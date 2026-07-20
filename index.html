@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>SOStituto</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --paper:#F3F0E7;        /* pagina di registro, avorio caldo */
+    --paper2:#FBFAF5;       /* riquadri più chiari */
+    --ink:#232B39;          /* inchiostro */
+    --ink-soft:#6A7180;     /* inchiostro sbiadito */
+    --red:#C0403A;          /* rosso registro: assenza, margine */
+    --teal:#1C6E6A;         /* penna verde-petrolio: interattivo */
+    --amber:#B07A1E;        /* non disponibile */
+    --rule:#DED8C6;         /* righe del registro */
+    --rule-soft:#E9E4D6;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{margin:0; padding:0}
+  body{
+    background:var(--paper); color:var(--ink);
+    font-family:'Inter',system-ui,sans-serif; font-size:16px; line-height:1.5;
+    padding-bottom:78px; max-width:640px; margin:0 auto;
+    -webkit-font-smoothing:antialiased;
+  }
+  /* ---- intestazione ---- */
+  header{
+    padding:18px 18px 12px; border-bottom:2px solid var(--ink);
+    position:relative; background:var(--paper);
+  }
+  .wordmark{font-family:'Zilla Slab',serif; font-weight:700; font-size:30px; letter-spacing:-.01em; line-height:1}
+  .wordmark .sos{color:var(--red)}
+  .tagline{font-size:13px; color:var(--ink-soft); margin-top:3px; font-weight:500}
+  /* ---- contenuto ---- */
+  main{padding:16px 14px}
+  h2.sec{font-family:'Zilla Slab',serif; font-weight:600; font-size:15px; text-transform:uppercase;
+    letter-spacing:.06em; color:var(--ink-soft); margin:4px 0 12px; display:flex; align-items:center; gap:8px}
+  h2.sec::after{content:""; flex:1; height:1px; background:var(--rule)}
+
+  /* ---- selettore giorno ---- */
+  .days{display:flex; gap:6px; margin-bottom:14px}
+  .day{flex:1; text-align:center; padding:9px 0; border:1.5px solid var(--rule);
+    border-radius:10px; background:var(--paper2); font-weight:700; font-size:14px; color:var(--ink-soft);
+    cursor:pointer; font-family:'Zilla Slab',serif; transition:.12s}
+  .day.on{background:var(--ink); color:var(--paper); border-color:var(--ink)}
+
+  /* ---- griglia orario (registro) ---- */
+  .ledger{background:var(--paper2); border:1.5px solid var(--rule); border-radius:12px; overflow:hidden}
+  .matgroup + .matgroup{border-top:2px solid var(--rule)}
+  .matlabel{font-family:'Zilla Slab',serif; font-weight:700; font-size:12px; letter-spacing:.05em;
+    text-transform:uppercase; color:var(--teal); padding:8px 12px 4px; background:#EFEBDD}
+  .trow{display:flex; align-items:center; gap:8px; padding:8px 12px 8px 16px;
+    border-top:1px solid var(--rule-soft); position:relative}
+  .trow::before{content:""; position:absolute; left:8px; top:6px; bottom:6px; width:2px; background:var(--red); opacity:.35; border-radius:2px}
+  .tname{flex:1 1 40%; min-width:0; font-weight:600; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .thours{display:flex; gap:4px; flex:1 1 60%}
+  .cell{flex:1; text-align:center; font-size:13px; font-weight:700; padding:6px 2px; border-radius:7px;
+    background:#EFEBDD; color:var(--ink); font-variant-numeric:tabular-nums; min-width:0;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .cell.occ{background:#E4E9F1; color:var(--ink)}       /* in classe */
+  .cell.disp{background:#DCEBE7; color:var(--teal)}     /* potenziamento/buca disponibile */
+  .cell.nond{background:#F0E7D2; color:var(--amber)}    /* non disponibile / emergenza */
+  .cell.free{background:transparent; color:#C3BCA8}     /* fuori servizio */
+  .cell.warn{background:#F4DAD7; color:var(--red)}      /* sigla ignota */
+  .cellhead{display:flex; gap:4px; padding:4px 12px 6px 16px}
+  .cellhead span{flex:1; text-align:center; font-size:10px; font-weight:700; color:var(--ink-soft);
+    text-transform:uppercase; letter-spacing:.04em}
+
+  /* ---- legenda ---- */
+  .legend{display:flex; flex-wrap:wrap; gap:8px 14px; margin-top:14px; padding:12px; background:var(--paper2);
+    border:1px solid var(--rule); border-radius:10px; font-size:12.5px; color:var(--ink-soft)}
+  .legend b{display:inline-block; width:20px; height:12px; border-radius:3px; vertical-align:middle; margin-right:5px}
+
+  /* ---- ricerca "dov'è" ---- */
+  .field{margin-bottom:14px}
+  .field label{display:block; font-size:13px; font-weight:600; color:var(--ink-soft); margin-bottom:5px}
+  select,input[type=text]{width:100%; padding:11px 12px; border:1.5px solid var(--rule); border-radius:10px;
+    background:var(--paper2); font-family:inherit; font-size:16px; color:var(--ink); font-weight:500}
+  select:focus,input:focus{outline:none; border-color:var(--teal)}
+  .answer{background:var(--paper2); border:1.5px solid var(--rule); border-left:4px solid var(--teal);
+    border-radius:12px; padding:16px; margin-top:6px}
+  .answer .big{font-family:'Zilla Slab',serif; font-size:22px; font-weight:700; line-height:1.25}
+  .answer .sub{font-size:14px; color:var(--ink-soft); margin-top:4px}
+  .wkrow{display:flex; align-items:center; gap:8px; padding:7px 0; border-top:1px solid var(--rule-soft)}
+  .wkrow:first-child{border-top:none}
+  .wkday{width:42px; font-family:'Zilla Slab',serif; font-weight:700; font-size:13px; color:var(--ink-soft)}
+  .subseg{display:flex; gap:4px; margin-bottom:10px}
+  .subseg button{flex:1; padding:8px; border:1.5px solid var(--rule); background:var(--paper2);
+    border-radius:9px; font-weight:600; font-size:13.5px; color:var(--ink-soft); cursor:pointer; font-family:inherit}
+  .subseg button.on{background:var(--teal); color:#fff; border-color:var(--teal)}
+
+  /* ---- importa ---- */
+  .drop{border:2px dashed var(--rule); border-radius:14px; padding:30px 18px; text-align:center; background:var(--paper2)}
+  .btn{display:inline-block; padding:12px 20px; border-radius:11px; border:none; background:var(--teal);
+    color:#fff; font-family:inherit; font-weight:700; font-size:15px; cursor:pointer}
+  .btn.ghost{background:transparent; color:var(--teal); border:1.5px solid var(--teal)}
+  .report{margin-top:16px}
+  .stat{display:flex; justify-content:space-between; padding:9px 0; border-top:1px solid var(--rule-soft); font-size:14.5px}
+  .stat b{font-weight:700}
+  .flag{background:#F4DAD7; border:1px solid #E3B7B2; border-radius:9px; padding:10px 12px; margin-top:6px;
+    font-size:13.5px; color:#8A2F2A}
+  .empty{text-align:center; padding:38px 20px; color:var(--ink-soft)}
+  .empty .ic{font-family:'Zilla Slab',serif; font-size:40px; color:var(--red); font-weight:700}
+  .hint{font-size:13px; color:var(--ink-soft); margin-top:10px; line-height:1.5}
+
+  /* ---- barra ---- */
+  nav{position:fixed; bottom:0; left:0; right:0; max-width:640px; margin:0 auto; display:flex;
+    background:var(--paper2); border-top:2px solid var(--ink)}
+  nav button{flex:1; border:none; background:none; padding:9px 0 7px; cursor:pointer;
+    display:flex; flex-direction:column; align-items:center; gap:3px; color:var(--ink-soft); font-family:inherit}
+  nav button.on{color:var(--teal)}
+  nav .ic{width:26px; height:26px}
+  nav .lb{font-size:11.5px; font-weight:700}
+  nav button.on .ic{color:var(--teal)}
+
+  /* ---- oggi / prospetto ---- */
+  .chips{display:flex; flex-direction:column; gap:7px; margin-bottom:12px}
+  .achip{display:flex; align-items:center; justify-content:space-between; gap:8px;
+    background:#F4DAD7; border:1px solid #E3B7B2; border-radius:10px; padding:8px 10px 8px 13px;
+    font-weight:600; font-size:14.5px; color:#8A2F2A}
+  .achip button{border:none; background:none; color:#8A2F2A; font-size:22px; line-height:1; cursor:pointer; padding:0 4px}
+  .pcard{background:var(--paper2); border:1.5px solid var(--rule); border-radius:12px; margin-top:12px; overflow:hidden}
+  .pass{font-family:'Zilla Slab',serif; font-weight:700; font-size:16px; padding:10px 14px; background:#EFEBDD;
+    border-bottom:1px solid var(--rule); color:var(--ink)}
+  .pass span{font-family:'Inter'; font-weight:500; font-size:12px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.04em; margin-left:6px}
+  .prow{display:flex; align-items:center; gap:9px; padding:9px 14px; border-top:1px solid var(--rule-soft)}
+  .prow:first-of-type{border-top:none}
+  .ph{font-family:'Zilla Slab',serif; font-weight:700; color:var(--ink-soft); width:26px; flex-shrink:0}
+  .pcl{font-weight:700; color:var(--ink); width:42px; flex-shrink:0}
+  .pto{flex:1; font-weight:600; font-size:15px; min-width:0}
+  .pmot{font-size:11.5px; color:var(--ink-soft); text-align:right; flex-shrink:0; max-width:42%}
+  .prow.pay{background:#F7EEDD}
+  .prow.pay .pmot{color:var(--amber); font-weight:700}
+  .prow.scoperta{background:#F4DAD7}
+  .prow.scoperta .pto{color:var(--red)}
+  .pnote{background:var(--paper2); border:1px solid var(--rule); border-left:4px solid var(--ink-soft);
+    border-radius:10px; padding:12px 14px; margin-top:12px; font-size:13.5px; color:var(--ink-soft); line-height:1.6}
+</style>
+</head>
+<body>
+<header>
+  <div class="wordmark"><span class="sos">SOS</span>tituto</div>
+  <div class="tagline">Orario e sostituzioni · <span id="hdrsub">Istituto Mestica</span></div>
+</header>
+<main id="main"></main>
+
+<nav>
+  <button data-tab="oggi">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+    <span class="lb">Oggi</span>
+  </button>
+  <button data-tab="orario" class="on">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M8 13h3M8 17h3"/></svg>
+    <span class="lb">Orario</span>
+  </button>
+  <button data-tab="dove">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+    <span class="lb">Dov'è</span>
+  </button>
+  <button data-tab="importa">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 8l5-5 5 5M5 21h14"/></svg>
+    <span class="lb">Importa</span>
+  </button>
+</nav>
+
+<script>
+/* ============================================================
+   SOStituto — primo mattone: importa orario, mostra, localizza
+   ============================================================ */
+const GIORNI_ORD = ["LUN","MAR","MER","GIO","VEN","SAB","DOM"];
+const NOMEGIORNO = {LUN:"lunedì",MAR:"martedì",MER:"mercoledì",GIO:"giovedì",VEN:"venerdì",SAB:"sabato",DOM:"domenica"};
+const DAYSET = new Set(GIORNI_ORD);
+
+let S = { orario:null, tab:"oggi", day:"LUN",
+          doveMode:"docente", selDoc:"", selClasse:"", selHour:1,
+          lingue:{ FR:"Basso", SP:"Martinelli" },
+          assentiOggi:{}, flagOggi:[], prospetto:null };   /* assentiOggi: {nome: null|[ore]} */
+
+/* ---------- persistenza ---------- */
+function save(){ try{
+  localStorage.setItem("sostituto_v1", JSON.stringify(S.orario));
+  localStorage.setItem("sostituto_lingue", JSON.stringify(S.lingue));
+}catch(e){} }
+function load(){ try{
+  const r=localStorage.getItem("sostituto_v1"); if(r) S.orario=JSON.parse(r);
+  const l=localStorage.getItem("sostituto_lingue"); if(l) S.lingue=JSON.parse(l);
+}catch(e){} }
+
+/* ---------- classificazione cella (vocabolario chiuso) ---------- */
+function pulisci(s){ return String(s).replace(/°/g,"").replace(/\s+/g," ").trim(); }
+function classifica(raw){
+  const rawS = String(raw==null?"":raw).trim();
+  if(!rawS) return {t:"VUOTA"};
+  const s = pulisci(rawS);
+  const su = s.toUpperCase().replace(/\s/g,"");
+  let m;
+  if(su==="P") return {t:"DISP", det:"P"};
+  if(su==="PNO") return {t:"NOND", det:"Pno"};
+  if(su==="PVP") return {t:"EMERG", det:"VP"};
+  if(su==="PCV") return {t:"EMERG", det:"CV"};
+  if((m=su.match(/^P(\d[A-D])$/))) return {t:"DISP", det:"P·"+m[1]};
+  if((m=su.match(/^AR(\d[A-D])$/))) return {t:"AR", det:m[1]};
+  if((m=su.match(/^(\d[A-D])AIRC$/))) return {t:"AR", det:m[1]};        /* refuso legacy */
+  if((m=su.match(/^(\d[A-D])([FS])$/))) return {t:"LINGUA", classe:m[1], lingua:(m[2]==="F"?"FR":"SP")};
+  if((m=su.match(/^(\d[A-D])-?(\d[A-D])$/))) return {t:"ARTIC", a:m[1], b:m[2]};
+  if((m=s.toUpperCase().match(/^(\d[A-D])\s+(\d[A-D])$/))) return {t:"ARTIC", a:m[1], b:m[2]}; /* refuso "2A 2C" */
+  if((m=su.match(/^(\d[A-D])$/))) return {t:"CLASSE", det:m[1]};
+  return {t:"IGNOTA", det:rawS};
+}
+
+/* ---------- import da Excel ---------- */
+function importaWorkbook(wb){
+  const ws = wb.Sheets["orario"] || wb.Sheets[wb.SheetNames[0]];
+  const grid = XLSX.utils.sheet_to_json(ws, {header:1, raw:true, defval:null});
+  // trova la riga intestazione (contiene DOCENTI)
+  let hdr=-1;
+  for(let r=0;r<Math.min(grid.length,12);r++){
+    const rowU = (grid[r]||[]).map(x=>String(x||"").toUpperCase());
+    if(rowU.includes("DOCENTI")){ hdr=r; break; }
+  }
+  if(hdr<0) throw new Error("Intestazione non trovata (manca la riga con 'DOCENTI'). Controlla che il foglio si chiami 'orario'.");
+  const dayRow=grid[hdr], hourRow=grid[hdr+1]||[];
+  const matCol = dayRow.findIndex(x=>String(x||"").toUpperCase()==="MATERIE");
+  const docCol = dayRow.findIndex(x=>String(x||"").toUpperCase()==="DOCENTI");
+  // mappa colonne → (giorno, ora), leggendo la griglia REALE (settimana lunga o corta)
+  const col2slot={}; let curDay=null;
+  for(let c=docCol+1;c<dayRow.length;c++){
+    const dv=String(dayRow[c]||"").toUpperCase().slice(0,3);
+    if(DAYSET.has(dv)) curDay=dv;
+    const hv=String(hourRow[c]||"").match(/\d/);
+    if(curDay && hv) col2slot[c]={g:curDay, h:parseInt(hv[0])};
+  }
+  const giorni=[...new Set(Object.values(col2slot).map(s=>s.g))].sort((a,b)=>GIORNI_ORD.indexOf(a)-GIORNI_ORD.indexOf(b));
+  const ore=[...new Set(Object.values(col2slot).map(s=>s.h))].sort((a,b)=>a-b);
+
+  const docenti=[]; let materiaCorr=null; const ignote=[];
+  for(let r=hdr+2;r<grid.length;r++){
+    const row=grid[r]||[];
+    const mv=row[matCol], dv=row[docCol];
+    if(mv!=null && String(mv).trim()) materiaCorr=String(mv).trim();
+    if(dv==null || !String(dv).trim()) continue;
+    const nome=String(dv).trim();
+    const cells={};
+    for(const c in col2slot){
+      const {g,h}=col2slot[c];
+      const cl=classifica(row[c]);
+      cells[g+"|"+h]=cl;
+      if(cl.t==="IGNOTA") ignote.push({nome, g, h, val:cl.det});
+    }
+    docenti.push({nome, materia:materiaCorr, cells});
+  }
+  return { giorni, ore, docenti, ignote, quando:new Date().toISOString() };
+}
+
+function isSost(d){ return /sosteg/i.test(d.materia||""); }
+
+/* ---- controllo suffisso lingua sui sostegni nelle ore di articolata ---- */
+function sostegniSenzaLingua(parsed, lingue){
+  const nomiLingua = new Set(Object.values(lingue||{}).filter(Boolean));
+  // ore/classi in cui c'è articolata (dai docenti di lingua noti)
+  const oreLingua=[];
+  for(const d of parsed.docenti){
+    if(!nomiLingua.has(d.nome)) continue;
+    for(const k in d.cells){ const c=d.cells[k];
+      if(c.t==="ARTIC"){ const [g,h]=k.split("|"); oreLingua.push({g,h:+h,classi:[c.a,c.b]}); }
+    }
+  }
+  const out=[]; const visti=new Set();
+  for(const ol of oreLingua){
+    for(const d of parsed.docenti){
+      if(!isSost(d)) continue;
+      const c=d.cells[ol.g+"|"+ol.h]; if(!c) continue;
+      if(c.t==="CLASSE" && ol.classi.includes(c.det)){
+        const key=d.nome+"|"+ol.g+"|"+ol.h;
+        if(!visti.has(key)){ visti.add(key); out.push({nome:d.nome, g:ol.g, h:ol.h, classe:c.det}); }
+      }
+    }
+  }
+  return out;
+}
+
+/* ---------- stato posizionale: buca vs fuori servizio ---------- */
+function oreServizio(doc,g,ore){
+  const hs = ore.filter(h => (doc.cells[g+"|"+h]||{}).t !== "VUOTA");
+  return hs.length ? [Math.min(...hs), Math.max(...hs)] : [null,null];
+}
+function statoCella(doc,g,h,ore){
+  const cl = doc.cells[g+"|"+h] || {t:"VUOTA"};
+  if(cl.t!=="VUOTA") return cl;
+  const [a,b]=oreServizio(doc,g,ore);
+  if(a!=null && h>a && h<b) return {t:"BUCA"};
+  return {t:"FUORI"};
+}
+
+/* ============================================================
+   MOTORE DELLE SOSTITUZIONI  (logica collaudata nelle simulazioni)
+   Gerarchia: 0 recupero · 1 sostegno DELLA classe · 2 potenziamento
+              3 sostegno libero · 4 PVP/PCV · 5 sostegno spostato
+              6 pagamento · 7 unico sostegno (danno)
+   ============================================================ */
+function classiDi(doc){
+  const out=new Set();
+  for(const k in doc.cells){ const c=doc.cells[k];
+    if(c.t==="CLASSE") out.add(c.det);
+    else if(c.t==="ARTIC"){ out.add(c.a); out.add(c.b); }
+    else if(c.t==="AR") out.add(c.det);
+    else if(c.t==="LINGUA") out.add(c.classe);
+  }
+  return out;
+}
+function sostSuClasse(o, classe, g, h){          /* sostegni presenti in una classe a quell'ora */
+  const out=[];
+  for(const d of o.docenti){ if(!isSost(d)) continue;
+    const c=statoCella(d,g,h,o.ore);
+    if((c.t==="CLASSE" && c.det===classe) || (c.t==="LINGUA" && c.classe===classe)) out.push(d.nome);
+  }
+  return out;
+}
+/* docenti_per_materia: per sapere se l'affinità disciplinare è applicabile */
+function contaMaterie(o){ const m={}; o.docenti.forEach(d=>m[d.materia]=(m[d.materia]||0)+1); return m; }
+
+/* candidati per coprire (classe,g,h). ctx = stato dinamico della giornata.
+   lingua = "FR"/"SP" se si copre un gruppo linguistico, altrimenti null */
+function candidati(o, classe, g, h, assenteObj, ctx, lingua){
+  const materia = assenteObj.materia;
+  const affApplicabile = ctx.perMateria[materia] > 1;
+  const pool=[];
+  for(const d of o.docenti){
+    if(ctx.assenti.has(d.nome)) continue;
+    if(ctx.occupati[g+"|"+h] && ctx.occupati[g+"|"+h].has(d.nome)) continue;  /* già impegnato */
+    const st = statoCella(d,g,h,o.ore);
+    const aff = (affApplicabile && d.materia===materia) ? 0 : 1;
+    const cdc = classiDi(d).has(classe) ? 0 : 1;
+    const tie = [aff, cdc, ctx.fatte[d.nome]||0, d.nome];
+    const flagged = ctx.flag.has(d.nome+"|"+classe);
+    // 0) recupero piazzabile
+    if((ctx.recuperi[d.nome]||0)>0 && (st.t==="DISP"||st.t==="BUCA"||st.t==="EMERG")){
+      pool.push([0,...tie,"recupero",d.nome]); continue;
+    }
+    // 1) sostegno DELLA classe che copre il proprio curricolare (o gruppo lingua compatibile)
+    if(isSost(d) && !flagged){
+      if(st.t==="CLASSE" && st.det===classe && !lingua){ pool.push([1,...tie,"sostegno della classe",d.nome]); continue; }
+      if(st.t==="LINGUA" && st.classe===classe && lingua && st.lingua===lingua){ pool.push([1,...tie,"sostegno della classe ("+lingua+")",d.nome]); continue; }
+    }
+    // 2) potenziamento / disposizione
+    if(st.t==="DISP"){ pool.push([2,...tie,"potenziamento",d.nome]); continue; }
+    // sostegno libero / spostato
+    if(isSost(d)){
+      if(flagged) continue;                                   /* flag = mai */
+      if(st.t==="BUCA"){ pool.push([3,...tie,"sostegno libero",d.nome]); continue; }
+      if(st.t==="CLASSE"){
+        if(ctx.flag.has(d.nome+"|"+st.det)) continue;         /* non toccare il suo caso grave */
+        if(lingua) continue;                                  /* per gruppo lingua non si spostano sostegni di classe */
+        const altri = sostSuClasse(o, st.det, g, h).filter(n=>n!==d.nome);
+        if(altri.length) pool.push([5,...tie,"sostegno spostato da "+st.det,d.nome]);
+        else pool.push([7,...tie,"⚠ unico sostegno di "+st.det,d.nome]);
+        continue;
+      }
+    }
+    // 4) PVP/PCV emergenza (prima del pagamento)
+    if(st.t==="EMERG"){ pool.push([4,...tie,"PVP/PCV",d.nome]); continue; }
+    // 6) ora buca curricolare = a pagamento
+    if(st.t==="BUCA"){ pool.push([6,...tie,"⚠ pagamento",d.nome]); continue; }
+  }
+  pool.sort((A,B)=> A[0]-B[0] || A[1]-B[1] || A[2]-B[2] || A[3]-B[3] || String(A[4]).localeCompare(B[4]));
+  return pool;
+}
+
+/* genera il prospetto completo di una giornata.
+   assenti = [{nome, ore:null|[h...]}]  (null = giornata intera) */
+function generaProspetto(o, giorno, assenti, opts){
+  opts = opts||{};
+  const ctx = {
+    assenti: new Set(assenti.map(a=>a.nome)),
+    perMateria: contaMaterie(o),
+    fatte: Object.assign({}, opts.fatte||{}),
+    recuperi: Object.assign({}, opts.recuperi||{}),
+    flag: new Set(opts.flag||[]),          /* elementi "Nome|Classe" */
+    occupati: {},
+    pagamento: 0
+  };
+  const nomiLingua = S.lingue || {};
+  const linguaDi = nome => (nome===nomiLingua.FR?"FR":(nome===nomiLingua.SP?"SP":null));
+
+  // costruisco gli slot da coprire
+  const slot=[];
+  const note=[];
+  for(const a of assenti){
+    const doc=o.docenti.find(d=>d.nome===a.nome); if(!doc) continue;
+    const ore = a.ore || o.ore;
+    const sost = isSost(doc);
+    for(const h of ore){
+      const st=statoCella(doc,giorno,h,o.ore);
+      if(st.t==="CLASSE"||st.t==="ARTIC"||st.t==="AR"){
+        if(sost){
+          // sostegno assente: copre solo se flaggato (affiancamento); altrimenti nessuna sostituzione
+          const cl = st.det || st.a;
+          if(opts.flag && new Set(opts.flag).has(a.nome+"|"+cl)){
+            slot.push({h, a:doc, classe:cl, tipo:"AFFIANCAMENTO", lingua:null});
+          } else {
+            note.push({h, nome:a.nome, classe:cl});
+          }
+          continue;
+        }
+        if(st.t==="ARTIC"){
+          const lingua = linguaDi(a.nome);          /* francese o spagnolo, dal docente assente */
+          slot.push({h, a:doc, classe:st.a, tipo: lingua? (lingua==="FR"?"francese":"spagnolo") : "sostituzione", lingua, gruppo:st.a+"·"+st.b});
+        } else if(st.t==="AR"){
+          slot.push({h, a:doc, classe:st.det, tipo:"affiancamento AR", lingua:null});
+        } else {
+          slot.push({h, a:doc, classe:st.det, tipo:"sostituzione", lingua:null});
+        }
+      }
+    }
+  }
+  // ordino: prima le ore con meno candidati (difficili)
+  slot.forEach(s=> s._n = candidati(o, s.classe, giorno, s.h, s.a, ctx, s.lingua).length);
+  slot.sort((x,y)=> x.h-y.h || x._n-y._n);
+
+  const esiti=[];
+  for(const s of slot){
+    const pool=candidati(o, s.classe, giorno, s.h, s.a, ctx, s.lingua);
+    if(!pool.length){ esiti.push({...s, scelto:null, motivo:"scoperta"}); continue; }
+    const p=pool[0]; const nome=p[4]; const motivo=p[p.length-2];
+    ctx.fatte[nome]=(ctx.fatte[nome]||0)+1;
+    (ctx.occupati[giorno+"|"+s.h] = ctx.occupati[giorno+"|"+s.h]||new Set()).add(nome);
+    if(/pagamento/.test(motivo)) ctx.pagamento++;
+    if(motivo==="recupero") ctx.recuperi[nome]--;
+    esiti.push({...s, scelto:nome, motivo, alternative: pool.slice(1,4).map(x=>x[4])});
+  }
+  return { giorno, esiti, note, pagamento: ctx.pagamento };
+}
+
+
+/* ---------- etichette brevi + descrizioni ---------- */
+function cellShort(cl){
+  switch(cl.t){
+    case "CLASSE": return cl.det;
+    case "ARTIC": return cl.a+"·"+cl.b;
+    case "AR": return "AR "+cl.det;
+    case "LINGUA": return cl.classe+"·"+cl.lingua;
+    case "DISP": return cl.det;
+    case "NOND": return "Pno";
+    case "EMERG": return cl.det;
+    case "BUCA": return "—";
+    case "FUORI": return "";
+    case "IGNOTA": return "?";
+    default: return "";
+  }
+}
+function cellClass(cl){
+  switch(cl.t){
+    case "CLASSE": case "ARTIC": case "AR": case "LINGUA": return "occ";
+    case "DISP": case "BUCA": return "disp";
+    case "NOND": case "EMERG": return "nond";
+    case "IGNOTA": return "warn";
+    default: return "free";
+  }
+}
+function cellDesc(cl){
+  switch(cl.t){
+    case "CLASSE": return "in classe "+fmtCl(cl.det);
+    case "ARTIC": return "2ª lingua · gruppi "+fmtCl(cl.a)+" e "+fmtCl(cl.b);
+    case "AR": return "attività alternativa in "+fmtCl(cl.det);
+    case "LINGUA": return "sostegno in "+fmtCl(cl.classe)+" · gruppo "+(cl.lingua==="FR"?"francese":"spagnolo");
+    case "DISP": return cl.det==="P" ? "potenziamento — a disposizione" : "potenziamento ("+cl.det.replace("·"," in ")+") — a disposizione";
+    case "NOND": return "progetti extracurricolari — non disponibile";
+    case "EMERG": return (cl.det==="VP"?"ore di vicepresidenza":"ore commissione viaggi")+" — solo emergenza";
+    case "BUCA": return "ora libera (a disposizione)";
+    case "FUORI": return "non in servizio";
+    case "IGNOTA": return "sigla non riconosciuta: “"+cl.det+"”";
+    default: return "";
+  }
+}
+function fmtCl(c){ return c ? c[0]+"ª "+c.slice(1) : c; }
+
+/* ============================================================
+   RENDER
+   ============================================================ */
+const el = id => document.getElementById(id);
+
+function render(){
+  document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on", b.dataset.tab===S.tab));
+  if(!S.orario && S.tab!=="importa"){ renderVuoto(); return; }
+  ({oggi:renderOggi, orario:renderOrario, dove:renderDove, importa:renderImporta})[S.tab]();
+}
+
+function renderVuoto(){
+  el("main").innerHTML = `<div class="empty">
+    <div class="ic">SOS</div>
+    <h2 class="sec" style="justify-content:center; margin-top:14px">Nessun orario caricato</h2>
+    <p class="hint">Per cominciare, importa il file Excel dell'orario.<br>Lo farai poche volte l'anno, quando l'orario cambia.</p>
+    <button class="btn" style="margin-top:14px" onclick="S.tab='importa'; render()">Importa l'orario</button>
+  </div>`;
+}
+
+/* ---- OGGI: assenti → prospetto ---- */
+function renderOggi(){
+  const o=S.orario;
+  const days = o.giorni.map(g=>`<div class="day ${g===S.day?'on':''}" onclick="S.day='${g}'; S.prospetto=null; render()">${g}</div>`).join("");
+  const assentiN = Object.keys(S.assentiOggi).length;
+  const docs=[...o.docenti].sort((a,b)=>a.nome.localeCompare(b.nome));
+
+  // chips degli assenti già scelti
+  const chips = Object.keys(S.assentiOggi).map(n=>{
+    const ore=S.assentiOggi[n];
+    const et = ore? ore.map(h=>h+"ª").join(" ") : "tutto il giorno";
+    return `<div class="achip"><span>${esc(n)} · ${et}</span><button onclick="delete S.assentiOggi['${esc(n)}']; S.prospetto=null; render()">×</button></div>`;
+  }).join("");
+
+  let out = `<h2 class="sec">Oggi · ${NOMEGIORNO[S.day]}</h2>
+    <div class="days">${days}</div>
+    <div class="field"><label>Aggiungi un assente</label>
+      <select id="addAbs" onchange="addAssente(this.value)">
+        <option value="">— scegli docente —</option>
+        ${docs.filter(d=>!(d.nome in S.assentiOggi)).map(d=>`<option>${esc(d.nome)}</option>`).join("")}
+      </select></div>`;
+
+  if(assentiN){
+    out += `<div class="chips">${chips}</div>
+      <button class="btn" style="width:100%; margin-top:6px" onclick="lanciaProspetto()">Genera il prospetto</button>`;
+  } else {
+    out += `<p class="hint">Scegli i docenti assenti oggi. Per un permesso breve potrai indicare solo alcune ore.</p>`;
+  }
+
+  // prospetto generato
+  if(S.prospetto){
+    out += renderProspettoHTML(S.prospetto);
+  }
+  el("main").innerHTML = out;
+}
+
+function addAssente(nome){
+  if(!nome) return;
+  S.assentiOggi[nome]=null;   // default: giornata intera
+  S.prospetto=null; render();
+}
+function toggleOra(nome, h){
+  const cur=S.assentiOggi[nome];
+  const o=S.orario;
+  // ore in cui è in classe quel giorno
+  const doc=o.docenti.find(d=>d.nome===nome);
+  const inClasse=o.ore.filter(hh=>["CLASSE","ARTIC","AR"].includes(statoCella(doc,S.day,hh,o.ore).t));
+  let set = new Set(cur===null? inClasse : cur);
+  if(set.has(h)) set.delete(h); else set.add(h);
+  S.assentiOggi[nome] = set.size===inClasse.length ? null : [...set].sort((a,b)=>a-b);
+  S.prospetto=null; render();
+}
+function lanciaProspetto(){
+  const o=S.orario;
+  const assenti=Object.keys(S.assentiOggi).map(n=>({nome:n, ore:S.assentiOggi[n]}));
+  S.prospetto = generaProspetto(o, S.day, assenti, { flag:S.flagOggi });
+  render();
+}
+
+function renderProspettoHTML(p){
+  const o=S.orario;
+  // raggruppo per assente
+  const perAss={};
+  p.esiti.forEach(e=>{ (perAss[e.a.nome]=perAss[e.a.nome]||[]).push(e); });
+  let html = `<h2 class="sec" style="margin-top:22px">Prospetto · ${NOMEGIORNO[p.giorno]}</h2>`;
+  for(const nome in perAss){
+    const doc=o.docenti.find(d=>d.nome===nome);
+    html += `<div class="pcard"><div class="pass">${esc(nome)} <span>${esc(doc.materia||"")}</span></div>`;
+    perAss[nome].sort((a,b)=>a.h-b.h).forEach(e=>{
+      if(!e.scelto){
+        html += `<div class="prow scoperta"><span class="ph">${e.h}ª</span><span class="pcl">${esc(fmtCl(e.classe))}</span><span class="pto">⚠ scoperta — nessun disponibile</span></div>`;
+      } else {
+        const tit = e.tipo.includes("francese")||e.tipo.includes("spagnolo") ? "2ª lingua "+e.tipo : e.tipo;
+        const pay = /pagamento/.test(e.motivo)?' pay':'';
+        html += `<div class="prow${pay}"><span class="ph">${e.h}ª</span><span class="pcl">${esc(fmtCl(e.classe))}</span>
+          <span class="pto">${esc(e.scelto)}</span><span class="pmot">${esc(e.motivo)}</span></div>`;
+      }
+    });
+    html += `</div>`;
+  }
+  // note (sostegni assenti non sostituiti)
+  if(p.note && p.note.length){
+    html += `<div class="pnote"><b>Sostegni assenti non sostituiti</b> (la classe ha il curricolare):<br>`;
+    html += p.note.map(n=>`${esc(n.nome)} · ${n.h}ª (${esc(fmtCl(n.classe))})`).join("<br>");
+    html += `</div>`;
+  }
+  html += `<div class="stat" style="border-top:2px solid var(--rule); margin-top:10px"><span>Ore a pagamento</span><b style="color:${p.pagamento?'var(--red)':'var(--teal)'}">${p.pagamento}</b></div>`;
+  return html;
+}
+
+/* ---- ORARIO: registro del giorno ---- */
+function renderOrario(){
+  const o=S.orario;
+  const days = o.giorni.map(g=>`<div class="day ${g===S.day?'on':''}" onclick="S.day='${g}'; render()">${g}</div>`).join("");
+  // raggruppo per materia mantenendo l'ordine
+  let rows=""; let lastMat=null;
+  const headCells = `<div class="cellhead"><span style="flex:1 1 40%"></span>${o.ore.map(h=>`<span>${h}ª</span>`).join("")}</div>`;
+  for(const d of o.orario? [] : o.docenti){
+    if(d.materia!==lastMat){
+      if(lastMat!==null) rows+=`</div>`;
+      rows+=`<div class="matgroup"><div class="matlabel">${esc(d.materia||"—")}</div>`;
+      lastMat=d.materia;
+    }
+    const cells = o.ore.map(h=>{
+      const cl=statoCella(d,S.day,h,o.ore);
+      return `<div class="cell ${cellClass(cl)}">${esc(cellShort(cl))}</div>`;
+    }).join("");
+    rows+=`<div class="trow"><div class="tname">${esc(d.nome)}</div><div class="thours">${cells}</div></div>`;
+  }
+  if(lastMat!==null) rows+=`</div>`;
+
+  el("main").innerHTML = `
+    <h2 class="sec">Orario · ${NOMEGIORNO[S.day]}</h2>
+    <div class="days">${days}</div>
+    <div class="ledger">
+      <div class="cellhead" style="border-bottom:1px solid var(--rule)"><span style="flex:1 1 40%; text-align:left; padding-left:4px">docente</span>${o.ore.map(h=>`<span>${h}ª</span>`).join("")}</div>
+      ${rows}
+    </div>
+    <div class="legend">
+      <span><b style="background:#E4E9F1"></b>in classe</span>
+      <span><b style="background:#DCEBE7"></b>disponibile</span>
+      <span><b style="background:#F0E7D2"></b>non disp.</span>
+      <span><b style="background:#F4DAD7"></b>da correggere</span>
+    </div>`;
+}
+
+/* ---- DOV'È: localizza docente o classe ---- */
+function renderDove(){
+  const o=S.orario;
+  const modeBtns = `<div class="subseg">
+    <button class="${S.doveMode==='docente'?'on':''}" onclick="S.doveMode='docente'; render()">Un docente</button>
+    <button class="${S.doveMode==='classe'?'on':''}" onclick="S.doveMode='classe'; render()">Una classe</button>
+  </div>`;
+
+  if(S.doveMode==="docente"){
+    const docs=[...o.docenti].sort((a,b)=>a.nome.localeCompare(b.nome));
+    if(!S.selDoc) S.selDoc=docs[0].nome;
+    const doc=o.docenti.find(d=>d.nome===S.selDoc);
+    const opts=docs.map(d=>`<option ${d.nome===S.selDoc?'selected':''}>${esc(d.nome)}</option>`).join("");
+    // settimana del docente
+    let wk="";
+    for(const g of o.giorni){
+      const cells=o.ore.map(h=>{
+        const cl=statoCella(doc,g,h,o.ore);
+        return `<div class="cell ${cellClass(cl)}">${esc(cellShort(cl))}</div>`;
+      }).join("");
+      wk+=`<div class="wkrow"><div class="wkday">${g}</div><div class="thours">${cells}</div></div>`;
+    }
+    el("main").innerHTML = `
+      <h2 class="sec">Dov'è un docente</h2>
+      ${modeBtns}
+      <div class="field"><label>Docente</label>
+        <select onchange="S.selDoc=this.value; render()">${opts}</select></div>
+      <div class="field"><label>Materia</label>
+        <div class="answer" style="border-left-color:var(--red)"><div class="sub" style="margin:0">${esc(doc.materia||"—")}</div></div></div>
+      <h2 class="sec">Settimana</h2>
+      <div class="cellhead"><span style="flex:0 0 42px"></span>${o.ore.map(h=>`<span>${h}ª</span>`).join("")}</div>
+      <div class="ledger" style="padding:4px 12px">${wk}</div>
+      <p class="hint">Tocca “Orario” per la vista giorno per giorno di tutti i docenti.</p>`;
+  } else {
+    // classe: chi c'è in una classe a un certo giorno/ora
+    const classi=classiEsistenti(o);
+    if(!S.selClasse) S.selClasse=classi[0];
+    const optCl=classi.map(c=>`<option ${c===S.selClasse?'selected':''}>${esc(c)}</option>`).join("");
+    const optG=o.giorni.map(g=>`<option value="${g}" ${g===S.day?'selected':''}>${NOMEGIORNO[g]}</option>`).join("");
+    const optH=o.ore.map(h=>`<option value="${h}" ${h===S.selHour?'selected':''}>${h}ª ora</option>`).join("");
+    const chi=chiInClasse(o, S.selClasse, S.day, S.selHour);
+    let ans;
+    if(chi.length){
+      ans = chi.map(x=>`<div class="answer" style="margin-top:8px"><div class="big" style="font-size:18px">${esc(x.nome)}</div><div class="sub">${esc(x.ruolo)}</div></div>`).join("");
+    } else {
+      ans = `<div class="answer" style="border-left-color:var(--ink-soft)"><div class="sub" style="margin:0">Nessun docente risulta in ${esc(fmtCl(S.selClasse))} a quest'ora.</div></div>`;
+    }
+    el("main").innerHTML = `
+      <h2 class="sec">Chi c'è in una classe</h2>
+      ${modeBtns}
+      <div class="field"><label>Classe</label><select onchange="S.selClasse=this.value; render()">${optCl}</select></div>
+      <div class="field"><label>Giorno</label><select onchange="S.day=this.value; render()">${optG}</select></div>
+      <div class="field"><label>Ora</label><select onchange="S.selHour=parseInt(this.value); render()">${optH}</select></div>
+      <h2 class="sec">In aula</h2>
+      ${ans}`;
+  }
+}
+
+function classiEsistenti(o){
+  const set=new Set();
+  for(const d of o.docenti) for(const k in d.cells){
+    const c=d.cells[k];
+    if(c.t==="CLASSE") set.add(c.det);
+    else if(c.t==="ARTIC"){ set.add(c.a); set.add(c.b); }
+    else if(c.t==="AR") set.add(c.det);
+    else if(c.t==="LINGUA") set.add(c.classe);
+  }
+  return [...set].sort();
+}
+function chiInClasse(o, classe, g, h){
+  const out=[];
+  for(const d of o.docenti){
+    const c=d.cells[g+"|"+h]; if(!c) continue;
+    let dove=null;
+    if(c.t==="CLASSE" && c.det===classe) dove= isSost(d)?"sostegno":"curricolare";
+    else if(c.t==="ARTIC" && (c.a===classe||c.b===classe)) dove="2ª lingua";
+    else if(c.t==="AR" && c.det===classe) dove="attività alternativa";
+    else if(c.t==="LINGUA" && c.classe===classe) dove="sostegno · "+(c.lingua==="FR"?"francese":"spagnolo");
+    if(dove) out.push({nome:d.nome, ruolo:dove+" · "+(d.materia||"")});
+  }
+  return out;
+}
+
+/* ---- IMPORTA ---- */
+function renderImporta(){
+  const has=S.orario;
+  el("main").innerHTML = `
+    <h2 class="sec">Importa l'orario</h2>
+    <div class="drop">
+      <p style="margin:0 0 14px; color:var(--ink-soft); font-size:14px">Carica il file Excel dell'orario<br>(foglio “orario”).</p>
+      <input type="file" id="file" accept=".xlsx,.xls" style="display:none">
+      <button class="btn" onclick="document.getElementById('file').click()">Scegli il file</button>
+    </div>
+    <div id="report" class="report"></div>
+    ${has?`<div class="report"><div class="stat"><span>Orario in memoria</span><b>${S.orario.docenti.length} docenti · ${S.orario.giorni.length} giorni × ${S.orario.ore.length} ore</b></div>
+      <p class="hint">Importando un nuovo file sostituisci quello attuale. I dati restano solo su questo dispositivo.</p></div>`:""}
+    <h2 class="sec" style="margin-top:26px">Docenti di 2ª lingua</h2>
+    <p class="hint" style="margin-top:0">Serve per gestire le classi articolate: l'app deve sapere chi fa francese e chi spagnolo. Si imposta una volta.</p>
+    <div class="field"><label>Francese</label>${selDocente("FR")}</div>
+    <div class="field"><label>Spagnolo</label>${selDocente("SP")}</div>`;
+  el("file").addEventListener("change", onFile);
+}
+
+function selDocente(lang){
+  // menù dei docenti (se l'orario è caricato) per assegnare la lingua
+  const cur=S.lingue[lang]||"";
+  if(!S.orario){
+    return `<input type="text" value="${esc(cur)}" placeholder="Cognome docente"
+      onchange="S.lingue['${lang}']=this.value.trim(); save()">`;
+  }
+  const docs=[...S.orario.docenti].map(d=>d.nome).sort((a,b)=>a.localeCompare(b));
+  const opts=[`<option value="">— nessuno —</option>`]
+    .concat(docs.map(n=>`<option ${n===cur?'selected':''}>${esc(n)}</option>`)).join("");
+  return `<select onchange="S.lingue['${lang}']=this.value; save(); render()">${opts}</select>`;
+}
+
+function onFile(ev){
+  const f=ev.target.files[0]; if(!f) return;
+  const rd=new FileReader();
+  rd.onload = e=>{
+    try{
+      const wb=XLSX.read(new Uint8Array(e.target.result), {type:"array"});
+      const parsed=importaWorkbook(wb);
+      // report PRIMA di salvare
+      const senzaLingua = sostegniSenzaLingua(parsed, S.lingue);
+      let html=`<div class="stat"><span>Docenti letti</span><b>${parsed.docenti.length}</b></div>
+        <div class="stat"><span>Griglia</span><b>${parsed.giorni.join(" ")} · ${parsed.ore.length} ore</b></div>
+        <div class="stat"><span>Sigle non riconosciute</span><b style="color:${parsed.ignote.length?'var(--red)':'var(--teal)'}">${parsed.ignote.length}</b></div>
+        <div class="stat"><span>Sostegni senza lingua (F/S)</span><b style="color:${senzaLingua.length?'var(--red)':'var(--teal)'}">${senzaLingua.length}</b></div>`;
+      if(parsed.ignote.length){
+        html += parsed.ignote.slice(0,10).map(x=>`<div class="flag"><b>${esc(x.nome)}</b> · ${x.g} ${x.h}ª ora: “${esc(x.val)}” — sigla non prevista, correggila nel file.</div>`).join("");
+        if(parsed.ignote.length>10) html+=`<p class="hint">…e altre ${parsed.ignote.length-10}.</p>`;
+      }
+      if(senzaLingua.length){
+        // raggruppo per giorno/ora per compattezza
+        const byOra={};
+        senzaLingua.forEach(x=>{ const k=x.g+" "+x.h+"ª"; (byOra[k]=byOra[k]||[]).push(esc(x.nome)+" ("+x.classe+")"); });
+        html += `<div class="flag"><b>Sostegni all'ora di 2ª lingua senza suffisso F/S</b> — a queste ore il sostegno va marcato francese (es. 2BF) o spagnolo (es. 2BS), così l'app sa in quale gruppo sta:</div>`;
+        html += Object.entries(byOra).slice(0,8).map(([k,v])=>`<div class="flag" style="background:#F7EEDD; border-color:#E3D3A8; color:#7A5B1A"><b>${k}</b>: ${v.join(", ")}</div>`).join("");
+        const nOre=Object.keys(byOra).length;
+        if(nOre>8) html+=`<p class="hint">…e altre ${nOre-8} ore.</p>`;
+      }
+      if(!parsed.ignote.length && !senzaLingua.length){
+        html += `<p class="hint" style="color:var(--teal)">Tutto riconosciuto. Orario pronto.</p>`;
+      } else {
+        html += `<p class="hint">Puoi salvare lo stesso: le sostituzioni funzioneranno, ma sui gruppi di lingua l'app non saprà distinguere francese da spagnolo finché non correggi le celle.</p>`;
+      }
+      html += `<button class="btn" style="margin-top:12px" id="confirm">Salva questo orario</button>`;
+      el("report").innerHTML=html;
+      el("confirm").addEventListener("click", ()=>{ S.orario=parsed; save(); S.tab="orario"; S.day=parsed.giorni[0]; S.selDoc=""; S.selClasse=""; render(); });
+    }catch(err){
+      el("report").innerHTML=`<div class="flag">Non riesco a leggere il file: ${esc(err.message)}</div>`;
+    }
+  };
+  rd.readAsArrayBuffer(f);
+}
+
+function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+/* ---------- avvio ---------- */
+document.querySelectorAll("nav button").forEach(b=> b.addEventListener("click", ()=>{ S.tab=b.dataset.tab; render(); }));
+load();
+if(S.orario){ S.day=S.orario.giorni[0]||"LUN"; }
+render();
+</script>
+</body>
+</html>
