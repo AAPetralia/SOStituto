@@ -124,6 +124,17 @@
     background:#F4DAD7; border:1px solid #E3B7B2; border-radius:10px; padding:8px 10px 8px 13px;
     font-weight:600; font-size:14.5px; color:#8A2F2A}
   .achip button{border:none; background:none; color:#8A2F2A; font-size:22px; line-height:1; cursor:pointer; padding:0 4px}
+  .achip span{cursor:pointer; flex:1}
+  .achip .chev{font-size:12px; color:#A85852; margin-left:2px}
+  .achip-wrap{margin-bottom:7px}
+  .orebar{background:var(--paper2); border:1px solid var(--rule); border-top:none;
+    border-radius:0 0 10px 10px; padding:10px 12px; margin-top:-3px}
+  .orebar-lbl{font-size:12px; color:var(--ink-soft); margin-bottom:7px}
+  .orebtns{display:flex; gap:6px}
+  .orab{flex:1; text-align:center; padding:9px 0; border-radius:8px; font-weight:700; font-size:14px;
+    border:1.5px solid var(--rule); background:#fff; color:var(--ink-soft); cursor:pointer; font-family:'Zilla Slab',serif}
+  .orab.on{background:var(--red); color:#fff; border-color:var(--red)}
+  .orab.off{opacity:.32; cursor:default; background:transparent; border-style:dashed}
   .pcard{background:var(--paper2); border:1.5px solid var(--rule); border-radius:12px; margin-top:12px; overflow:hidden}
   .pass{font-family:'Zilla Slab',serif; font-weight:700; font-size:16px; padding:10px 14px; background:#EFEBDD;
     border-bottom:1px solid var(--rule); color:var(--ink)}
@@ -179,7 +190,7 @@ const DAYSET = new Set(GIORNI_ORD);
 let S = { orario:null, tab:"oggi", day:"LUN",
           doveMode:"docente", selDoc:"", selClasse:"", selHour:1,
           lingue:{ FR:"Basso", SP:"Martinelli" },
-          assentiOggi:{}, flagOggi:[], prospetto:null };   /* assentiOggi: {nome: null|[ore]} */
+          assentiOggi:{}, flagOggi:[], prospetto:null, chipAperto:"" };   /* assentiOggi: {nome: null|[ore]} */
 
 /* ---------- persistenza ---------- */
 function save(){ try{
@@ -506,11 +517,34 @@ function renderOggi(){
   const assentiN = Object.keys(S.assentiOggi).length;
   const docs=[...o.docenti].sort((a,b)=>a.nome.localeCompare(b.nome));
 
-  // chips degli assenti già scelti
+  // chips degli assenti già scelti — espandibili per il permesso breve
   const chips = Object.keys(S.assentiOggi).map(n=>{
     const ore=S.assentiOggi[n];
-    const et = ore? ore.map(h=>h+"ª").join(" ") : "tutto il giorno";
-    return `<div class="achip"><span>${esc(n)} · ${et}</span><button onclick="delete S.assentiOggi['${esc(n)}']; S.prospetto=null; render()">×</button></div>`;
+    const doc=o.docenti.find(d=>d.nome===n);
+    const inClasse=o.ore.filter(hh=>["CLASSE","ARTIC","AR"].includes(statoCella(doc,S.day,hh,o.ore).t));
+    const et = ore ? "permesso · "+ore.map(h=>h+"ª").join(" ") : "tutto il giorno";
+    const aperto = S.chipAperto===n;
+    // ore attualmente "assenti" = ore (se permesso) oppure tutte le inClasse (se giornata intera)
+    const oreAssenti = new Set(ore || inClasse);
+    let orebar="";
+    if(aperto){
+      orebar = `<div class="orebar">
+        <div class="orebar-lbl">Ore di assenza (tocca per togliere/mettere):</div>
+        <div class="orebtns">` +
+        o.ore.map(h=>{
+          const presente = inClasse.includes(h);
+          if(!presente) return `<div class="orab off" title="non in classe">${h}ª</div>`;
+          const on = oreAssenti.has(h);
+          return `<div class="orab ${on?'on':''}" onclick="toggleOra('${esc(n)}',${h})">${h}ª</div>`;
+        }).join("") +
+        `</div></div>`;
+    }
+    return `<div class="achip-wrap">
+      <div class="achip">
+        <span onclick="S.chipAperto='${aperto?'':esc(n)}'; render()">${esc(n)} · ${et} <b class="chev">${aperto?'▲':'▾'}</b></span>
+        <button onclick="delete S.assentiOggi['${esc(n)}']; if(S.chipAperto==='${esc(n)}')S.chipAperto=''; S.prospetto=null; render()">×</button>
+      </div>${orebar}
+    </div>`;
   }).join("");
 
   let out = `<h2 class="sec">Oggi · ${NOMEGIORNO[S.day]}</h2>
@@ -541,14 +575,16 @@ function addAssente(nome){
   S.prospetto=null; render();
 }
 function toggleOra(nome, h){
-  const cur=S.assentiOggi[nome];
   const o=S.orario;
-  // ore in cui è in classe quel giorno
   const doc=o.docenti.find(d=>d.nome===nome);
   const inClasse=o.ore.filter(hh=>["CLASSE","ARTIC","AR"].includes(statoCella(doc,S.day,hh,o.ore).t));
-  let set = new Set(cur===null? inClasse : cur);
+  const cur=S.assentiOggi[nome];
+  // insieme corrente delle ore di ASSENZA (null = tutta la giornata = tutte le ore in classe)
+  let set = new Set(cur===null ? inClasse : cur);
   if(set.has(h)) set.delete(h); else set.add(h);
-  S.assentiOggi[nome] = set.size===inClasse.length ? null : [...set].sort((a,b)=>a-b);
+  // se restano tutte le ore in classe → giornata intera (null); se nessuna → rimane vuoto (assente 0 ore = di fatto presente)
+  if(set.size===inClasse.length) S.assentiOggi[nome]=null;
+  else S.assentiOggi[nome]=[...set].sort((a,b)=>a-b);
   S.prospetto=null; render();
 }
 function lanciaProspetto(){
