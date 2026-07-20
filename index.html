@@ -149,6 +149,18 @@
   .prow.pay .pmot{color:var(--amber); font-weight:700}
   .prow.scoperta{background:#F4DAD7}
   .prow.scoperta .pto{color:var(--red)}
+  .prow.svuota{background:#F7EEDD}
+  .prow.manuale{background:#DCEBE7}
+  .prow.manuale .pmot{color:var(--teal); font-weight:700}
+  .prow{cursor:pointer}
+  .prow .chev{font-size:11px; color:var(--ink-soft); margin-left:3px}
+  .altbox{background:#EFEBDD; border-top:1px solid var(--rule); padding:8px 12px 10px}
+  .alt-lbl{font-size:12px; color:var(--ink-soft); margin-bottom:6px; padding-left:2px}
+  .altrow{display:flex; align-items:center; justify-content:space-between; gap:8px;
+    background:var(--paper2); border:1.5px solid var(--rule); border-radius:9px; padding:9px 12px;
+    margin-bottom:5px; cursor:pointer; font-weight:600; font-size:14.5px}
+  .altrow:active{background:#DCEBE7}
+  .altmot{font-size:11.5px; color:var(--ink-soft); font-weight:500; text-align:right; max-width:45%}
   .pnote{background:var(--paper2); border:1px solid var(--rule); border-left:4px solid var(--ink-soft);
     border-radius:10px; padding:12px 14px; margin-top:12px; font-size:13.5px; color:var(--ink-soft); line-height:1.6}
 </style>
@@ -190,7 +202,8 @@ const DAYSET = new Set(GIORNI_ORD);
 let S = { orario:null, tab:"oggi", day:"LUN",
           doveMode:"docente", selDoc:"", selClasse:"", selHour:1,
           lingue:{ FR:"Basso", SP:"Martinelli" },
-          assentiOggi:{}, flagOggi:[], prospetto:null, chipAperto:"" };   /* assentiOggi: {nome: null|[ore]} */
+          assentiOggi:{}, flagOggi:[], prospetto:null, chipAperto:"",
+          override:{}, apertoRiga:"" };   /* assentiOggi: {nome: null|[ore]} */
 
 /* ---------- persistenza ---------- */
 function save(){ try{
@@ -433,18 +446,53 @@ function generaProspetto(o, giorno, assenti, opts){
   slot.forEach(s=> s._n = candidati(o, s.classe, giorno, s.h, s.a, ctx, s.lingua).length);
   slot.sort((x,y)=> x.h-y.h || x._n-y._n);
 
-  const esiti=[];
+  const override = opts.override || {};
+  // PRIMA passata: applico gli override "forzati" (docente scelto a mano), così occupano il posto
+  //                 e i loro nomi risultano impegnati per il resto del calcolo.
+  const esitiMap = {};
   for(const s of slot){
+    const key = s.a.nome+"|"+s.h;
+    if(key in override && override[key]){          /* scelta manuale di un docente */
+      const nome = override[key];
+      ctx.fatte[nome]=(ctx.fatte[nome]||0)+1;
+      (ctx.occupati[giorno+"|"+s.h] = ctx.occupati[giorno+"|"+s.h]||new Set()).add(nome);
+      esitiMap[key] = {...s, scelto:nome, motivo:"scelta manuale", manuale:true};
+    }
+  }
+  // SECONDA passata: le celle non forzate. Se override vuoto ("") → cella svuotata da riempire.
+  for(const s of slot){
+    const key = s.a.nome+"|"+s.h;
+    if(key in esitiMap) continue;                  /* già forzata */
+    if(override[key]===""){                        /* svuotata manualmente: da riempire */
+      esitiMap[key] = {...s, scelto:null, motivo:"da riempire", svuotata:true};
+      continue;
+    }
     const pool=candidati(o, s.classe, giorno, s.h, s.a, ctx, s.lingua);
-    if(!pool.length){ esiti.push({...s, scelto:null, motivo:"scoperta"}); continue; }
+    if(!pool.length){ esitiMap[key] = {...s, scelto:null, motivo:"scoperta"}; continue; }
     const p=pool[0]; const nome=p[4]; const motivo=p[p.length-2];
     ctx.fatte[nome]=(ctx.fatte[nome]||0)+1;
     (ctx.occupati[giorno+"|"+s.h] = ctx.occupati[giorno+"|"+s.h]||new Set()).add(nome);
     if(/pagamento/.test(motivo)) ctx.pagamento++;
     if(motivo==="recupero") ctx.recuperi[nome]--;
-    esiti.push({...s, scelto:nome, motivo, alternative: pool.slice(1,4).map(x=>x[4])});
+    esitiMap[key] = {...s, scelto:nome, motivo};
   }
+  const esiti = slot.map(s=> esitiMap[s.a.nome+"|"+s.h]);
   return { giorno, esiti, note, pagamento: ctx.pagamento };
+}
+
+/* ricostruisce il contesto della giornata per calcolare le alternative di UNA cella,
+   escludendo l'assegnazione di quella cella (così il suo attuale titolare risulta libero) */
+function ricostruisciCtx(o, prosp, cellaEsclusa){
+  const assenti = new Set(prosp.esiti.map(e=>e.a.nome));
+  const ctx = { assenti, perMateria: contaMaterie(o), fatte:{}, recuperi:{}, flag:new Set(S.flagOggi||[]), occupati:{}, pagamento:0 };
+  for(const e of prosp.esiti){
+    if(e.a.nome===cellaEsclusa.a.nome && e.h===cellaEsclusa.h) continue;  /* escludo questa cella */
+    if(e.scelto){
+      ctx.fatte[e.scelto]=(ctx.fatte[e.scelto]||0)+1;
+      (ctx.occupati[prosp.giorno+"|"+e.h] = ctx.occupati[prosp.giorno+"|"+e.h]||new Set()).add(e.scelto);
+    }
+  }
+  return ctx;
 }
 
 
@@ -590,32 +638,78 @@ function toggleOra(nome, h){
 function lanciaProspetto(){
   const o=S.orario;
   const assenti=Object.keys(S.assentiOggi).map(n=>({nome:n, ore:S.assentiOggi[n]}));
-  S.prospetto = generaProspetto(o, S.day, assenti, { flag:S.flagOggi });
+  S.override = S.override || {};              /* {assente|h : nomeScelto|""(=svuota)} */
+  S.prospetto = generaProspetto(o, S.day, assenti, { flag:S.flagOggi, override:S.override });
   render();
 }
 
+/* candidati per una cella già presente nel prospetto (per mostrare le alternative) */
+function alternativeCella(e){
+  const o=S.orario;
+  const assenti=Object.keys(S.assentiOggi).map(n=>({nome:n, ore:S.assentiOggi[n]}));
+  // ricostruisco il contesto ESCLUDENDO l'assegnazione di questa cella, così vedo chi è libero
+  const ctxSnapshot = ricostruisciCtx(o, p_corrente(), e);
+  const pool = candidati(o, e.classe, p_corrente().giorno, e.h, e.a, ctxSnapshot, e.lingua||null);
+  return pool.map(x=>({nome:x[x.length-1], motivo:x[x.length-2]}));
+}
+function p_corrente(){ return S.prospetto; }
+
+/* applica una scelta manuale su una cella */
+function scegliManuale(assente, h, nome){
+  S.override = S.override || {};
+  const key = assente+"|"+h;
+  // se il docente scelto era già usato in un'altra cella dello stesso prospetto, quella si svuota
+  const prima = S.prospetto.esiti.find(e=> e.scelto===nome && !(e.a.nome===assente && e.h===h));
+  if(prima){ S.override[prima.a.nome+"|"+prima.h] = "";  /* svuota: da riempire a mano */ }
+  S.override[key] = nome;
+  S.apertoRiga = "";
+  lanciaProspetto();
+}
+function apriAlternative(assente,h){ S.apertoRiga = (S.apertoRiga===assente+"|"+h)?"":(assente+"|"+h); render(); }
+
 function renderProspettoHTML(p){
   const o=S.orario;
-  // raggruppo per assente
   const perAss={};
   p.esiti.forEach(e=>{ (perAss[e.a.nome]=perAss[e.a.nome]||[]).push(e); });
+  const nOverride = Object.keys(S.override||{}).filter(k=>S.override[k]!==undefined).length;
   let html = `<h2 class="sec" style="margin-top:22px">Prospetto · ${NOMEGIORNO[p.giorno]}</h2>`;
+  if(nOverride){ html += `<button class="btn ghost" style="width:100%; margin-bottom:10px; font-size:13.5px; padding:8px" onclick="S.override={}; lanciaProspetto()">↺ Ripristina proposta automatica</button>`; }
   for(const nome in perAss){
     const doc=o.docenti.find(d=>d.nome===nome);
     html += `<div class="pcard"><div class="pass">${esc(nome)} <span>${esc(doc.materia||"")}</span></div>`;
     perAss[nome].sort((a,b)=>a.h-b.h).forEach(e=>{
-      if(!e.scelto){
+      const key=e.a.nome+"|"+e.h;
+      const aperto = S.apertoRiga===key;
+      const chevron = `<b class="chev">${aperto?'▲':'▾'}</b>`;
+      if(e.svuotata){
+        html += `<div class="prow svuota" onclick="apriAlternative('${esc(e.a.nome)}',${e.h})">
+          <span class="ph">${e.h}ª</span><span class="pcl">${esc(fmtCl(e.classe))}</span>
+          <span class="pto" style="color:var(--amber)">da riempire ${chevron}</span></div>`;
+      } else if(!e.scelto){
         html += `<div class="prow scoperta"><span class="ph">${e.h}ª</span><span class="pcl">${esc(fmtCl(e.classe))}</span><span class="pto">⚠ scoperta — nessun disponibile</span></div>`;
       } else {
-        const tit = e.tipo.includes("francese")||e.tipo.includes("spagnolo") ? "2ª lingua "+e.tipo : e.tipo;
         const pay = /pagamento/.test(e.motivo)?' pay':'';
-        html += `<div class="prow${pay}"><span class="ph">${e.h}ª</span><span class="pcl">${esc(fmtCl(e.classe))}</span>
-          <span class="pto">${esc(e.scelto)}</span><span class="pmot">${esc(e.motivo)}</span></div>`;
+        const man = e.manuale?' manuale':'';
+        html += `<div class="prow${pay}${man}" onclick="apriAlternative('${esc(e.a.nome)}',${e.h})">
+          <span class="ph">${e.h}ª</span><span class="pcl">${esc(fmtCl(e.classe))}</span>
+          <span class="pto">${esc(e.scelto)} ${chevron}</span><span class="pmot">${esc(e.motivo)}</span></div>`;
+      }
+      // pannello alternative
+      if(aperto){
+        const alt = alternativeCella(e).filter(a=>a.nome!==e.scelto).slice(0,3);
+        html += `<div class="altbox">`;
+        if(alt.length){
+          html += `<div class="alt-lbl">Al posto ${e.scelto?'di '+esc(e.scelto):'(vuoto)'}, scegli:</div>`;
+          html += alt.map(a=>`<div class="altrow" onclick="event.stopPropagation(); scegliManuale('${esc(e.a.nome)}',${e.h},'${esc(a.nome)}')">
+            <span>${esc(a.nome)}</span><span class="altmot">${esc(a.motivo)}</span></div>`).join("");
+        } else {
+          html += `<div class="alt-lbl">Nessun altro docente disponibile per quest'ora.</div>`;
+        }
+        html += `</div>`;
       }
     });
     html += `</div>`;
   }
-  // note (sostegni assenti non sostituiti)
   if(p.note && p.note.length){
     html += `<div class="pnote"><b>Sostegni assenti non sostituiti</b> (la classe ha il curricolare):<br>`;
     html += p.note.map(n=>`${esc(n.nome)} · ${n.h}ª (${esc(fmtCl(n.classe))})`).join("<br>");
