@@ -764,7 +764,9 @@ function renderOrario(){
       lastMat=d.materia;
     }
     const cells = o.ore.map(h=>{
-      const cl=statoCella(d,S.day,h,o.ore);
+      const raw = d.cells[S.day+"|"+h] || {t:"VUOTA"};
+      // il ricevimento va MOSTRATO come R nella griglia (statoCella lo convertirebbe in buca)
+      const cl = (raw.t==="RICE") ? raw : statoCella(d,S.day,h,o.ore);
       return `<div class="cell ${cellClass(cl)}">${esc(cellShort(cl))}</div>`;
     }).join("");
     rows+=`<div class="trow"><div class="tname">${esc(d.nome)}</div><div class="thours">${cells}</div></div>`;
@@ -803,7 +805,8 @@ function renderDove(){
     let wk="";
     for(const g of o.giorni){
       const cells=o.ore.map(h=>{
-        const cl=statoCella(doc,g,h,o.ore);
+        const raw = doc.cells[g+"|"+h] || {t:"VUOTA"};
+        const cl = (raw.t==="RICE") ? raw : statoCella(doc,g,h,o.ore);
         return `<div class="cell ${cellClass(cl)}">${esc(cellShort(cl))}</div>`;
       }).join("");
       wk+=`<div class="wkrow"><div class="wkday">${g}</div><div class="thours">${cells}</div></div>`;
