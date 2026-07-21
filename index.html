@@ -64,6 +64,7 @@
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
   .cell.occ{background:#E4E9F1; color:var(--ink)}       /* in classe */
   .cell.disp{background:#DCEBE7; color:var(--teal)}     /* potenziamento/buca disponibile */
+  .cell.rice{background:#EAF3F1; color:var(--teal); outline:1.5px dashed var(--teal); outline-offset:-3px}  /* ricevimento */
   .cell.nond{background:#F0E7D2; color:var(--amber)}    /* non disponibile / emergenza */
   .cell.free{background:transparent; color:#C3BCA8}     /* fuori servizio */
   .cell.warn{background:#F4DAD7; color:var(--red)}      /* sigla ignota */
@@ -161,6 +162,11 @@
     margin-bottom:5px; cursor:pointer; font-weight:600; font-size:14.5px}
   .altrow:active{background:#DCEBE7}
   .altmot{font-size:11.5px; color:var(--ink-soft); font-weight:500; text-align:right; max-width:45%}
+  .prow.vuotarow{opacity:.55; cursor:default}
+  .prow.vuotarow .pto.nsub{color:var(--ink-soft); font-weight:500; font-style:italic; font-size:13.5px}
+  .ricewarn{background:#EAF3F1; border-left:3px solid var(--teal); color:var(--teal); font-size:12.5px;
+    font-weight:600; padding:6px 14px; border-top:1px solid var(--rule-soft)}
+  .ricewarn.pay{background:#F7EEDD; border-left-color:var(--amber); color:#7A5B1A}
   .pnote{background:var(--paper2); border:1px solid var(--rule); border-left:4px solid var(--ink-soft);
     border-radius:10px; padding:12px 14px; margin-top:12px; font-size:13.5px; color:var(--ink-soft); line-height:1.6}
 </style>
@@ -227,6 +233,7 @@ function classifica(raw){
   let m;
   if(su==="P") return {t:"DISP", det:"P"};
   if(su==="PNO") return {t:"NOND", det:"Pno"};
+  if(su==="R") return {t:"RICE"};                     /* ricevimento mattutino */
   if(su==="PVP") return {t:"EMERG", det:"VP"};
   if(su==="PCV") return {t:"EMERG", det:"CV"};
   if((m=su.match(/^P(\d[A-D])$/))) return {t:"DISP", det:"P·"+m[1]};
@@ -312,11 +319,13 @@ function sostegniSenzaLingua(parsed, lingue){
 
 /* ---------- stato posizionale: buca vs fuori servizio ---------- */
 function oreServizio(doc,g,ore){
-  const hs = ore.filter(h => (doc.cells[g+"|"+h]||{}).t !== "VUOTA");
+  // il ricevimento (RICE) NON è servizio: cade in buca o ai margini, quindi lo escludo dal range
+  const hs = ore.filter(h => { const t=(doc.cells[g+"|"+h]||{}).t; return t!=="VUOTA" && t!=="RICE"; });
   return hs.length ? [Math.min(...hs), Math.max(...hs)] : [null,null];
 }
 function statoCella(doc,g,h,ore){
   const cl = doc.cells[g+"|"+h] || {t:"VUOTA"};
+  if(cl.t==="RICE") return {t:"BUCA", rice:true};    /* ricevimento: disponibile come una buca, ma marcato */
   if(cl.t!=="VUOTA") return cl;
   const [a,b]=oreServizio(doc,g,ore);
   if(a!=null && h>a && h<b) return {t:"BUCA"};
@@ -452,13 +461,14 @@ function generaProspetto(o, giorno, assenti, opts){
   // PRIMA passata: applico gli override "forzati" (docente scelto a mano), così occupano il posto
   //                 e i loro nomi risultano impegnati per il resto del calcolo.
   const esitiMap = {};
+  const isRice = (nome,h)=>{ const d=o.docenti.find(x=>x.nome===nome); return !!(d && (d.cells[giorno+"|"+h]||{}).t==="RICE"); };
   for(const s of slot){
     const key = s.a.nome+"|"+s.h;
     if(key in override && override[key]){          /* scelta manuale di un docente */
       const nome = override[key];
       ctx.fatte[nome]=(ctx.fatte[nome]||0)+1;
       (ctx.occupati[giorno+"|"+s.h] = ctx.occupati[giorno+"|"+s.h]||new Set()).add(nome);
-      esitiMap[key] = {...s, scelto:nome, motivo:"scelta manuale", manuale:true};
+      esitiMap[key] = {...s, scelto:nome, motivo:"scelta manuale", manuale:true, rice:isRice(nome,s.h)};
     }
   }
   // SECONDA passata: le celle non forzate. Se override vuoto ("") → cella svuotata da riempire.
@@ -476,7 +486,7 @@ function generaProspetto(o, giorno, assenti, opts){
     (ctx.occupati[giorno+"|"+s.h] = ctx.occupati[giorno+"|"+s.h]||new Set()).add(nome);
     if(/pagamento/.test(motivo)) ctx.pagamento++;
     if(motivo==="recupero") ctx.recuperi[nome]--;
-    esitiMap[key] = {...s, scelto:nome, motivo};
+    esitiMap[key] = {...s, scelto:nome, motivo, rice:isRice(nome,s.h)};
   }
   const esiti = slot.map(s=> esitiMap[s.a.nome+"|"+s.h]);
   return { giorno, esiti, note, pagamento: ctx.pagamento };
@@ -509,6 +519,7 @@ function cellShort(cl){
     case "NOND": return "Pno";
     case "EMERG": return cl.det;
     case "BUCA": return "—";
+    case "RICE": return "R";
     case "FUORI": return "";
     case "IGNOTA": return "?";
     default: return "";
@@ -518,6 +529,7 @@ function cellClass(cl){
   switch(cl.t){
     case "CLASSE": case "ARTIC": case "AR": case "LINGUA": return "occ";
     case "DISP": case "BUCA": return "disp";
+    case "RICE": return "rice";
     case "NOND": case "EMERG": return "nond";
     case "IGNOTA": return "warn";
     default: return "free";
@@ -533,6 +545,7 @@ function cellDesc(cl){
     case "NOND": return "progetti extracurricolari — non disponibile";
     case "EMERG": return (cl.det==="VP"?"ore di vicepresidenza":"ore commissione viaggi")+" — solo emergenza";
     case "BUCA": return "ora libera (a disposizione)";
+    case "RICE": return "ricevimento mattutino (disponibile, ma è il suo ricevimento)";
     case "FUORI": return "non in servizio";
     case "IGNOTA": return "sigla non riconosciuta: “"+cl.det+"”";
     default: return "";
@@ -681,11 +694,25 @@ function renderProspettoHTML(p){
   if(nOverride){ html += `<button class="btn ghost" style="width:100%; margin-bottom:10px; font-size:13.5px; padding:8px" onclick="S.override={}; lanciaProspetto()">↺ Ripristina proposta automatica</button>`; }
   for(const nome in perAss){
     const doc=o.docenti.find(d=>d.nome===nome);
+    const assObj = perAss[nome][0].a;
     html += `<div class="pcard"><div class="pass">${esc(nome)} <span>${esc(doc.materia||"")}</span></div>`;
-    perAss[nome].sort((a,b)=>a.h-b.h).forEach(e=>{
+    // mappa ora→esito per questo assente
+    const perOra={}; perAss[nome].forEach(e=>perOra[e.h]=e);
+    const oreCoperte = perAss[nome].map(e=>e.h);
+    const minH=Math.min(...oreCoperte), maxH=Math.max(...oreCoperte);
+    for(const h of o.ore){
+      const e = perOra[h];
+      if(!e){
+        // riga "nessuna sostituzione" solo tra la prima e l'ultima ora coperta (continuità di lettura)
+        if(h>minH && h<maxH){
+          html += `<div class="prow vuotarow"><span class="ph">${h}ª</span><span class="pcl">—</span><span class="pto nsub">nessuna sostituzione</span></div>`;
+        }
+        continue;
+      }
       const key=e.a.nome+"|"+e.h;
       const aperto = S.apertoRiga===key;
       const chevron = `<b class="chev">${aperto?'▲':'▾'}</b>`;
+      const riceWarn = e.rice ? `<div class="ricewarn ${/pagamento/.test(e.motivo)?'pay':''}">⚠ è la sua ora di ricevimento${/pagamento/.test(e.motivo)?' — e sarebbe a pagamento':''}</div>` : "";
       if(e.svuotata){
         html += `<div class="prow svuota" onclick="apriAlternative('${esc(e.a.nome)}',${e.h})">
           <span class="ph">${e.h}ª</span><span class="pcl">${esc(fmtCl(e.classe))}</span>
@@ -697,9 +724,8 @@ function renderProspettoHTML(p){
         const man = e.manuale?' manuale':'';
         html += `<div class="prow${pay}${man}" onclick="apriAlternative('${esc(e.a.nome)}',${e.h})">
           <span class="ph">${e.h}ª</span><span class="pcl">${esc(fmtCl(e.classe))}</span>
-          <span class="pto">${esc(e.scelto)} ${chevron}</span><span class="pmot">${esc(e.motivo)}</span></div>`;
+          <span class="pto">${esc(e.scelto)} ${chevron}</span><span class="pmot">${esc(e.motivo)}</span></div>${riceWarn}`;
       }
-      // pannello alternative
       if(aperto){
         const alt = alternativeCella(e).filter(a=>a.nome!==e.scelto).slice(0,3);
         html += `<div class="altbox">`;
@@ -712,7 +738,7 @@ function renderProspettoHTML(p){
         }
         html += `</div>`;
       }
-    });
+    }
     html += `</div>`;
   }
   if(p.note && p.note.length){
