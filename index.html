@@ -203,16 +203,18 @@ let S = { orario:null, tab:"oggi", day:"LUN",
           doveMode:"docente", selDoc:"", selClasse:"", selHour:1,
           lingue:{ FR:"Basso", SP:"Martinelli" },
           assentiOggi:{}, flagOggi:[], prospetto:null, chipAperto:"",
-          override:{}, apertoRiga:"" };   /* assentiOggi: {nome: null|[ore]} */
+          override:{}, apertoRiga:"", flagDocSel:"" };   /* assentiOggi: {nome: null|[ore]} */
 
 /* ---------- persistenza ---------- */
 function save(){ try{
   localStorage.setItem("sostituto_v1", JSON.stringify(S.orario));
   localStorage.setItem("sostituto_lingue", JSON.stringify(S.lingue));
+  localStorage.setItem("sostituto_flag", JSON.stringify(S.flagOggi));
 }catch(e){} }
 function load(){ try{
   const r=localStorage.getItem("sostituto_v1"); if(r) S.orario=JSON.parse(r);
   const l=localStorage.getItem("sostituto_lingue"); if(l) S.lingue=JSON.parse(l);
+  const f=localStorage.getItem("sostituto_flag"); if(f) S.flagOggi=JSON.parse(f);
 }catch(e){} }
 
 /* ---------- classificazione cella (vocabolario chiuso) ---------- */
@@ -609,6 +611,9 @@ function renderOggi(){
   } else {
     out += `<p class="hint">Scegli i docenti assenti oggi. Per un permesso breve potrai indicare solo alcune ore.</p>`;
   }
+  if((S.flagOggi||[]).length){
+    out += `<p class="hint" style="margin-top:8px">🛡️ Flag attivi: ${S.flagOggi.map(f=>{const[n,c]=f.split("|");return esc(n)+" ("+esc(fmtCl(c))+")";}).join(", ")} — non verranno spostati.</p>`;
+  }
 
   // prospetto generato
   if(S.prospetto){
@@ -854,8 +859,54 @@ function renderImporta(){
     <h2 class="sec" style="margin-top:26px">Docenti di 2ª lingua</h2>
     <p class="hint" style="margin-top:0">Serve per gestire le classi articolate: l'app deve sapere chi fa francese e chi spagnolo. Si imposta una volta.</p>
     <div class="field"><label>Francese</label>${selDocente("FR")}</div>
-    <div class="field"><label>Spagnolo</label>${selDocente("SP")}</div>`;
+    <div class="field"><label>Spagnolo</label>${selDocente("SP")}</div>
+    ${renderFlagSection()}`;
   el("file").addEventListener("change", onFile);
+}
+
+/* ---- sezione flag "non derogabile" ---- */
+function renderFlagSection(){
+  if(!S.orario) return `<h2 class="sec" style="margin-top:26px">Sostegni non derogabili</h2>
+    <p class="hint" style="margin-top:0">Importa prima l'orario, poi qui potrai marcare i sostegni con un caso non derogabile.</p>`;
+  const sost=[...S.orario.docenti].filter(isSost).map(d=>d.nome).sort((a,b)=>a.localeCompare(b));
+  // lista flag attivi
+  const attivi = (S.flagOggi||[]).map(fk=>{
+    const [nome,cl]=fk.split("|");
+    return `<div class="achip" style="background:#E4E9F1; border-color:#C3D0E4; color:#2A3F5F">
+      <span>${esc(nome)} · ${esc(fmtCl(cl))}</span>
+      <button onclick="rimuoviFlag('${esc(fk)}')" style="color:#2A3F5F">×</button></div>`;
+  }).join("");
+  // classi del docente selezionato (solo dove lavora)
+  let classiSel="";
+  if(S.flagDocSel){
+    const doc=S.orario.docenti.find(d=>d.nome===S.flagDocSel);
+    const classi=[...classiDi(doc)].sort();
+    classiSel = `<div class="field"><label>Classe con caso non derogabile</label>
+      <select onchange="aggiungiFlag(this.value)">
+        <option value="">— scegli la classe —</option>
+        ${classi.map(c=>`<option value="${esc(c)}">${esc(fmtCl(c))}</option>`).join("")}
+      </select></div>`;
+  }
+  return `<h2 class="sec" style="margin-top:26px">Sostegni non derogabili</h2>
+    <p class="hint" style="margin-top:0">Marca i sostegni che seguono un alunno con assistenza non derogabile: in quell'ora/classe non verranno mai spostati per una sostituzione. Si imposta di rado.</p>
+    ${attivi?`<div class="chips">${attivi}</div>`:""}
+    <div class="field"><label>Aggiungi: docente di sostegno</label>
+      <select onchange="S.flagDocSel=this.value; render()">
+        <option value="">— scegli sostegno —</option>
+        ${sost.map(n=>`<option ${n===S.flagDocSel?'selected':''}>${esc(n)}</option>`).join("")}
+      </select></div>
+    ${classiSel}`;
+}
+function aggiungiFlag(classe){
+  if(!classe || !S.flagDocSel) return;
+  const key=S.flagDocSel+"|"+classe;
+  S.flagOggi = S.flagOggi||[];
+  if(!S.flagOggi.includes(key)) S.flagOggi.push(key);
+  S.flagDocSel=""; S.prospetto=null; save(); render();
+}
+function rimuoviFlag(key){
+  S.flagOggi = (S.flagOggi||[]).filter(k=>k!==key);
+  S.prospetto=null; save(); render();
 }
 
 function selDocente(lang){
