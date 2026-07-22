@@ -409,7 +409,7 @@ function candidati(o, classe, g, h, assenteObj, ctx, lingua){
       if(flagged) continue;                                   /* flag = mai */
       if(st.t==="CLASSE"){
         if(ctx.flag.has(d.nome+"|"+st.det)) continue;         /* non toccare il suo caso grave */
-        if(lingua) continue;                                  /* per gruppo lingua non si spostano sostegni di classe */
+        /* un sostegno spostato fa vigilanza/accompagnamento: vale anche per i gruppi lingua */
         const altri = sostSuClasse(o, st.det, g, h).filter(n=>n!==d.nome);
         if(altri.length) pool.push([5,...tie,"sostegno spostato da "+st.det,d.nome]);
         else pool.push([7,...tie,"⚠ unico sostegno di "+st.det,d.nome]);
@@ -452,8 +452,9 @@ function generaProspetto(o, giorno, assenti, opts){
     for(const h of ore){
       const st=statoCella(doc,giorno,h,o.ore);
       if(st.t==="CLASSE"||st.t==="ARTIC"||st.t==="AR"){
-        if(sost){
-          // sostegno assente: copre solo se flaggato (affiancamento); altrimenti nessuna sostituzione
+        // il sostegno assente NON si sostituisce (salvo flag) SOLO per le sue ore di sostegno;
+        // l'ora di AR (attività alternativa) è lezione vera → si copre come un curricolare
+        if(sost && st.t!=="AR"){
           const cl = st.det || st.a;
           if(opts.flag && new Set(opts.flag).has(a.nome+"|"+cl)){
             slot.push({h, a:doc, classe:cl, tipo:"AFFIANCAMENTO", lingua:null});
