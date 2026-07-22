@@ -900,10 +900,6 @@ function testoWhatsAppData(p, iso){
     const extra = bits.length ? "  ("+bits.join(", ")+")" : "";
     t += `${e.h}ª  ${cl}  ${ass} → *${sost}*${extra}\n`;
   });
-  // sostegni non sostituiti, se presenti
-  if(p.note && p.note.length){
-    t += `\n_Sostegni assenti non sostituiti: ${p.note.map(n=>cognomeBreve(n.nome)+" "+n.h+"ª").join(", ")}_`;
-  }
   return t.trimEnd();
 }
 
