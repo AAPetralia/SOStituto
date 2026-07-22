@@ -171,6 +171,15 @@
     background:var(--ink); color:var(--paper); padding:11px 18px; border-radius:22px; font-size:14px;
     font-weight:600; opacity:0; pointer-events:none; transition:.25s; z-index:99; max-width:82%; text-align:center}
   #toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+  .daylabel{margin-top:6px; font-family:'Zilla Slab',serif; font-weight:700; color:var(--teal); font-size:15px; text-transform:capitalize}
+  .regcard{background:var(--paper2); border:1.5px solid var(--rule); border-radius:12px; margin-bottom:10px; overflow:hidden}
+  .reghead{display:flex; align-items:center; justify-content:space-between; padding:12px 14px; cursor:pointer}
+  .reghead b{font-family:'Zilla Slab',serif; font-size:16px; text-transform:capitalize}
+  .regsub{font-size:12.5px; color:var(--ink-soft); font-weight:500; margin-top:2px}
+  .regbody{border-top:1px solid var(--rule)}
+  .regass{font-family:'Zilla Slab',serif; font-weight:700; font-size:14px; padding:8px 14px 3px; color:var(--ink)}
+  .regrow{display:flex; align-items:center; gap:9px; padding:6px 14px; border-top:1px solid var(--rule-soft)}
+  .regrow.scoperta{background:#F4DAD7}
   .pnote{background:var(--paper2); border:1px solid var(--rule); border-left:4px solid var(--ink-soft);
     border-radius:10px; padding:12px 14px; margin-top:12px; font-size:13.5px; color:var(--ink-soft); line-height:1.6}
 </style>
@@ -185,7 +194,11 @@
 <nav>
   <button data-tab="oggi">
     <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-    <span class="lb">Oggi</span>
+    <span class="lb">Sostituz.</span>
+  </button>
+  <button data-tab="registro">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h13l3 3v13a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>
+    <span class="lb">Registro</span>
   </button>
   <button data-tab="orario" class="on">
     <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M8 13h3M8 17h3"/></svg>
@@ -213,7 +226,8 @@ let S = { orario:null, tab:"oggi", day:"LUN",
           doveMode:"docente", selDoc:"", selClasse:"", selHour:1,
           lingue:{ FR:"Basso", SP:"Martinelli" },
           assentiOggi:{}, flagOggi:[], prospetto:null, chipAperto:"",
-          override:{}, apertoRiga:"", flagDocSel:"" };   /* assentiOggi: {nome: null|[ore]} */
+          override:{}, apertoRiga:"", flagDocSel:"",
+          dataOggi:null, registro:{}, regApertoGiorno:"" };   /* assentiOggi: {nome: null|[ore]} */
 
 /* ---------- persistenza ---------- */
 function save(){ try{
@@ -225,6 +239,7 @@ function load(){ try{
   const r=localStorage.getItem("sostituto_v1"); if(r) S.orario=JSON.parse(r);
   const l=localStorage.getItem("sostituto_lingue"); if(l) S.lingue=JSON.parse(l);
   const f=localStorage.getItem("sostituto_flag"); if(f) S.flagOggi=JSON.parse(f);
+  const rg=localStorage.getItem("sostituto_registro"); if(rg) S.registro=JSON.parse(rg);
 }catch(e){} }
 
 /* ---------- classificazione cella (vocabolario chiuso) ---------- */
@@ -565,7 +580,7 @@ const el = id => document.getElementById(id);
 function render(){
   document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on", b.dataset.tab===S.tab));
   if(!S.orario && S.tab!=="importa"){ renderVuoto(); return; }
-  ({oggi:renderOggi, orario:renderOrario, dove:renderDove, importa:renderImporta})[S.tab]();
+  ({oggi:renderOggi, registro:renderRegistro, orario:renderOrario, dove:renderDove, importa:renderImporta})[S.tab]();
 }
 
 function renderVuoto(){
@@ -580,9 +595,12 @@ function renderVuoto(){
 /* ---- OGGI: assenti → prospetto ---- */
 function renderOggi(){
   const o=S.orario;
-  const days = o.giorni.map(g=>`<div class="day ${g===S.day?'on':''}" onclick="S.day='${g}'; S.prospetto=null; render()">${g}</div>`).join("");
   const assentiN = Object.keys(S.assentiOggi).length;
   const docs=[...o.docenti].sort((a,b)=>a.nome.localeCompare(b.nome));
+  // dalla data scelta ricavo il giorno della settimana per il motore
+  S.dataOggi = S.dataOggi || isoOggi();
+  S.day = giornoDaData(S.dataOggi, o);
+  const giornoOk = o.giorni.includes(S.day);
 
   // chips degli assenti già scelti — espandibili per il permesso breve
   const chips = Object.keys(S.assentiOggi).map(n=>{
@@ -614,9 +632,16 @@ function renderOggi(){
     </div>`;
   }).join("");
 
-  let out = `<h2 class="sec">Oggi · ${NOMEGIORNO[S.day]}</h2>
-    <div class="days">${days}</div>
-    <div class="field"><label>Aggiungi un assente</label>
+  let out = `<h2 class="sec">Sostituzioni</h2>
+    <div class="field"><label>Data</label>
+      <input type="date" value="${S.dataOggi}" onchange="cambiaData(this.value)">
+      <div class="daylabel">${giornoOk ? NOMEGIORNO[S.day] : "⚠ giorno senza lezioni in orario"}</div>
+    </div>`;
+  if(!giornoOk){
+    out += `<p class="hint">Il giorno scelto non ha lezioni nell'orario importato (es. domenica). Scegli una data feriale.</p>`;
+    el("main").innerHTML = out; return;
+  }
+  out += `<div class="field"><label>Aggiungi un assente</label>
       <select id="addAbs" onchange="addAssente(this.value)">
         <option value="">— scegli docente —</option>
         ${docs.filter(d=>!(d.nome in S.assentiOggi)).map(d=>`<option>${esc(d.nome)}</option>`).join("")}
@@ -662,8 +687,33 @@ function lanciaProspetto(){
   const assenti=Object.keys(S.assentiOggi).map(n=>({nome:n, ore:S.assentiOggi[n]}));
   S.override = S.override || {};              /* {assente|h : nomeScelto|""(=svuota)} */
   S.prospetto = generaProspetto(o, S.day, assenti, { flag:S.flagOggi, override:S.override });
+  archiviaRegistro();                         /* opzione 1: si salva da sé alla generazione */
   render();
 }
+
+/* ---------- data ↔ giorno settimana ---------- */
+const SETT = ["DOM","LUN","MAR","MER","GIO","VEN","SAB"];
+function isoOggi(){ const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+function giornoDaData(iso){ const d=new Date(iso+"T12:00:00"); return SETT[d.getDay()]; }
+function dataLeggibile(iso){ const d=new Date(iso+"T12:00:00"); return NOMEGIORNO[SETT[d.getDay()]]+" "+String(d.getDate()).padStart(2,"0")+"/"+String(d.getMonth()+1).padStart(2,"0")+"/"+d.getFullYear(); }
+function cambiaData(iso){ S.dataOggi = iso || isoOggi(); S.prospetto=null; render(); }
+
+/* ---------- registro: archiviazione automatica (opzione 1) ---------- */
+function archiviaRegistro(){
+  if(!S.prospetto) return;
+  S.registro = S.registro || {};
+  const p=S.prospetto;
+  S.registro[S.dataOggi] = {
+    data: S.dataOggi, giorno: p.giorno, pagamento: p.pagamento,
+    assenti: Object.keys(S.assentiOggi).map(n=>({nome:n, ore:S.assentiOggi[n]})),
+    righe: p.esiti.map(e=>({ h:e.h, assente:e.a.nome, classe:e.classe, scelto:e.scelto,
+      motivo:e.motivo, tipo:e.tipo||"", rice:!!e.rice, svuotata:!!e.svuotata, manuale:!!e.manuale })),
+    note: (p.note||[]).map(n=>({nome:n.nome, h:n.h, classe:n.classe})),
+    salvato: new Date().toISOString()
+  };
+  saveRegistro();
+}
+function saveRegistro(){ try{ localStorage.setItem("sostituto_registro", JSON.stringify(S.registro)); }catch(e){} }
 
 /* candidati per una cella già presente nel prospetto (per mostrare le alternative) */
 function alternativeCella(e){
@@ -688,6 +738,67 @@ function scegliManuale(assente, h, nome){
   lanciaProspetto();
 }
 function apriAlternative(assente,h){ S.apertoRiga = (S.apertoRiga===assente+"|"+h)?"":(assente+"|"+h); render(); }
+
+/* ---- REGISTRO: lista giornate archiviate ---- */
+function renderRegistro(){
+  const date = Object.keys(S.registro||{}).sort().reverse();   /* più recenti in cima */
+  if(!date.length){
+    el("main").innerHTML = `<h2 class="sec">Registro sostituzioni</h2>
+      <div class="empty"><div class="ic">▤</div>
+      <p class="hint">Nessuna giornata archiviata.<br>Il registro si popola da sé quando generi un prospetto nella scheda Sostituzioni.</p></div>`;
+    return;
+  }
+  let out = `<h2 class="sec">Registro sostituzioni</h2>
+    <p class="hint" style="margin-top:0">${date.length} giornat${date.length===1?'a':'e'} in archivio. Tocca per aprire.</p>`;
+  for(const iso of date){
+    const rec=S.registro[iso];
+    const aperto = S.regApertoGiorno===iso;
+    const nSost = rec.righe.filter(r=>r.scelto).length;
+    const nScop = rec.righe.filter(r=>r.motivo==="scoperta").length;
+    out += `<div class="regcard">
+      <div class="reghead" onclick="S.regApertoGiorno='${aperto?'':iso}'; render()">
+        <div><b>${dataLeggibile(iso)}</b><div class="regsub">${nSost} sostituzion${nSost===1?'e':'i'}${nScop?` · ${nScop} scoperte`:''}${rec.pagamento?` · ${rec.pagamento} a pagamento`:''}</div></div>
+        <b class="chev">${aperto?'▲':'▾'}</b>
+      </div>`;
+    if(aperto){
+      out += `<div class="regbody">`;
+      // raggruppo per assente
+      const perAss={}; rec.righe.forEach(r=>{ (perAss[r.assente]=perAss[r.assente]||[]).push(r); });
+      for(const ass in perAss){
+        out += `<div class="regass">${esc(ass)}</div>`;
+        perAss[ass].sort((a,b)=>a.h-b.h).forEach(r=>{
+          if(r.scelto){
+            out += `<div class="regrow"><span class="ph">${r.h}ª</span><span class="pcl">${esc(fmtCl(r.classe))}</span><span class="pto">${esc(r.scelto)}</span><span class="pmot">${esc(r.motivo)}</span></div>`;
+          } else if(r.motivo==="scoperta"){
+            out += `<div class="regrow scoperta"><span class="ph">${r.h}ª</span><span class="pcl">${esc(fmtCl(r.classe))}</span><span class="pto" style="color:var(--red)">scoperta</span></div>`;
+          }
+        });
+      }
+      if(rec.note && rec.note.length){
+        out += `<div class="pnote" style="margin:8px 12px">Sostegni non sostituiti: ${rec.note.map(n=>esc(n.nome)+" "+n.h+"ª").join(", ")}</div>`;
+      }
+      out += `<div style="padding:10px 12px; display:flex; gap:8px">
+        <button class="btn ghost" style="flex:1; font-size:13px; padding:8px" onclick="condividiWhatsAppRegistro('${iso}')">📋 WhatsApp</button>
+        <button class="btn ghost" style="flex:1; font-size:13px; padding:8px; color:var(--red); border-color:var(--red)" onclick="eliminaGiorno('${iso}')">🗑 Elimina</button>
+      </div>`;
+      out += `</div>`;
+    }
+    out += `</div>`;
+  }
+  el("main").innerHTML = out;
+}
+function eliminaGiorno(iso){
+  if(!confirm("Eliminare la giornata "+dataLeggibile(iso)+" dal registro?")) return;
+  delete S.registro[iso]; S.regApertoGiorno=""; saveRegistro(); render();
+}
+function condividiWhatsAppRegistro(iso){
+  // ricostruisco un pseudo-prospetto dal record per riusare testoWhatsApp
+  const rec=S.registro[iso];
+  const p={ giorno:rec.giorno, pagamento:rec.pagamento,
+    esiti: rec.righe.map(r=>({h:r.h, a:{nome:r.assente}, classe:r.classe, scelto:r.scelto, motivo:r.motivo, tipo:r.tipo, rice:r.rice})) };
+  const t = testoWhatsAppData(p, iso);
+  if(navigator.share){ navigator.share({text:t}).catch(()=>copiaTesto(t)); } else copiaTesto(t);
+}
 
 function renderProspettoHTML(p){
   const o=S.orario;
@@ -765,21 +876,18 @@ function notaWA(e){
 function oneriWA(e){ if(/pagamento/.test(e.motivo)) return "PAG"; if(e.motivo==="recupero") return "REC"; return ""; }
 function pad(s,n){ s=String(s); return s.length>=n ? s : s+" ".repeat(n-s.length); }
 
-function testoWhatsApp(p){
+function testoWhatsApp(p){ return testoWhatsAppData(p, S.dataOggi || isoOggi()); }
+function testoWhatsAppData(p, iso){
   const righe=[];
   p.esiti.forEach(e=>{ if(e.scelto) righe.push({
     h:e.h, ass:cognomeBreve(e.a.nome), cl:e.classe, sost:cognomeBreve(e.scelto),
     nota:notaWA(e), on:oneriWA(e)
   }); });
   righe.sort((a,b)=> a.h-b.h || a.ass.localeCompare(b.ass));
-  const nomeG = NOMEGIORNO[p.giorno];
-  const oggi = new Date();
-  const dd = String(oggi.getDate()).padStart(2,"0")+"/"+String(oggi.getMonth()+1).padStart(2,"0")+"/"+oggi.getFullYear();
-  let t = `*Sostituzioni · ${nomeG} ${dd}*\n\`\`\`\n`;
+  let t = `*Sostituzioni · ${dataLeggibile(iso)}*\n\`\`\`\n`;
   t += pad("Ora",4)+pad("Assente",11)+pad("Cl",5)+pad("Sostituto",11)+pad("Nota",11)+"On\n";
   righe.forEach(r=>{ t += pad(r.h+"ª",4)+pad(r.ass,11)+pad(r.cl,5)+pad(r.sost,11)+pad(r.nota,11)+r.on+"\n"; });
   t += "```";
-  // righe scoperte e sostegni non sostituiti, se presenti
   const scoperte=p.esiti.filter(e=>e.motivo==="scoperta");
   if(scoperte.length){ t += "\n⚠ *Scoperte:* "+scoperte.map(e=>e.h+"ª "+fmtCl(e.classe)).join(", "); }
   return t;
@@ -1060,7 +1168,8 @@ function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;",
 /* ---------- avvio ---------- */
 document.querySelectorAll("nav button").forEach(b=> b.addEventListener("click", ()=>{ S.tab=b.dataset.tab; render(); }));
 load();
-if(S.orario){ S.day=S.orario.giorni[0]||"LUN"; }
+S.dataOggi = S.dataOggi || isoOggi();
+if(S.orario){ S.day = giornoDaData(S.dataOggi); }
 render();
 </script>
 </body>
