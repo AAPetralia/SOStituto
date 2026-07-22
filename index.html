@@ -144,6 +144,7 @@
   .prow:first-of-type{border-top:none}
   .ph{font-family:'Zilla Slab',serif; font-weight:700; color:var(--ink-soft); width:26px; flex-shrink:0}
   .pcl{font-weight:700; color:var(--ink); width:42px; flex-shrink:0}
+  .pcl.wide{width:auto; min-width:56px; white-space:nowrap; color:var(--teal)}
   .pto{flex:1; font-weight:600; font-size:15px; min-width:0}
   .pmot{font-size:11.5px; color:var(--ink-soft); text-align:right; flex-shrink:0; max-width:42%}
   .prow.pay{background:#F7EEDD}
@@ -707,7 +708,8 @@ function archiviaRegistro(){
     data: S.dataOggi, giorno: p.giorno, pagamento: p.pagamento,
     assenti: Object.keys(S.assentiOggi).map(n=>({nome:n, ore:S.assentiOggi[n]})),
     righe: p.esiti.map(e=>({ h:e.h, assente:e.a.nome, classe:e.classe, scelto:e.scelto,
-      motivo:e.motivo, tipo:e.tipo||"", rice:!!e.rice, svuotata:!!e.svuotata, manuale:!!e.manuale })),
+      motivo:e.motivo, tipo:e.tipo||"", rice:!!e.rice, svuotata:!!e.svuotata, manuale:!!e.manuale,
+      gruppo:e.gruppo||"", lingua:e.lingua||"" })),
     note: (p.note||[]).map(n=>({nome:n.nome, h:n.h, classe:n.classe})),
     salvato: new Date().toISOString()
   };
@@ -738,6 +740,20 @@ function scegliManuale(assente, h, nome){
   lanciaProspetto();
 }
 function apriAlternative(assente,h){ S.apertoRiga = (S.apertoRiga===assente+"|"+h)?"":(assente+"|"+h); render(); }
+
+/* etichetta classe: per le articolate mostra il gruppo (2A·2C), altrimenti la classe */
+function clLabel(e){
+  if(e.gruppo && e.lingua) return e.gruppo;      /* es. "2A·2C" */
+  return fmtCl(e.classe);
+}
+/* etichetta motivo: antepone lingua (articolate) o "affianc." dove serve */
+function motivoLabel(e){
+  const bits=[];
+  if(e.gruppo && e.lingua) bits.push(e.lingua==="FR"?"francese":"spagnolo");
+  if(e.tipo && /AFFIAN/i.test(e.tipo)) bits.push("affianc.");
+  bits.push(e.motivo);
+  return bits.join(" · ");
+}
 
 /* ---- REGISTRO: lista giornate archiviate ---- */
 function renderRegistro(){
@@ -828,19 +844,20 @@ function renderProspettoHTML(p){
       const aperto = S.apertoRiga===key;
       const chevron = `<b class="chev">${aperto?'▲':'▾'}</b>`;
       const riceWarn = e.rice ? `<div class="ricewarn ${/pagamento/.test(e.motivo)?'pay':''}">⚠ è la sua ora di ricevimento${/pagamento/.test(e.motivo)?' — e sarebbe a pagamento':''}</div>` : "";
+      const clLab = clLabel(e);
+      const artic = !!(e.gruppo && e.lingua);
       if(e.svuotata){
         html += `<div class="prow svuota" onclick="apriAlternative('${esc(e.a.nome)}',${e.h})">
-          <span class="ph">${e.h}ª</span><span class="pcl">${esc(fmtCl(e.classe))}</span>
+          <span class="ph">${e.h}ª</span><span class="pcl ${artic?'wide':''}">${esc(clLab)}</span>
           <span class="pto" style="color:var(--amber)">da riempire ${chevron}</span></div>`;
       } else if(!e.scelto){
-        html += `<div class="prow scoperta"><span class="ph">${e.h}ª</span><span class="pcl">${esc(fmtCl(e.classe))}</span><span class="pto">⚠ scoperta — nessun disponibile</span></div>`;
+        html += `<div class="prow scoperta"><span class="ph">${e.h}ª</span><span class="pcl ${artic?'wide':''}">${esc(clLab)}</span><span class="pto">⚠ scoperta — nessun disponibile</span></div>`;
       } else {
         const pay = /pagamento/.test(e.motivo)?' pay':'';
         const man = e.manuale?' manuale':'';
-        const affPref = (e.tipo && /AFFIAN/i.test(e.tipo)) ? "affianc. · " : "";
         html += `<div class="prow${pay}${man}" onclick="apriAlternative('${esc(e.a.nome)}',${e.h})">
-          <span class="ph">${e.h}ª</span><span class="pcl">${esc(fmtCl(e.classe))}</span>
-          <span class="pto">${esc(e.scelto)} ${chevron}</span><span class="pmot">${affPref}${esc(e.motivo)}</span></div>${riceWarn}`;
+          <span class="ph">${e.h}ª</span><span class="pcl ${artic?'wide':''}">${esc(clLab)}</span>
+          <span class="pto">${esc(e.scelto)} ${chevron}</span><span class="pmot">${esc(motivoLabel(e))}</span></div>${riceWarn}`;
       }
       if(aperto){
         const alt = alternativeCella(e).filter(a=>a.nome!==e.scelto).slice(0,3);
@@ -885,7 +902,8 @@ function testoWhatsAppData(p, iso){
     .slice().sort((a,b)=> a.h-b.h || String(a.a.nome).localeCompare(String(b.a.nome)));
   let t = `*Sostituzioni · ${dataLeggibile(iso)}*\n\n`;
   righe.forEach(e=>{
-    const cl = e.classe;   /* compatto: 2D, non "2ª D" */
+    const artic = !!(e.gruppo && e.lingua);
+    const cl = artic ? e.gruppo.replace("·","-") : e.classe;   /* articolata: 2A-2C */
     const ass = cognomeBreve(e.a.nome);
     if(e.motivo==="scoperta"){
       t += `${e.h}ª  ${cl}  ${ass} → ⚠ SCOPERTA\n`; return;
@@ -893,6 +911,7 @@ function testoWhatsAppData(p, iso){
     const sost = cognomeBreve(e.scelto);
     // nota solo se diversa dalla sostituzione normale
     const bits=[];
+    if(artic) bits.push(e.lingua);                 /* FR / SP */
     if(e.tipo && /AFFIAN/i.test(e.tipo)) bits.push("affianc.");
     if(/pagamento/.test(e.motivo)) bits.push("PAG");
     else if(e.motivo==="recupero") bits.push("REC");
