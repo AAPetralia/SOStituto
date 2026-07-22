@@ -879,19 +879,32 @@ function pad(s,n){ s=String(s); return s.length>=n ? s : s+" ".repeat(n-s.length
 
 function testoWhatsApp(p){ return testoWhatsAppData(p, S.dataOggi || isoOggi()); }
 function testoWhatsAppData(p, iso){
-  const righe=[];
-  p.esiti.forEach(e=>{ if(e.scelto) righe.push({
-    h:e.h, ass:cognomeBreve(e.a.nome), cl:e.classe, sost:cognomeBreve(e.scelto),
-    nota:notaWA(e), on:oneriWA(e)
-  }); });
-  righe.sort((a,b)=> a.h-b.h || a.ass.localeCompare(b.ass));
-  let t = `*Sostituzioni · ${dataLeggibile(iso)}*\n\`\`\`\n`;
-  t += pad("Ora",4)+pad("Assente",11)+pad("Cl",5)+pad("Sostituto",11)+pad("Nota",11)+"On\n";
-  righe.forEach(r=>{ t += pad(r.h+"ª",4)+pad(r.ass,11)+pad(r.cl,5)+pad(r.sost,11)+pad(r.nota,11)+r.on+"\n"; });
-  t += "```";
-  const scoperte=p.esiti.filter(e=>e.motivo==="scoperta");
-  if(scoperte.length){ t += "\n⚠ *Scoperte:* "+scoperte.map(e=>e.h+"ª "+fmtCl(e.classe)).join(", "); }
-  return t;
+  // FORMATO 2: una riga per sostituzione, righe corte (non si sfasano su WhatsApp)
+  const righe = p.esiti
+    .filter(e=> e.scelto || e.motivo==="scoperta")
+    .slice().sort((a,b)=> a.h-b.h || String(a.a.nome).localeCompare(String(b.a.nome)));
+  let t = `*Sostituzioni · ${dataLeggibile(iso)}*\n\n`;
+  righe.forEach(e=>{
+    const cl = e.classe;   /* compatto: 2D, non "2ª D" */
+    const ass = cognomeBreve(e.a.nome);
+    if(e.motivo==="scoperta"){
+      t += `${e.h}ª  ${cl}  ${ass} → ⚠ SCOPERTA\n`; return;
+    }
+    const sost = cognomeBreve(e.scelto);
+    // nota solo se diversa dalla sostituzione normale
+    const bits=[];
+    if(e.tipo && /AFFIAN/i.test(e.tipo)) bits.push("affianc.");
+    if(/pagamento/.test(e.motivo)) bits.push("PAG");
+    else if(e.motivo==="recupero") bits.push("REC");
+    if(e.rice) bits.push("⚠ricev.");
+    const extra = bits.length ? "  ("+bits.join(", ")+")" : "";
+    t += `${e.h}ª  ${cl}  ${ass} → *${sost}*${extra}\n`;
+  });
+  // sostegni non sostituiti, se presenti
+  if(p.note && p.note.length){
+    t += `\n_Sostegni assenti non sostituiti: ${p.note.map(n=>cognomeBreve(n.nome)+" "+n.h+"ª").join(", ")}_`;
+  }
+  return t.trimEnd();
 }
 
 function condividiWhatsApp(){
