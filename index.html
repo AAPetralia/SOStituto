@@ -414,11 +414,13 @@ function candidati(o, classe, g, h, assenteObj, ctx, lingua){
     const cdc = classiDi(d).has(classe) ? 0 : 1;
     const tie = [aff, cdc, ctx.fatte[d.nome]||0, d.nome];
     const flagged = ctx.flag.has(d.nome+"|"+classe);
-    // a) sostegno PRIVO DEL PROPRIO ALUNNO (assente oggi): risorsa liberissima, priorità massima
-    //    — criterio a) circolare, sopra il recupero. Vale nelle sue ore di sostegno (l'alunno non c'è,
-    //    quindi non lo sta seguendo). Supera anche l'intoccabilità: senza alunno, non c'è caso grave da presidiare.
+    // f) sostegno PRIVO DEL PROPRIO ALUNNO (assente oggi): risorsa libera, criterio f) della circolare.
+    //    Sta SOTTO potenziamento (e) e tutto ciò che precede, SOPRA pagamento (g) e sostegno di altra classe (h).
+    //    Vale nelle sue ore di sostegno (l'alunno non c'è, non lo sta seguendo).
+    //    Supera l'intoccabilità: senza alunno, non c'è caso grave da presidiare.
+    //    (Il criterio a) "privo di alunni" resta per la classe in gita, dalla futura scheda Uscita didattica.)
     if(isSost(d) && ctx.alunnoAssente.has(d.nome) && (st.t==="CLASSE"||st.t==="LINGUA")){
-      pool.push([-1,...tie,"alunno assente",d.nome]); continue;
+      pool.push([3,...tie,"alunno assente",d.nome]); continue;
     }
     // 0) recupero piazzabile
     if((ctx.recuperi[d.nome]||0)>0 && (st.t==="DISP"||st.t==="BUCA"||st.t==="EMERG")){
