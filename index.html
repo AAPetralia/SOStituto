@@ -376,6 +376,18 @@ function sostSuClasse(o, classe, g, h){          /* sostegni presenti in una cla
   }
   return out;
 }
+/* c'è un curricolare (non sostegno) ASSENTE che insegna in questa classe a quest'ora? */
+function curricolareAssenteInClasse(o, classe, g, h, ctx, escludi){
+  for(const d of o.docenti){
+    if(isSost(d)) continue;
+    if(!ctx.assenti.has(d.nome)) continue;
+    if(d.nome===escludi) continue;
+    const c=statoCella(d,g,h,o.ore);
+    const cl = c.det || c.a || c.classe;
+    if((c.t==="CLASSE"||c.t==="ARTIC"||c.t==="AR"||c.t==="LINGUA") && (cl===classe || c.b===classe)) return true;
+  }
+  return false;
+}
 /* docenti_per_materia: per sapere se l'affinità disciplinare è applicabile */
 function contaMaterie(o){ const m={}; o.docenti.forEach(d=>m[d.materia]=(m[d.materia]||0)+1); return m; }
 
@@ -411,8 +423,11 @@ function candidati(o, classe, g, h, assenteObj, ctx, lingua){
         if(ctx.flag.has(d.nome+"|"+st.det)) continue;         /* non toccare il suo caso grave */
         /* un sostegno spostato fa vigilanza/accompagnamento: vale anche per i gruppi lingua */
         const altri = sostSuClasse(o, st.det, g, h).filter(n=>n!==d.nome);
-        if(altri.length) pool.push([5,...tie,"sostegno spostato da "+st.det,d.nome]);
-        else pool.push([7,...tie,"⚠ unico sostegno di "+st.det,d.nome]);
+        // se nella SUA classe c'è un curricolare assente, quel sostegno serve LÌ → penalizza lo spostamento
+        const servaCasa = curricolareAssenteInClasse(o, st.det, g, h, ctx, d.nome);
+        if(!altri.length) pool.push([7,...tie,"⚠ unico sostegno di "+st.det,d.nome]);
+        else if(servaCasa) pool.push([6,...tie,"sostegno spostato da "+st.det+" (serviva lì)",d.nome]);
+        else pool.push([5,...tie,"sostegno spostato da "+st.det,d.nome]);
         continue;
       }
       /* un sostegno in ora BUCA è fuori servizio come chiunque → cade nel pagamento sotto */
@@ -467,7 +482,7 @@ function generaProspetto(o, giorno, assenti, opts){
           const lingua = linguaDi(a.nome);          /* francese o spagnolo, dal docente assente */
           slot.push({h, a:doc, classe:st.a, tipo: lingua? (lingua==="FR"?"francese":"spagnolo") : "sostituzione", lingua, gruppo:st.a+"·"+st.b});
         } else if(st.t==="AR"){
-          slot.push({h, a:doc, classe:st.det, tipo:"affiancamento AR", lingua:null});
+          slot.push({h, a:doc, classe:st.det, tipo:"AIRC", lingua:null});
         } else {
           slot.push({h, a:doc, classe:st.det, tipo:"sostituzione", lingua:null});
         }
@@ -733,8 +748,9 @@ function p_corrente(){ return S.prospetto; }
 function scegliManuale(assente, h, nome){
   S.override = S.override || {};
   const key = assente+"|"+h;
-  // se il docente scelto era già usato in un'altra cella dello stesso prospetto, quella si svuota
-  const prima = S.prospetto.esiti.find(e=> e.scelto===nome && !(e.a.nome===assente && e.h===h));
+  // conflitto REALE solo se il docente è già usato ALLA STESSA ORA (non può stare in due classi insieme).
+  // In ore diverse può fare più sostituzioni: nessun conflitto.
+  const prima = S.prospetto.esiti.find(e=> e.scelto===nome && e.h===h && !(e.a.nome===assente && e.h===h));
   if(prima){ S.override[prima.a.nome+"|"+prima.h] = "";  /* svuota: da riempire a mano */ }
   S.override[key] = nome;
   S.apertoRiga = "";
@@ -751,7 +767,8 @@ function clLabel(e){
 function motivoLabel(e){
   const bits=[];
   if(e.gruppo && e.lingua) bits.push(e.lingua==="FR"?"francese":"spagnolo");
-  if(e.tipo && /AFFIAN/i.test(e.tipo)) bits.push("affianc.");
+  if(e.tipo==="AIRC") bits.push("AIRC");
+  else if(e.tipo && /AFFIAN/i.test(e.tipo)) bits.push("affianc.");
   bits.push(e.motivo);
   return bits.join(" · ");
 }
@@ -889,6 +906,7 @@ function renderProspettoHTML(p){
 function cognomeBreve(n){ const c=String(n).split(/\s+/)[0]; return c.length>10 ? c.slice(0,9)+"." : c; }
 function notaWA(e){
   const ass = S.orario.docenti.find(d=>d.nome===e.a.nome);
+  if(e.tipo==="AIRC") return "AIRC";
   if((e.tipo && /AFFIAN/i.test(e.tipo)) || isSost(ass)) return "affianc.";
   return "sost.curr.";
 }
@@ -913,7 +931,8 @@ function testoWhatsAppData(p, iso){
     // nota solo se diversa dalla sostituzione normale
     const bits=[];
     if(artic) bits.push(e.lingua);                 /* FR / SP */
-    if(e.tipo && /AFFIAN/i.test(e.tipo)) bits.push("affianc.");
+    if(e.tipo==="AIRC") bits.push("AIRC");
+    else if(e.tipo && /AFFIAN/i.test(e.tipo)) bits.push("affianc.");
     if(/pagamento/.test(e.motivo)) bits.push("PAG");
     else if(e.motivo==="recupero") bits.push("REC");
     if(e.rice) bits.push("⚠ricev.");
