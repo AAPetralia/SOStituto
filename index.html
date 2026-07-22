@@ -181,6 +181,12 @@
   .regass{font-family:'Zilla Slab',serif; font-weight:700; font-size:14px; padding:8px 14px 3px; color:var(--ink)}
   .regrow{display:flex; align-items:center; gap:9px; padding:6px 14px; border-top:1px solid var(--rule-soft)}
   .regrow.scoperta{background:#F4DAD7}
+  .aapanel{background:var(--paper2); border:1.5px solid var(--rule); border-radius:12px; padding:6px; margin-bottom:12px}
+  .aapanel-lbl{font-size:12.5px; color:var(--ink-soft); padding:8px 10px 6px; line-height:1.4}
+  .aarow{display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border-top:1px solid var(--rule-soft); cursor:pointer; font-weight:600}
+  .aarow b{font-weight:600; font-size:12.5px; color:var(--ink-soft)}
+  .aarow.on{background:#DCEBE7}
+  .aarow.on b{color:var(--teal)}
   .pnote{background:var(--paper2); border:1px solid var(--rule); border-left:4px solid var(--ink-soft);
     border-radius:10px; padding:12px 14px; margin-top:12px; font-size:13.5px; color:var(--ink-soft); line-height:1.6}
 </style>
@@ -228,19 +234,22 @@ let S = { orario:null, tab:"oggi", day:"LUN",
           lingue:{ FR:"Basso", SP:"Martinelli" },
           assentiOggi:{}, flagOggi:[], prospetto:null, chipAperto:"",
           override:{}, apertoRiga:"", flagDocSel:"",
-          dataOggi:null, registro:{}, regApertoGiorno:"" };   /* assentiOggi: {nome: null|[ore]} */
+          dataOggi:null, registro:{}, regApertoGiorno:"",
+          alunnoAssenteOggi:[], alunnoSel:"", alunnoPanel:false };   /* assentiOggi: {nome: null|[ore]} */
 
 /* ---------- persistenza ---------- */
 function save(){ try{
   localStorage.setItem("sostituto_v1", JSON.stringify(S.orario));
   localStorage.setItem("sostituto_lingue", JSON.stringify(S.lingue));
   localStorage.setItem("sostituto_flag", JSON.stringify(S.flagOggi));
+  localStorage.setItem("sostituto_alunno", JSON.stringify({data:S.dataOggi, lista:S.alunnoAssenteOggi}));
 }catch(e){} }
 function load(){ try{
   const r=localStorage.getItem("sostituto_v1"); if(r) S.orario=JSON.parse(r);
   const l=localStorage.getItem("sostituto_lingue"); if(l) S.lingue=JSON.parse(l);
   const f=localStorage.getItem("sostituto_flag"); if(f) S.flagOggi=JSON.parse(f);
   const rg=localStorage.getItem("sostituto_registro"); if(rg) S.registro=JSON.parse(rg);
+  const aa=localStorage.getItem("sostituto_alunno"); if(aa){ const o=JSON.parse(aa); if(o && o.data===S.dataOggi) S.alunnoAssenteOggi=o.lista||[]; }
 }catch(e){} }
 
 /* ---------- classificazione cella (vocabolario chiuso) ---------- */
@@ -405,6 +414,12 @@ function candidati(o, classe, g, h, assenteObj, ctx, lingua){
     const cdc = classiDi(d).has(classe) ? 0 : 1;
     const tie = [aff, cdc, ctx.fatte[d.nome]||0, d.nome];
     const flagged = ctx.flag.has(d.nome+"|"+classe);
+    // a) sostegno PRIVO DEL PROPRIO ALUNNO (assente oggi): risorsa liberissima, priorità massima
+    //    — criterio a) circolare, sopra il recupero. Vale nelle sue ore di sostegno (l'alunno non c'è,
+    //    quindi non lo sta seguendo). Supera anche l'intoccabilità: senza alunno, non c'è caso grave da presidiare.
+    if(isSost(d) && ctx.alunnoAssente.has(d.nome) && (st.t==="CLASSE"||st.t==="LINGUA")){
+      pool.push([-1,...tie,"alunno assente",d.nome]); continue;
+    }
     // 0) recupero piazzabile
     if((ctx.recuperi[d.nome]||0)>0 && (st.t==="DISP"||st.t==="BUCA"||st.t==="EMERG")){
       pool.push([0,...tie,"recupero",d.nome]); continue;
@@ -451,6 +466,7 @@ function generaProspetto(o, giorno, assenti, opts){
     fatte: Object.assign({}, opts.fatte||{}),
     recuperi: Object.assign({}, opts.recuperi||{}),
     flag: new Set(opts.flag||[]),          /* elementi "Nome|Classe" */
+    alunnoAssente: new Set(opts.alunnoAssente||[]),   /* sostegni col proprio alunno assente oggi (criterio a) */
     occupati: {},
     pagamento: 0
   };
@@ -532,7 +548,7 @@ function generaProspetto(o, giorno, assenti, opts){
    escludendo l'assegnazione di quella cella (così il suo attuale titolare risulta libero) */
 function ricostruisciCtx(o, prosp, cellaEsclusa){
   const assenti = new Set(prosp.esiti.map(e=>e.a.nome));
-  const ctx = { assenti, perMateria: contaMaterie(o), fatte:{}, recuperi:{}, flag:new Set(S.flagOggi||[]), occupati:{}, pagamento:0 };
+  const ctx = { assenti, perMateria: contaMaterie(o), fatte:{}, recuperi:{}, flag:new Set(S.flagOggi||[]), alunnoAssente:new Set(S.alunnoAssenteOggi||[]), occupati:{}, pagamento:0 };
   for(const e of prosp.esiti){
     if(e.a.nome===cellaEsclusa.a.nome && e.h===cellaEsclusa.h) continue;  /* escludo questa cella */
     if(e.scelto){
@@ -658,6 +674,27 @@ function renderOggi(){
     out += `<p class="hint">Il giorno scelto non ha lezioni nell'orario importato (es. domenica). Scegli una data feriale.</p>`;
     el("main").innerHTML = out; return;
   }
+
+  // BOTTONE alunno assente (last-minute, dopo l'appello) — in alto per ricordarsi di premerlo
+  const nAA = (S.alunnoAssenteOggi||[]).length;
+  out += `<button class="btn" style="width:100%; margin-bottom:12px; background:${nAA?'var(--teal)':'#8a7a5c'}"
+      onclick="S.alunnoPanel=!S.alunnoPanel; render()">
+      👦 Alunno assente${nAA?` · ${nAA}`:''} <b style="font-weight:400; opacity:.85">(dopo l'appello)</b></button>`;
+  if(S.alunnoPanel){
+    const sostegni = docs.filter(d=>isSost(d));
+    out += `<div class="aapanel">
+      <div class="aapanel-lbl">Segna i sostegni il cui alunno è assente oggi. Diventano risorse a priorità massima (criterio a).</div>`;
+    out += sostegni.map(d=>{
+      const on=(S.alunnoAssenteOggi||[]).includes(d.nome);
+      return `<div class="aarow ${on?'on':''}" onclick="toggleAlunnoAssente('${esc(d.nome)}')">
+        <span>${esc(d.nome)}</span><b>${on?'✓ assente':'presente'}</b></div>`;
+    }).join("");
+    out += `</div>`;
+  }
+  if(nAA){
+    out += `<p class="hint" style="margin-top:-4px; margin-bottom:12px">👦 Alunno assente: ${S.alunnoAssenteOggi.map(esc).join(", ")} — disponibili a priorità massima.</p>`;
+  }
+
   out += `<div class="field"><label>Aggiungi un assente</label>
       <select id="addAbs" onchange="addAssente(this.value)">
         <option value="">— scegli docente —</option>
@@ -686,6 +723,14 @@ function addAssente(nome){
   S.assentiOggi[nome]=null;   // default: giornata intera
   S.prospetto=null; render();
 }
+function toggleAlunnoAssente(nome){
+  S.alunnoAssenteOggi = S.alunnoAssenteOggi || [];
+  const i = S.alunnoAssenteOggi.indexOf(nome);
+  if(i>=0) S.alunnoAssenteOggi.splice(i,1); else S.alunnoAssenteOggi.push(nome);
+  save();                 /* persiste (giornaliero, azzerato al cambio data) */
+  S.prospetto=null;       /* va rigenerato per applicare la priorità */
+  render();
+}
 function toggleOra(nome, h){
   const o=S.orario;
   const doc=o.docenti.find(d=>d.nome===nome);
@@ -703,7 +748,7 @@ function lanciaProspetto(){
   const o=S.orario;
   const assenti=Object.keys(S.assentiOggi).map(n=>({nome:n, ore:S.assentiOggi[n]}));
   S.override = S.override || {};              /* {assente|h : nomeScelto|""(=svuota)} */
-  S.prospetto = generaProspetto(o, S.day, assenti, { flag:S.flagOggi, override:S.override });
+  S.prospetto = generaProspetto(o, S.day, assenti, { flag:S.flagOggi, override:S.override, alunnoAssente:S.alunnoAssenteOggi });
   archiviaRegistro();                         /* opzione 1: si salva da sé alla generazione */
   render();
 }
@@ -713,7 +758,7 @@ const SETT = ["DOM","LUN","MAR","MER","GIO","VEN","SAB"];
 function isoOggi(){ const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
 function giornoDaData(iso){ const d=new Date(iso+"T12:00:00"); return SETT[d.getDay()]; }
 function dataLeggibile(iso){ const d=new Date(iso+"T12:00:00"); return NOMEGIORNO[SETT[d.getDay()]]+" "+String(d.getDate()).padStart(2,"0")+"/"+String(d.getMonth()+1).padStart(2,"0")+"/"+d.getFullYear(); }
-function cambiaData(iso){ S.dataOggi = iso || isoOggi(); S.prospetto=null; render(); }
+function cambiaData(iso){ S.dataOggi = iso || isoOggi(); S.alunnoAssenteOggi=[]; S.prospetto=null; render(); }
 
 /* ---------- registro: archiviazione automatica (opzione 1) ---------- */
 function archiviaRegistro(){
