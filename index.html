@@ -167,6 +167,10 @@
   .ricewarn{background:#EAF3F1; border-left:3px solid var(--teal); color:var(--teal); font-size:12.5px;
     font-weight:600; padding:6px 14px; border-top:1px solid var(--rule-soft)}
   .ricewarn.pay{background:#F7EEDD; border-left-color:var(--amber); color:#7A5B1A}
+  #toast{position:fixed; bottom:88px; left:50%; transform:translateX(-50%) translateY(20px);
+    background:var(--ink); color:var(--paper); padding:11px 18px; border-radius:22px; font-size:14px;
+    font-weight:600; opacity:0; pointer-events:none; transition:.25s; z-index:99; max-width:82%; text-align:center}
+  #toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
   .pnote{background:var(--paper2); border:1px solid var(--rule); border-left:4px solid var(--ink-soft);
     border-radius:10px; padding:12px 14px; margin-top:12px; font-size:13.5px; color:var(--ink-soft); line-height:1.6}
 </style>
@@ -747,7 +751,66 @@ function renderProspettoHTML(p){
     html += `</div>`;
   }
   html += `<div class="stat" style="border-top:2px solid var(--rule); margin-top:10px"><span>Ore a pagamento</span><b style="color:${p.pagamento?'var(--red)':'var(--teal)'}">${p.pagamento}</b></div>`;
+  html += `<button class="btn" style="width:100%; margin-top:14px; background:#25925a" onclick="condividiWhatsApp()">📋 Copia per WhatsApp</button>`;
   return html;
+}
+
+/* ---- genera il testo del prospetto per WhatsApp ---- */
+function cognomeBreve(n){ const c=String(n).split(/\s+/)[0]; return c.length>10 ? c.slice(0,9)+"." : c; }
+function notaWA(e){
+  const ass = S.orario.docenti.find(d=>d.nome===e.a.nome);
+  if((e.tipo && /AFFIAN/i.test(e.tipo)) || isSost(ass)) return "affianc.";
+  return "sost.curr.";
+}
+function oneriWA(e){ if(/pagamento/.test(e.motivo)) return "PAG"; if(e.motivo==="recupero") return "REC"; return ""; }
+function pad(s,n){ s=String(s); return s.length>=n ? s : s+" ".repeat(n-s.length); }
+
+function testoWhatsApp(p){
+  const righe=[];
+  p.esiti.forEach(e=>{ if(e.scelto) righe.push({
+    h:e.h, ass:cognomeBreve(e.a.nome), cl:e.classe, sost:cognomeBreve(e.scelto),
+    nota:notaWA(e), on:oneriWA(e)
+  }); });
+  righe.sort((a,b)=> a.h-b.h || a.ass.localeCompare(b.ass));
+  const nomeG = NOMEGIORNO[p.giorno];
+  const oggi = new Date();
+  const dd = String(oggi.getDate()).padStart(2,"0")+"/"+String(oggi.getMonth()+1).padStart(2,"0")+"/"+oggi.getFullYear();
+  let t = `*Sostituzioni · ${nomeG} ${dd}*\n\`\`\`\n`;
+  t += pad("Ora",4)+pad("Assente",11)+pad("Cl",5)+pad("Sostituto",11)+pad("Nota",11)+"On\n";
+  righe.forEach(r=>{ t += pad(r.h+"ª",4)+pad(r.ass,11)+pad(r.cl,5)+pad(r.sost,11)+pad(r.nota,11)+r.on+"\n"; });
+  t += "```";
+  // righe scoperte e sostegni non sostituiti, se presenti
+  const scoperte=p.esiti.filter(e=>e.motivo==="scoperta");
+  if(scoperte.length){ t += "\n⚠ *Scoperte:* "+scoperte.map(e=>e.h+"ª "+fmtCl(e.classe)).join(", "); }
+  return t;
+}
+
+function condividiWhatsApp(){
+  const t = testoWhatsApp(S.prospetto);
+  // provo la condivisione nativa (telefono), poi ripiego sulla copia
+  if(navigator.share){
+    navigator.share({text:t}).catch(()=>copiaTesto(t));
+  } else {
+    copiaTesto(t);
+  }
+}
+function copiaTesto(t){
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(t).then(()=>toast("Copiato! Incollalo su WhatsApp")).catch(()=>fallbackCopia(t));
+  } else fallbackCopia(t);
+}
+function fallbackCopia(t){
+  const ta=document.createElement("textarea"); ta.value=t; ta.style.position="fixed"; ta.style.opacity="0";
+  document.body.appendChild(ta); ta.select();
+  try{ document.execCommand("copy"); toast("Copiato! Incollalo su WhatsApp"); }
+  catch(e){ toast("Copia non riuscita — seleziona a mano"); }
+  document.body.removeChild(ta);
+}
+function toast(msg){
+  let el=document.getElementById("toast");
+  if(!el){ el=document.createElement("div"); el.id="toast"; document.body.appendChild(el); }
+  el.textContent=msg; el.className="show";
+  setTimeout(()=>{ el.className=""; }, 2200);
 }
 
 /* ---- ORARIO: registro del giorno ---- */
