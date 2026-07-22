@@ -403,10 +403,9 @@ function candidati(o, classe, g, h, assenteObj, ctx, lingua){
     }
     // 2) potenziamento / disposizione
     if(st.t==="DISP"){ pool.push([2,...tie,"potenziamento",d.nome]); continue; }
-    // sostegno libero / spostato
+    // sostegno spostato da altra classe
     if(isSost(d)){
       if(flagged) continue;                                   /* flag = mai */
-      if(st.t==="BUCA"){ pool.push([3,...tie,"sostegno libero",d.nome]); continue; }
       if(st.t==="CLASSE"){
         if(ctx.flag.has(d.nome+"|"+st.det)) continue;         /* non toccare il suo caso grave */
         if(lingua) continue;                                  /* per gruppo lingua non si spostano sostegni di classe */
@@ -415,6 +414,7 @@ function candidati(o, classe, g, h, assenteObj, ctx, lingua){
         else pool.push([7,...tie,"⚠ unico sostegno di "+st.det,d.nome]);
         continue;
       }
+      /* un sostegno in ora BUCA è fuori servizio come chiunque → cade nel pagamento sotto */
     }
     // 4) PVP/PCV emergenza (prima del pagamento)
     if(st.t==="EMERG"){ pool.push([4,...tie,"PVP/PCV",d.nome]); continue; }
@@ -837,9 +837,10 @@ function renderProspettoHTML(p){
       } else {
         const pay = /pagamento/.test(e.motivo)?' pay':'';
         const man = e.manuale?' manuale':'';
+        const affPref = (e.tipo && /AFFIAN/i.test(e.tipo)) ? "affianc. · " : "";
         html += `<div class="prow${pay}${man}" onclick="apriAlternative('${esc(e.a.nome)}',${e.h})">
           <span class="ph">${e.h}ª</span><span class="pcl">${esc(fmtCl(e.classe))}</span>
-          <span class="pto">${esc(e.scelto)} ${chevron}</span><span class="pmot">${esc(e.motivo)}</span></div>${riceWarn}`;
+          <span class="pto">${esc(e.scelto)} ${chevron}</span><span class="pmot">${affPref}${esc(e.motivo)}</span></div>${riceWarn}`;
       }
       if(aperto){
         const alt = alternativeCella(e).filter(a=>a.nome!==e.scelto).slice(0,3);
