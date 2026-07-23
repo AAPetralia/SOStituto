@@ -200,6 +200,7 @@
   .oreb{padding:8px 13px; border:1.5px solid var(--rule); border-radius:9px; background:var(--paper2);
     font-weight:700; font-size:14px; cursor:pointer; color:var(--ink-soft)}
   .oreb.on{background:var(--teal); border-color:var(--teal); color:#fff}
+  .oreb.pno{background:#F0E7D2; border-color:var(--amber); color:var(--amber); text-decoration:line-through}
   .pickgrid{display:flex; gap:6px; flex-wrap:wrap}
   .pick{padding:8px 12px; border:1.5px solid var(--rule); border-radius:9px; background:var(--paper2);
     font-weight:700; font-size:14px; cursor:pointer}
@@ -258,7 +259,8 @@ let S = { orario:null, tab:"oggi", day:"LUN",
           dataOggi:null, registro:{}, regApertoGiorno:"",
           alunnoAssenteOggi:[], alunnoSel:"", alunnoPanel:false,
           uscite:[], uscitaForm:null,
-          assenzeNote:[], assenzaForm:null, noteApplicate:null, daNote:[] };   /* assentiOggi: {nome: null|[ore]} */
+          assenzeNote:[], assenzaForm:null, noteApplicate:null, daNote:[],
+          pnoOn:[] };   /* assentiOggi: {nome: null|[ore]} */
 
 /* ---------- persistenza ---------- */
 function save(){ try{
@@ -268,6 +270,7 @@ function save(){ try{
   localStorage.setItem("sostituto_alunno", JSON.stringify({data:S.dataOggi, lista:S.alunnoAssenteOggi}));
   localStorage.setItem("sostituto_uscite", JSON.stringify(S.uscite||[]));
   localStorage.setItem("sostituto_assenze", JSON.stringify(S.assenzeNote||[]));
+  localStorage.setItem("sostituto_pno", JSON.stringify(S.pnoOn||[]));
 }catch(e){} }
 function load(){ try{
   const r=localStorage.getItem("sostituto_v1"); if(r) S.orario=JSON.parse(r);
@@ -277,6 +280,7 @@ function load(){ try{
   const aa=localStorage.getItem("sostituto_alunno"); if(aa){ const o=JSON.parse(aa); if(o && o.data===S.dataOggi) S.alunnoAssenteOggi=o.lista||[]; }
   const us=localStorage.getItem("sostituto_uscite"); if(us) S.uscite=JSON.parse(us);
   const an=localStorage.getItem("sostituto_assenze"); if(an) S.assenzeNote=JSON.parse(an);
+  const pn=localStorage.getItem("sostituto_pno"); if(pn) S.pnoOn=JSON.parse(pn);
 }catch(e){} }
 
 /* ---------- classificazione cella (vocabolario chiuso) ---------- */
@@ -381,6 +385,9 @@ function oreServizio(doc,g,ore){
 }
 function statoCella(doc,g,h,ore){
   const cl = doc.cells[g+"|"+h] || {t:"VUOTA"};
+  /* potenziamento marcato a mano come NON disponibile (progetti, impegni fuori sede):
+     correzione sull'orario importato, senza toccare il file Excel */
+  if(cl.t==="DISP" && (S.pnoOn||[]).includes(doc.nome+"|"+g+"|"+h)) return {t:"NOND", det:"Pno", manuale:true};
   if(cl.t==="RICE") return {t:"BUCA", rice:true};    /* ricevimento: disponibile come una buca, ma marcato */
   if(cl.t!=="VUOTA") return cl;
   const [a,b]=oreServizio(doc,g,ore);
@@ -722,22 +729,23 @@ function fmtCl(c){ return c ? c[0]+"ª "+c.slice(1) : c; }
    ============================================================ */
 const el = id => document.getElementById(id);
 
-const SOTTO_ALTRO = ["dove","importa","uscita","assenze","backup"];   /* pagine raggiunte dal menu Altro */
+const SOTTO_ALTRO = ["dove","importa","uscita","assenze","backup","potenz"];   /* pagine raggiunte dal menu Altro */
 
 function render(){
   const attivo = SOTTO_ALTRO.includes(S.tab) ? "altro" : S.tab;
   document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on", b.dataset.tab===attivo));
   if(!S.orario && S.tab!=="importa"){ renderVuoto(); return; }
   ({oggi:renderOggi, registro:renderRegistro, orario:renderOrario, altro:renderAltro,
-    dove:renderDove, importa:renderImporta, uscita:renderUscita, assenze:renderAssenze, backup:renderBackup})[S.tab]();
+    dove:renderDove, importa:renderImporta, uscita:renderUscita, assenze:renderAssenze, backup:renderBackup, potenz:renderPotenziamento})[S.tab]();
 }
 
 /* ---- ALTRO: menu delle funzioni occasionali ---- */
 function renderAltro(){
-  const nAss = (S.assenzeNote||[]).length, nUsc = (S.uscite||[]).length;
+  const nAss = (S.assenzeNote||[]).length, nUsc = (S.uscite||[]).length, nPno = (S.pnoOn||[]).length;
   const voci = [
     { tab:"assenze", ic:"📌", tit:"Assenze note",       sub:nAss?`${nAss} annotate — si caricano da sole nel giorno giusto`:"Annota le assenze comunicate in anticipo" },
     { tab:"uscita",  ic:"🚌", tit:"Uscite didattiche",  sub:nUsc?`${nUsc} registrate`:"Classi in uscita e accompagnatori" },
+    { tab:"potenz",  ic:"🎯", tit:"Potenziamento",      sub:nPno?`${nPno} ore marcate Pno`:"Marca le ore non disponibili senza toccare l'Excel" },
     { tab:"dove",    ic:"🔍", tit:"Dov'è",              sub:"Trova un docente o una classe in un momento preciso" },
     { tab:"importa", ic:"⬆️", tit:"Importa l'orario",   sub:"Carica il file Excel — poche volte l'anno" },
     { tab:"backup",  ic:"🔐", tit:"Backup e ripristino", sub:"Salva tutto in un file — o rimetti a posto dopo un guaio" },
@@ -987,6 +995,67 @@ function motivoLabel(e){
   return bits.join(" · ");
 }
 
+/* ---- POTENZIAMENTO: marca a mano le ore non disponibili (Pno) ---- */
+function orePotenziamento(o){
+  /* per ogni docente, le celle che nell'orario importato sono P (DISP) */
+  const out=[];
+  for(const d of o.docenti){
+    const slot=[];
+    for(const g of o.giorni) for(const h of o.ore){
+      const raw = d.cells[g+"|"+h];
+      if(raw && raw.t==="DISP") slot.push({g,h});
+    }
+    if(slot.length) out.push({doc:d, slot});
+  }
+  return out.sort((a,b)=>a.doc.nome.localeCompare(b.doc.nome));
+}
+function renderPotenziamento(){
+  const o=S.orario;
+  const elenco = orePotenziamento(o);
+  const nOff = (S.pnoOn||[]).length;
+  let out = `<div class="backlink" onclick="S.tab='altro'; render()">‹ Altro</div>
+    <h2 class="sec">Potenziamento</h2>
+    <p class="hint" style="margin-top:0">Tocca un'ora per marcarla <b>Pno</b> quando il docente è impegnato altrove (progetti, attività fuori sede). Non verrà più proposta per le sostituzioni. Ritoccala per riattivarla.</p>`;
+
+  if(nOff){
+    out += `<div class="promemo" style="background:#F7EEDD; border-left-color:var(--amber)">
+      ⚠️ <b>${nOff} or${nOff===1?'a':'e'} marcate Pno</b> — non disponibili finché non le riattivi.
+      <div style="margin-top:8px"><button class="btn ghost" style="padding:6px 12px; font-size:13px" onclick="azzeraPno()">Riattiva tutte</button></div>
+    </div>`;
+  }
+
+  if(!elenco.length){
+    out += `<p class="hint">Nessun docente ha ore di potenziamento nell'orario importato.</p>`;
+    el("main").innerHTML = out; return;
+  }
+
+  out += elenco.map(({doc,slot})=>{
+    const btns = slot.map(s=>{
+      const key = doc.nome+"|"+s.g+"|"+s.h;
+      const off = (S.pnoOn||[]).includes(key);
+      return `<div class="oreb ${off?'pno':''}" onclick="togglePno('${esc(key)}')">${s.g} ${s.h}ª${off?' · Pno':''}</div>`;
+    }).join("");
+    const nOffDoc = slot.filter(s=>(S.pnoOn||[]).includes(doc.nome+"|"+s.g+"|"+s.h)).length;
+    return `<div class="regcard"><div class="reghead" style="cursor:default; display:block">
+        <b>${esc(doc.nome)}</b>
+        <div class="regsub">${slot.length} ore di potenziamento${nOffDoc?` · ${nOffDoc} non disponibili`:''}</div>
+        <div class="orebtns" style="margin-top:9px">${btns}</div>
+      </div></div>`;
+  }).join("");
+
+  el("main").innerHTML = out;
+}
+function togglePno(key){
+  S.pnoOn = S.pnoOn || [];
+  const i = S.pnoOn.indexOf(key);
+  if(i>=0) S.pnoOn.splice(i,1); else S.pnoOn.push(key);
+  S.prospetto=null; save(); render();
+}
+function azzeraPno(){
+  if(!confirm("Riattivare tutte le ore di potenziamento marcate Pno?")) return;
+  S.pnoOn=[]; S.prospetto=null; save(); render();
+}
+
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
 function datiBackup(){
@@ -998,7 +1067,8 @@ function datiBackup(){
     flagOggi: S.flagOggi || [],
     registro: S.registro || {},
     uscite: S.uscite || [],
-    assenzeNote: S.assenzeNote || []
+    assenzeNote: S.assenzeNote || [],
+    pnoOn: S.pnoOn || []
   };
 }
 function riepilogoBackup(d){
@@ -1049,6 +1119,7 @@ function onFileBackup(ev){
     S.registro    = d.registro || {};
     S.uscite      = d.uscite || [];
     S.assenzeNote = d.assenzeNote || [];
+    S.pnoOn       = d.pnoOn || [];
     S.prospetto=null; S.assentiOggi={}; S.noteApplicate=null; S.alunnoAssenteOggi=[];
     if(S.orario) S.day = giornoDaData(S.dataOggi||isoOggi());
     save(); saveRegistro();
