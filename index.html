@@ -844,9 +844,25 @@ function renderOggi(){
         ${docs.filter(d=>!(d.nome in S.assentiOggi)).map(d=>`<option>${esc(d.nome)}</option>`).join("")}
       </select></div>`;
 
-  if(assentiN){
-    out += `<div class="chips">${chips}</div>
-      <button class="btn" style="width:100%; margin-top:6px" onclick="lanciaProspetto()">Genera il prospetto</button>`;
+  // avviso: uscita didattica in corso in questa data
+  const uscOggi = usciteAttive(S.dataOggi);
+  if(uscOggi.length){
+    out += uscOggi.map(u=>{
+      const oreTx = (u.ore && u.ore.length) ? u.ore.map(h=>h+"ª").join(", ") : "giornata intera";
+      const acc = (u.accomp||[]).map(n=>esc(cognomeBreve(n)));
+      return `<div class="promemo" style="background:#F2EDE0; border-left-color:#8a7a5c">
+        🚌 <b>${esc(u.nota||"Uscita didattica")}</b> · ${esc(oreTx)}<br>
+        Fuori sede: <b>${(u.classi||[]).map(esc).join(", ")||"—"}</b> — nessuna sostituzione per queste classi.<br>
+        ${acc.length ? `Accompagnatori (${acc.length}): ${acc.join(", ")} — le loro ore nelle <b>altre</b> classi verranno sostituite.`
+                     : `Nessun accompagnatore indicato.`}
+      </div>`;
+    }).join("");
+  }
+
+  if(assentiN || uscOggi.length){
+    if(assentiN) out += `<div class="chips">${chips}</div>`;
+    out += `<button class="btn" style="width:100%; margin-top:6px" onclick="lanciaProspetto()">Genera il prospetto</button>`;
+    if(!assentiN) out += `<p class="hint">Nessun assente dichiarato: il prospetto coprirà le ore degli accompagnatori.</p>`;
   } else {
     out += `<p class="hint">Scegli i docenti assenti oggi. Per un permesso breve potrai indicare solo alcune ore.</p>`;
   }
