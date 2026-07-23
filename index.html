@@ -468,7 +468,7 @@ function generaProspetto(o, giorno, assenti, opts){
     fatte: Object.assign({}, opts.fatte||{}),
     recuperi: Object.assign({}, opts.recuperi||{}),
     flag: new Set(opts.flag||[]),          /* elementi "Nome|Classe" */
-    alunnoAssente: new Set(opts.alunnoAssente||[]),   /* sostegni col proprio alunno assente oggi (criterio a) */
+    alunnoAssente: new Set(opts.alunnoAssente||[]),   /* sostegni col proprio alunno assente oggi (criterio f) */
     occupati: {},
     pagamento: 0
   };
@@ -685,7 +685,7 @@ function renderOggi(){
   if(S.alunnoPanel){
     const sostegni = docs.filter(d=>isSost(d));
     out += `<div class="aapanel">
-      <div class="aapanel-lbl">Segna i sostegni il cui alunno è assente oggi. Diventano risorse a priorità massima (criterio a).</div>`;
+      <div class="aapanel-lbl">Segna i sostegni il cui alunno è assente oggi. Diventano disponibili secondo il criterio <b>f</b> della circolare (dopo il potenziamento, prima delle ore eccedenti).</div>`;
     out += sostegni.map(d=>{
       const on=(S.alunnoAssenteOggi||[]).includes(d.nome);
       return `<div class="aarow ${on?'on':''}" onclick="toggleAlunnoAssente('${esc(d.nome)}')">
@@ -694,7 +694,7 @@ function renderOggi(){
     out += `</div>`;
   }
   if(nAA){
-    out += `<p class="hint" style="margin-top:-4px; margin-bottom:12px">👦 Alunno assente: ${S.alunnoAssenteOggi.map(esc).join(", ")} — disponibili a priorità massima.</p>`;
+    out += `<p class="hint" style="margin-top:-4px; margin-bottom:12px">👦 Alunno assente: ${S.alunnoAssenteOggi.map(esc).join(", ")} — disponibili come criterio f.</p>`;
   }
 
   out += `<div class="field"><label>Aggiungi un assente</label>
