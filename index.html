@@ -80,6 +80,19 @@
   /* ---- ricerca "dov'è" ---- */
   .field{margin-bottom:14px}
   .field label{display:block; font-size:13px; font-weight:600; color:var(--ink-soft); margin-bottom:5px}
+  /* riga: data grande a sinistra, bottone compatto a destra */
+  .datarow{display:flex; align-items:flex-end; gap:10px; margin-bottom:6px}
+  .datacol{flex:1; min-width:0}
+  .datacol label{display:block; font-size:13px; font-weight:600; color:var(--ink-soft); margin-bottom:5px}
+  input.databig{width:100%; padding:13px 12px; border:1.5px solid var(--rule); border-radius:10px;
+    background:var(--paper2); font-family:'Zilla Slab',serif; font-size:20px; font-weight:700;
+    color:var(--ink); letter-spacing:.3px}
+  input.databig:focus{outline:none; border-color:var(--teal)}
+  .btn-mini{flex-shrink:0; padding:8px 11px; border:1.5px solid var(--rule); border-radius:10px;
+    background:var(--paper2); color:var(--ink-soft); font-family:inherit; font-size:11.5px; font-weight:700;
+    line-height:1.25; text-align:center; cursor:pointer; letter-spacing:.2px}
+  .btn-mini.on{background:var(--teal); border-color:var(--teal); color:#fff}
+  .btn-mini.aperto{border-color:var(--teal); color:var(--teal)}
   select,input[type=text]{width:100%; padding:11px 12px; border:1.5px solid var(--rule); border-radius:10px;
     background:var(--paper2); font-family:inherit; font-size:16px; color:var(--ink); font-weight:500}
   select:focus,input:focus{outline:none; border-color:var(--teal)}
@@ -172,7 +185,7 @@
     background:var(--ink); color:var(--paper); padding:11px 18px; border-radius:22px; font-size:14px;
     font-weight:600; opacity:0; pointer-events:none; transition:.25s; z-index:99; max-width:82%; text-align:center}
   #toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
-  .daylabel{margin-top:6px; font-family:'Zilla Slab',serif; font-weight:700; color:var(--teal); font-size:15px; text-transform:capitalize}
+  .daylabel{margin:0 0 14px; font-family:'Zilla Slab',serif; font-weight:700; color:var(--teal); font-size:16px; text-transform:capitalize}
   .regcard{background:var(--paper2); border:1.5px solid var(--rule); border-radius:12px; margin-bottom:10px; overflow:hidden}
   .reghead{display:flex; align-items:center; justify-content:space-between; padding:12px 14px; cursor:pointer}
   .reghead b{font-family:'Zilla Slab',serif; font-size:16px; text-transform:capitalize}
@@ -189,7 +202,8 @@
   .aarow.on b{color:var(--teal)}
   .menurow{display:flex; align-items:center; gap:13px; background:var(--paper2); border:1.5px solid var(--rule);
     border-radius:12px; padding:14px; margin-bottom:10px; cursor:pointer}
-  .menurow .mic{font-size:21px; flex-shrink:0}
+  .menurow .mic{flex-shrink:0; width:23px; height:23px; color:var(--teal); display:flex; align-items:center}
+  .menurow .mic svg{width:23px; height:23px; display:block}
   .menurow .mtx{flex:1; display:flex; flex-direction:column; gap:2px}
   .menurow .mtx b{font-family:'Zilla Slab',serif; font-size:16.5px}
   .menurow .mtx i{font-style:normal; font-size:12.5px; color:var(--ink-soft); line-height:1.35}
@@ -254,19 +268,19 @@
 
 <nav>
   <button data-tab="oggi">
-    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4h8a1 1 0 0 1 1 1v1H7V5a1 1 0 0 1 1-1z"/><path d="M17 6h2a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h2"/><path d="M8.5 13.5l2 2 4-4.5"/></svg>
     <span class="lb">Sostituz.</span>
   </button>
   <button data-tab="registro">
-    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h13l3 3v13a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h11a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6"/><path d="M6 3a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2"/><path d="M9 7.5h7M9 11h7M9 14.5h4.5"/></svg>
     <span class="lb">Registro</span>
   </button>
   <button data-tab="orario" class="on">
-    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M8 13h3M8 17h3"/></svg>
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/><path d="M7.5 13h3M7.5 16.5h3M14 13h2.5"/></svg>
     <span class="lb">Orario</span>
   </button>
   <button data-tab="altro">
-    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></svg>
     <span class="lb">Altro</span>
   </button>
 </nav>
@@ -935,12 +949,12 @@ function stampaRegistro(soloGiorno){
 function renderAltro(){
   const nAss = (S.assenzeNote||[]).length, nUsc = (S.uscite||[]).length, nPno = (S.pnoOn||[]).length;
   const voci = [
-    { tab:"assenze", ic:"📌", tit:"Assenze note",       sub:nAss?`${nAss} annotate — si caricano da sole nel giorno giusto`:"Annota le assenze comunicate in anticipo" },
-    { tab:"uscita",  ic:"🚌", tit:"Uscite didattiche",  sub:nUsc?`${nUsc} registrate`:"Classi in uscita e accompagnatori" },
-    { tab:"potenz",  ic:"🎯", tit:"Potenziamento",      sub:nPno?`${nPno} ore marcate Pno`:"Marca le ore non disponibili senza toccare l'Excel" },
-    { tab:"dove",    ic:"🔍", tit:"Dov'è",              sub:"Trova un docente o una classe in un momento preciso" },
-    { tab:"importa", ic:"⬆️", tit:"Importa l'orario",   sub:"Carica il file Excel — poche volte l'anno" },
-    { tab:"backup",  ic:"🔐", tit:"Backup e ripristino", sub:"Salva tutto in un file — o rimetti a posto dopo un guaio" },
+    { tab:"assenze", ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v4"/><path d="M9 3h6l-1 6 3 3v2H7v-2l3-3-1-6z"/></svg>`, tit:"Assenze note",       sub:nAss?`${nAss} annotate — si caricano da sole nel giorno giusto`:"Annota le assenze comunicate in anticipo" },
+    { tab:"uscita",  ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="11" rx="2"/><path d="M3 10.5h18M7 16v2M17 16v2"/><circle cx="7.5" cy="13" r=".9"/><circle cx="16.5" cy="13" r=".9"/></svg>`, tit:"Uscite didattiche",  sub:nUsc?`${nUsc} registrate`:"Classi in uscita e accompagnatori" },
+    { tab:"potenz",  ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.6"/><circle cx="12" cy="12" r=".6" fill="currentColor"/></svg>`, tit:"Potenziamento",      sub:nPno?`${nPno} ore marcate Pno`:"Marca le ore non disponibili senza toccare l'Excel" },
+    { tab:"dove",    ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="M20.5 20.5l-4.7-4.7"/></svg>`, tit:"Dov'è",              sub:"Trova un docente o una classe in un momento preciso" },
+    { tab:"importa", ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4"/><path d="M8 8l4-4 4 4"/><path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/></svg>`, tit:"Importa l'orario",   sub:"Carica il file Excel — poche volte l'anno" },
+    { tab:"backup",  ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10.5" width="16" height="9.5" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/><circle cx="12" cy="15" r="1.1"/></svg>`, tit:"Backup e ripristino", sub:"Salva tutto in un file — o rimetti a posto dopo un guaio" },
   ];
   let out = `<h2 class="sec">Altro</h2>`;
   out += voci.map(v=>`<div class="menurow" onclick="S.tab='${v.tab}'; render()">
@@ -1003,21 +1017,23 @@ function renderOggi(){
     </div>`;
   }).join("");
 
+  const nAA = (S.alunnoAssenteOggi||[]).length;
   let out = `<h2 class="sec">Sostituzioni</h2>
-    <div class="field"><label>Data</label>
-      <input type="date" value="${S.dataOggi}" onchange="cambiaData(this.value)">
-      <div class="daylabel">${giornoOk ? NOMEGIORNO[S.day] : "⚠ giorno senza lezioni in orario"}</div>
-    </div>`;
+    <div class="datarow">
+      <div class="datacol">
+        <label>Data</label>
+        <input type="date" class="databig" value="${S.dataOggi}" onchange="cambiaData(this.value)">
+      </div>
+      <button class="btn-mini${nAA?' on':''}${S.alunnoPanel?' aperto':''}" onclick="S.alunnoPanel=!S.alunnoPanel; render()">
+        Alunno<br>assente${nAA?` · ${nAA}`:''}
+      </button>
+    </div>
+    <div class="daylabel">${giornoOk ? NOMEGIORNO[S.day] : "⚠ giorno senza lezioni in orario"}</div>`;
   if(!giornoOk){
     out += `<p class="hint">Il giorno scelto non ha lezioni nell'orario importato (es. domenica). Scegli una data feriale.</p>`;
     el("main").innerHTML = out; return;
   }
 
-  // BOTTONE alunno assente (si preme dopo l'appello) — in alto per ricordarsi di premerlo
-  const nAA = (S.alunnoAssenteOggi||[]).length;
-  out += `<button class="btn" style="width:100%; margin-bottom:12px; padding:9px; font-size:14.5px; background:${nAA?'var(--teal)':'#8a7a5c'}"
-      onclick="S.alunnoPanel=!S.alunnoPanel; render()">
-      Alunno assente${nAA?` · ${nAA}`:''}</button>`;
   if(S.alunnoPanel){
     const sostegni = docs.filter(d=>isSost(d));
     out += `<div class="aapanel">
