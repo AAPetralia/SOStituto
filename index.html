@@ -789,10 +789,20 @@ function impostaPagina(orientamento){
   if(!st){ st = document.createElement("style"); st.id="pagecss"; document.head.appendChild(st); }
   st.textContent = `@page { size: A4 ${orientamento}; margin: 12mm 10mm; }`;
 }
-function lanciaStampa(html, orientamento){
+/* data in forma adatta a un nome di file: 20-10-2026 */
+function dataFile(iso){
+  const d=new Date(iso+"T12:00:00");
+  return String(d.getDate()).padStart(2,"0")+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+d.getFullYear();
+}
+function lanciaStampa(html, orientamento, nomeFile){
   impostaPagina(orientamento);
   el("printarea").innerHTML = html;
-  setTimeout(()=>{ window.print(); }, 60);
+  // il browser usa il titolo della pagina come nome predefinito del PDF
+  const titoloOrig = document.title;
+  if(nomeFile) document.title = nomeFile;
+  const ripristina = ()=>{ document.title = titoloOrig; window.removeEventListener("afterprint", ripristina); };
+  window.addEventListener("afterprint", ripristina);
+  setTimeout(()=>{ window.print(); setTimeout(ripristina, 4000); }, 60);
 }
 /* tipo di intervento, per esteso (nei PDF lo spazio c'è) */
 function tipoEsteso(r){
@@ -857,7 +867,7 @@ function stampaProspetto(){
       <div>Da allegare al registro delle presenze.</div>
     </div>
     <div class="pr-firma-box">Il responsabile di plesso<br><br>______________________________</div>`;
-  lanciaStampa(html, "landscape");
+  lanciaStampa(html, "landscape", "Prospetto sostituzioni "+dataFile(iso));
 }
 
 /* ---- REGISTRO: A4 verticale, per periodo, con riepilogo per docente ---- */
@@ -915,7 +925,10 @@ function stampaRegistro(soloGiorno){
     </div>
     ${blocchi}${riep}
     <div class="pr-firma-box">Il responsabile di plesso<br><br>______________________________</div>`;
-  lanciaStampa(html, "portrait");
+  const nomeFile = date.length===1
+    ? "Registro sostituzioni "+dataFile(date[0])
+    : "Registro sostituzioni "+dataFile(date[0])+" - "+dataFile(date[date.length-1]);
+  lanciaStampa(html, "portrait", nomeFile);
 }
 
 /* ---- ALTRO: menu delle funzioni occasionali ---- */
