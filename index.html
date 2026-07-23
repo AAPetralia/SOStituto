@@ -835,11 +835,11 @@ function renderOggi(){
     el("main").innerHTML = out; return;
   }
 
-  // BOTTONE alunno assente (last-minute, dopo l'appello) — in alto per ricordarsi di premerlo
+  // BOTTONE alunno assente (si preme dopo l'appello) — in alto per ricordarsi di premerlo
   const nAA = (S.alunnoAssenteOggi||[]).length;
-  out += `<button class="btn" style="width:100%; margin-bottom:12px; background:${nAA?'var(--teal)':'#8a7a5c'}"
+  out += `<button class="btn" style="width:100%; margin-bottom:12px; padding:9px; font-size:14.5px; background:${nAA?'var(--teal)':'#8a7a5c'}"
       onclick="S.alunnoPanel=!S.alunnoPanel; render()">
-      👦 Alunno assente${nAA?` · ${nAA}`:''} <b style="font-weight:400; opacity:.85">(dopo l'appello)</b></button>`;
+      Alunno assente${nAA?` · ${nAA}`:''}</button>`;
   if(S.alunnoPanel){
     const sostegni = docs.filter(d=>isSost(d));
     out += `<div class="aapanel">
@@ -852,7 +852,7 @@ function renderOggi(){
     out += `</div>`;
   }
   if(nAA){
-    out += `<p class="hint" style="margin-top:-4px; margin-bottom:12px">👦 Alunno assente: ${S.alunnoAssenteOggi.map(esc).join(", ")} — disponibili come criterio f.</p>`;
+    out += `<p class="hint" style="margin-top:-4px; margin-bottom:12px">Alunno assente: ${S.alunnoAssenteOggi.map(esc).join(", ")} — disponibili come criterio f.</p>`;
   }
 
   // promemoria: assenze già comunicate nei prossimi giorni
