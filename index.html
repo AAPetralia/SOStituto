@@ -215,6 +215,33 @@
   .achip.danota{border-color:var(--teal)}
   .pnote{background:var(--paper2); border:1px solid var(--rule); border-left:4px solid var(--ink-soft);
     border-radius:10px; padding:12px 14px; margin-top:12px; font-size:13.5px; color:var(--ink-soft); line-height:1.6}
+
+  /* ================= STAMPA / PDF ================= */
+  #printarea{display:none}
+  @media print{
+    header, nav, main, #toast{display:none !important}
+    #printarea{display:block !important}
+    body{background:#fff; color:#000; margin:0}
+    .pr-head{border-bottom:2px solid #000; padding-bottom:6px; margin-bottom:12px}
+    .pr-ist{font-size:10pt; letter-spacing:.4px; text-transform:uppercase}
+    .pr-tit{font-size:16pt; font-weight:700; margin-top:3px}
+    .pr-sub{font-size:11pt; margin-top:2px}
+    .pr-tab{width:100%; border-collapse:collapse; font-size:9.5pt; margin-bottom:14px}
+    .pr-tab th{background:#eee; border:1px solid #000; padding:5px 6px; text-align:left; font-size:8.5pt;
+      text-transform:uppercase; letter-spacing:.3px}
+    .pr-tab td{border:1px solid #666; padding:5px 6px; vertical-align:top}
+    .pr-tab td.c{text-align:center; white-space:nowrap}
+    .pr-firma{width:24%}
+    .pr-giorno{font-size:12pt; font-weight:700; margin:14px 0 5px; border-bottom:1px solid #000; padding-bottom:2px}
+    .pr-giorno:first-of-type{margin-top:0}
+    .pr-note{font-size:9pt; margin-top:4px; font-style:italic}
+    .pr-foot{margin-top:16px; font-size:9.5pt; display:flex; justify-content:space-between; gap:30px}
+    .pr-firma-box{margin-top:26px; text-align:right; font-size:10pt}
+    .pr-page{page-break-after:always}
+    .pr-page:last-child{page-break-after:auto}
+    tr, .pr-blocco{page-break-inside:avoid}
+    thead{display:table-header-group}
+  }
 </style>
 </head>
 <body>
@@ -223,6 +250,7 @@
   <div class="tagline">Orario e sostituzioni · <span id="hdrsub">Istituto Mestica</span></div>
 </header>
 <main id="main"></main>
+<div id="printarea"></div>
 
 <nav>
   <button data-tab="oggi">
@@ -751,6 +779,143 @@ function render(){
   if(!S.orario && S.tab!=="importa"){ renderVuoto(); return; }
   ({oggi:renderOggi, registro:renderRegistro, orario:renderOrario, altro:renderAltro,
     dove:renderDove, importa:renderImporta, uscita:renderUscita, assenze:renderAssenze, backup:renderBackup, potenz:renderPotenziamento})[S.tab]();
+}
+
+/* ================= STAMPA / PDF ================= */
+const ISTITUTO = "Istituto Comprensivo \"Via Tacito\" · Plesso Mestica — Civitanova Marche";
+
+function impostaPagina(orientamento){
+  let st = document.getElementById("pagecss");
+  if(!st){ st = document.createElement("style"); st.id="pagecss"; document.head.appendChild(st); }
+  st.textContent = `@page { size: A4 ${orientamento}; margin: 12mm 10mm; }`;
+}
+function lanciaStampa(html, orientamento){
+  impostaPagina(orientamento);
+  el("printarea").innerHTML = html;
+  setTimeout(()=>{ window.print(); }, 60);
+}
+/* tipo di intervento, per esteso (nei PDF lo spazio c'è) */
+function tipoEsteso(r){
+  if(r.tipo==="AIRC") return "Attività alternativa";
+  if(r.tipo && /AFFIAN/i.test(r.tipo)) return "Affiancamento alla classe";
+  if(r.gruppo && r.lingua) return "Sostituzione · gruppo "+(r.lingua==="FR"?"francese":"spagnolo");
+  return "Sostituzione del curricolare";
+}
+function oneriEsteso(r){
+  if(/pagamento/.test(r.motivo||"")) return "A PAGAMENTO";
+  if(r.motivo==="recupero") return "Recupero";
+  return "";
+}
+function classePr(r){ return (r.gruppo && r.lingua) ? r.gruppo.replace("·","-") : fmtCl(r.classe); }
+
+/* ---- PROSPETTO del giorno: A4 orizzontale, con colonna firma (circ. prot. 0011096) ---- */
+function stampaProspetto(){
+  const p = S.prospetto;
+  if(!p){ toast("Genera prima il prospetto"); return; }
+  const righe = p.esiti.filter(e=>e.scelto || e.motivo==="scoperta")
+    .slice().sort((a,b)=> a.h-b.h || String(a.a.nome).localeCompare(String(b.a.nome)));
+  const iso = S.dataOggi || isoOggi();
+
+  let corpo = righe.map(e=>{
+    const scoperta = !e.scelto;
+    return `<tr>
+      <td class="c">${e.h}ª</td>
+      <td>${esc(e.a.nome)}</td>
+      <td class="c">${esc(classePr(e))}</td>
+      <td><b>${scoperta ? "— DA COPRIRE —" : esc(e.scelto)}</b></td>
+      <td>${esc(tipoEsteso(e))}${e.rice?" · in ora di ricevimento":""}</td>
+      <td class="c">${esc(oneriEsteso(e))}</td>
+      <td class="pr-firma"></td>
+    </tr>`;
+  }).join("");
+  if(!righe.length) corpo = `<tr><td colspan="7" class="c">Nessuna sostituzione da effettuare.</td></tr>`;
+
+  const nonSost = (p.note||[]).length
+    ? `<div class="pr-note">Sostegni assenti non sostituiti (la classe ha il docente curricolare): ${
+        p.note.map(n=>esc(n.nome)+" — "+n.h+"ª ora ("+esc(fmtCl(n.classe))+")").join("; ")}</div>` : "";
+  const usc = usciteAttive(iso).map(u=>
+    `<div class="pr-note">Uscita didattica: ${esc(u.nota||"—")} — classi ${(u.classi||[]).map(esc).join(", ")} fuori sede.</div>`).join("");
+
+  const html = `
+    <div class="pr-head">
+      <div class="pr-ist">${esc(ISTITUTO)}</div>
+      <div class="pr-tit">Prospetto delle sostituzioni</div>
+      <div class="pr-sub">${esc(dataLeggibile(iso))}</div>
+    </div>
+    <table class="pr-tab">
+      <thead><tr>
+        <th style="width:5%">Ora</th><th style="width:19%">Docente assente</th>
+        <th style="width:8%">Classe</th><th style="width:19%">Docente sostituto</th>
+        <th style="width:19%">Tipo di intervento</th><th style="width:9%">Oneri</th>
+        <th class="pr-firma">Firma del sostituto</th>
+      </tr></thead>
+      <tbody>${corpo}</tbody>
+    </table>
+    ${usc}${nonSost}
+    <div class="pr-foot">
+      <div>Ore a pagamento: <b>${p.pagamento||0}</b> — Sostituzioni disposte: <b>${righe.filter(e=>e.scelto).length}</b></div>
+      <div>Da allegare al registro delle presenze.</div>
+    </div>
+    <div class="pr-firma-box">Il responsabile di plesso<br><br>______________________________</div>`;
+  lanciaStampa(html, "landscape");
+}
+
+/* ---- REGISTRO: A4 verticale, per periodo, con riepilogo per docente ---- */
+function stampaRegistro(soloGiorno){
+  const tutte = Object.keys(S.registro||{}).sort();
+  const date = soloGiorno ? [soloGiorno] : tutte;
+  if(!date.length){ toast("Il registro è vuoto"); return; }
+
+  let blocchi = "", totSost=0, totPag=0;
+  const perDoc = {};      /* nome → {fatte, pag} */
+  for(const iso of date){
+    const rec = S.registro[iso]; if(!rec) continue;
+    const righe = (rec.righe||[]).filter(r=>r.scelto).sort((a,b)=>a.h-b.h);
+    righe.forEach(r=>{
+      totSost++;
+      const k=r.scelto; perDoc[k]=perDoc[k]||{fatte:0,pag:0};
+      perDoc[k].fatte++;
+      if(/pagamento/.test(r.motivo||"")){ perDoc[k].pag++; totPag++; }
+    });
+    const corpo = righe.length
+      ? righe.map(r=>`<tr>
+          <td class="c">${r.h}ª</td><td>${esc(r.assente)}</td>
+          <td class="c">${esc(classePr(r))}</td><td><b>${esc(r.scelto)}</b></td>
+          <td>${esc(tipoEsteso(r))}</td><td class="c">${esc(oneriEsteso(r))}</td></tr>`).join("")
+      : `<tr><td colspan="6" class="c">Nessuna sostituzione.</td></tr>`;
+    blocchi += `<div class="pr-blocco">
+      <div class="pr-giorno">${esc(dataLeggibile(iso))}</div>
+      <table class="pr-tab">
+        <thead><tr><th style="width:6%">Ora</th><th style="width:23%">Docente assente</th>
+          <th style="width:9%">Classe</th><th style="width:23%">Docente sostituto</th>
+          <th style="width:26%">Tipo di intervento</th><th style="width:13%">Oneri</th></tr></thead>
+        <tbody>${corpo}</tbody>
+      </table></div>`;
+  }
+
+  const nomi = Object.keys(perDoc).sort();
+  const riep = nomi.length ? `
+    <div class="pr-blocco">
+      <div class="pr-giorno">Riepilogo per docente</div>
+      <table class="pr-tab">
+        <thead><tr><th style="width:60%">Docente</th><th style="width:20%">Sostituzioni</th>
+          <th style="width:20%">di cui a pagamento</th></tr></thead>
+        <tbody>${nomi.map(n=>`<tr><td>${esc(n)}</td><td class="c">${perDoc[n].fatte}</td>
+          <td class="c">${perDoc[n].pag||""}</td></tr>`).join("")}
+        <tr><td><b>Totale</b></td><td class="c"><b>${totSost}</b></td><td class="c"><b>${totPag}</b></td></tr>
+        </tbody></table></div>` : "";
+
+  const periodo = date.length===1 ? dataLeggibile(date[0])
+    : "dal "+dataLeggibile(date[0])+" al "+dataLeggibile(date[date.length-1]);
+  const html = `
+    <div class="pr-head">
+      <div class="pr-ist">${esc(ISTITUTO)}</div>
+      <div class="pr-tit">Registro delle sostituzioni</div>
+      <div class="pr-sub">${esc(periodo)} — ${date.length} giornat${date.length===1?'a':'e'}</div>
+    </div>
+    ${blocchi}${riep}
+    <div class="pr-firma-box">Il responsabile di plesso<br><br>______________________________</div>`;
+  lanciaStampa(html, "portrait");
 }
 
 /* ---- ALTRO: menu delle funzioni occasionali ---- */
@@ -1371,7 +1536,8 @@ function renderRegistro(){
     return;
   }
   let out = `<h2 class="sec">Registro sostituzioni</h2>
-    <p class="hint" style="margin-top:0">${date.length} giornat${date.length===1?'a':'e'} in archivio. Tocca per aprire.</p>`;
+    <p class="hint" style="margin-top:0">${date.length} giornat${date.length===1?'a':'e'} in archivio. Tocca per aprire.</p>
+    <button class="btn" style="width:100%; margin-bottom:14px; padding:10px; font-size:14px" onclick="stampaRegistro()">🖨 Esporta tutto il registro in PDF</button>`;
   for(const iso of date){
     const rec=S.registro[iso];
     const aperto = S.regApertoGiorno===iso;
@@ -1401,6 +1567,7 @@ function renderRegistro(){
       }
       out += `<div style="padding:10px 12px; display:flex; gap:8px">
         <button class="btn ghost" style="flex:1; font-size:13px; padding:8px" onclick="condividiWhatsAppRegistro('${iso}')">📋 WhatsApp</button>
+        <button class="btn ghost" style="flex:1; font-size:13px; padding:8px" onclick="stampaRegistro('${iso}')">🖨 PDF</button>
         <button class="btn ghost" style="flex:1; font-size:13px; padding:8px; color:var(--red); border-color:var(--red)" onclick="eliminaGiorno('${iso}')">🗑 Elimina</button>
       </div>`;
       out += `</div>`;
@@ -1486,7 +1653,11 @@ function renderProspettoHTML(p){
     html += `</div>`;
   }
   html += `<div class="stat" style="border-top:2px solid var(--rule); margin-top:10px"><span>Ore a pagamento</span><b style="color:${p.pagamento?'var(--red)':'var(--teal)'}">${p.pagamento}</b></div>`;
-  html += `<button class="btn" style="width:100%; margin-top:14px; background:#25925a" onclick="condividiWhatsApp()">📋 Copia per WhatsApp</button>`;
+  html += `<div style="display:flex; gap:8px; margin-top:14px">
+    <button class="btn" style="flex:1; background:#25925a; padding:11px; font-size:14px" onclick="condividiWhatsApp()">📋 WhatsApp</button>
+    <button class="btn" style="flex:1; padding:11px; font-size:14px" onclick="stampaProspetto()">🖨 PDF / Stampa</button>
+  </div>
+  <p class="hint" style="margin-top:6px">Il PDF include la colonna per la firma dei sostituti, da allegare al registro delle presenze.</p>`;
   return html;
 }
 
