@@ -763,15 +763,17 @@ function renderVuoto(){
 /* ---- OGGI: assenti → prospetto ---- */
 function renderOggi(){
   const o=S.orario;
-  const assentiN = Object.keys(S.assentiOggi).length;
   const docs=[...o.docenti].sort((a,b)=>a.nome.localeCompare(b.nome));
   // dalla data scelta ricavo il giorno della settimana per il motore
   S.dataOggi = S.dataOggi || isoOggi();
   S.day = giornoDaData(S.dataOggi, o);
   const giornoOk = o.giorni.includes(S.day);
+  // le assenze già comunicate vanno caricate PRIMA di contare gli assenti,
+  // altrimenti il conteggio resta a zero e non compaiono né i chip né il bottone
+  applicaAssenzeNote();
+  const assentiN = Object.keys(S.assentiOggi).length;
 
   // chips degli assenti già scelti — espandibili per il permesso breve
-  applicaAssenzeNote();
   const chips = Object.keys(S.assentiOggi).map(n=>{
     const ore=S.assentiOggi[n];
     const doc=o.docenti.find(d=>d.nome===n);
