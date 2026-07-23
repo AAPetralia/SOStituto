@@ -308,15 +308,29 @@ function classifica(raw){
 
 /* ---------- import da Excel ---------- */
 function importaWorkbook(wb){
-  const ws = wb.Sheets["orario"] || wb.Sheets[wb.SheetNames[0]];
+  const nomiFogli = wb.SheetNames || [];
+  const ws = wb.Sheets["orario"] || wb.Sheets[nomiFogli[0]];
+  if(!ws) throw new Error("Il file non contiene fogli leggibili. Fogli visti: " + (nomiFogli.join(", ")||"nessuno") + ".");
   const grid = XLSX.utils.sheet_to_json(ws, {header:1, raw:true, defval:null});
-  // trova la riga intestazione (contiene DOCENTI)
+  // trova la riga intestazione (contiene DOCENTI) — tollerante su spazi e righe vuote iniziali
   let hdr=-1;
-  for(let r=0;r<Math.min(grid.length,12);r++){
-    const rowU = (grid[r]||[]).map(x=>String(x||"").toUpperCase());
+  for(let r=0;r<Math.min(grid.length,30);r++){
+    const rowU = (grid[r]||[]).map(x=>String(x==null?"":x).trim().toUpperCase());
     if(rowU.includes("DOCENTI")){ hdr=r; break; }
   }
-  if(hdr<0) throw new Error("Intestazione non trovata (manca la riga con 'DOCENTI'). Controlla che il foglio si chiami 'orario'.");
+  if(hdr<0){
+    // errore diagnostico: dico cosa ho effettivamente ricevuto
+    const anteprima = grid.slice(0,3).map((r,i)=>
+      "riga "+i+": " + ((r||[]).slice(0,6).map(x=> x==null?"—":String(x).trim()).join(" | ") || "(vuota)")
+    ).join("  ·  ");
+    throw new Error(
+      "Intestazione non trovata (manca la riga con 'DOCENTI').\n\n" +
+      "Fogli nel file: " + (nomiFogli.join(", ")||"nessuno") + "\n" +
+      "Righe lette: " + grid.length + "\n" +
+      (grid.length ? "Inizio del foglio → " + anteprima
+                   : "Il foglio risulta VUOTO: probabilmente il file scelto non è quello giusto o è stato scaricato male.")
+    );
+  }
   const dayRow=grid[hdr], hourRow=grid[hdr+1]||[];
   const matCol = dayRow.findIndex(x=>String(x||"").toUpperCase()==="MATERIE");
   const docCol = dayRow.findIndex(x=>String(x||"").toUpperCase()==="DOCENTI");
@@ -1783,7 +1797,7 @@ function onFile(ev){
       el("report").innerHTML=html;
       el("confirm").addEventListener("click", ()=>{ S.orario=parsed; save(); S.tab="orario"; S.day=parsed.giorni[0]; S.selDoc=""; S.selClasse=""; render(); });
     }catch(err){
-      el("report").innerHTML=`<div class="flag">Non riesco a leggere il file: ${esc(err.message)}</div>`;
+      el("report").innerHTML=`<div class="flag" style="white-space:pre-wrap; line-height:1.5">Non riesco a leggere il file: ${esc(err.message)}</div>`;
     }
   };
   rd.readAsArrayBuffer(f);
