@@ -209,6 +209,9 @@
     border-bottom:1px solid var(--rule-soft); cursor:pointer; font-size:14.5px}
   .pickrow.on{background:#DCEBE7; font-weight:700}
   .pickrow.on b{color:var(--teal)}
+  .promemo{background:#EAF3F1; border-left:3px solid var(--teal); border-radius:8px; padding:10px 12px;
+    font-size:13px; color:var(--ink); margin-bottom:12px; line-height:1.55}
+  .achip.danota{border-color:var(--teal)}
   .pnote{background:var(--paper2); border:1px solid var(--rule); border-left:4px solid var(--ink-soft);
     border-radius:10px; padding:12px 14px; margin-top:12px; font-size:13.5px; color:var(--ink-soft); line-height:1.6}
 </style>
@@ -254,7 +257,8 @@ let S = { orario:null, tab:"oggi", day:"LUN",
           override:{}, apertoRiga:"", flagDocSel:"",
           dataOggi:null, registro:{}, regApertoGiorno:"",
           alunnoAssenteOggi:[], alunnoSel:"", alunnoPanel:false,
-          uscite:[], uscitaForm:null };   /* assentiOggi: {nome: null|[ore]} */
+          uscite:[], uscitaForm:null,
+          assenzeNote:[], assenzaForm:null, noteApplicate:null, daNote:[] };   /* assentiOggi: {nome: null|[ore]} */
 
 /* ---------- persistenza ---------- */
 function save(){ try{
@@ -263,6 +267,7 @@ function save(){ try{
   localStorage.setItem("sostituto_flag", JSON.stringify(S.flagOggi));
   localStorage.setItem("sostituto_alunno", JSON.stringify({data:S.dataOggi, lista:S.alunnoAssenteOggi}));
   localStorage.setItem("sostituto_uscite", JSON.stringify(S.uscite||[]));
+  localStorage.setItem("sostituto_assenze", JSON.stringify(S.assenzeNote||[]));
 }catch(e){} }
 function load(){ try{
   const r=localStorage.getItem("sostituto_v1"); if(r) S.orario=JSON.parse(r);
@@ -271,6 +276,7 @@ function load(){ try{
   const rg=localStorage.getItem("sostituto_registro"); if(rg) S.registro=JSON.parse(rg);
   const aa=localStorage.getItem("sostituto_alunno"); if(aa){ const o=JSON.parse(aa); if(o && o.data===S.dataOggi) S.alunnoAssenteOggi=o.lista||[]; }
   const us=localStorage.getItem("sostituto_uscite"); if(us) S.uscite=JSON.parse(us);
+  const an=localStorage.getItem("sostituto_assenze"); if(an) S.assenzeNote=JSON.parse(an);
 }catch(e){} }
 
 /* ---------- classificazione cella (vocabolario chiuso) ---------- */
@@ -606,6 +612,39 @@ function tutteLeClassi(o){
   return [...s].sort();
 }
 
+/* ---- ASSENZE NOTE (comunicate in anticipo) ---- */
+/* record: {id, docente, dal, al, tipo:"giornata"|"breve", ore:[], nota} */
+function assenzeNoteAttive(iso){
+  if(!iso) return [];
+  return (S.assenzeNote||[]).filter(a => iso >= a.dal && iso <= (a.al||a.dal));
+}
+/* carica automaticamente le assenze note della data scelta — una volta sola per data,
+   così se le togli con la ✕ (collega rientrato) non tornano da sole */
+function applicaAssenzeNote(){
+  const iso = S.dataOggi;
+  if(S.noteApplicate === iso) return;
+  S.noteApplicate = iso;
+  S.daNote = [];
+  for(const a of assenzeNoteAttive(iso)){
+    if(a.docente in S.assentiOggi) continue;
+    S.assentiOggi[a.docente] = (a.tipo==="breve" && a.ore && a.ore.length) ? a.ore.slice() : null;
+    S.daNote.push(a.docente);
+  }
+}
+/* prossime assenze note nei giorni successivi (per il promemoria) */
+function assenzeProssime(iso, giorni){
+  if(!iso) return [];
+  const d0=new Date(iso+"T12:00:00"); const out=[];
+  for(let k=1;k<=giorni;k++){
+    const d=new Date(d0); d.setDate(d.getDate()+k);
+    const s=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+    const g=SETT[d.getDay()];
+    if(g==="DOM") continue;
+    assenzeNoteAttive(s).forEach(a=>out.push({iso:s, a}));
+  }
+  return out;
+}
+
 /* uscite didattiche attive in una data (ISO) */
 function usciteAttive(iso){
   if(!iso) return [];
@@ -683,22 +722,25 @@ function fmtCl(c){ return c ? c[0]+"ª "+c.slice(1) : c; }
    ============================================================ */
 const el = id => document.getElementById(id);
 
-const SOTTO_ALTRO = ["dove","importa","uscita"];   /* pagine raggiunte dal menu Altro */
+const SOTTO_ALTRO = ["dove","importa","uscita","assenze","backup"];   /* pagine raggiunte dal menu Altro */
 
 function render(){
   const attivo = SOTTO_ALTRO.includes(S.tab) ? "altro" : S.tab;
   document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on", b.dataset.tab===attivo));
   if(!S.orario && S.tab!=="importa"){ renderVuoto(); return; }
   ({oggi:renderOggi, registro:renderRegistro, orario:renderOrario, altro:renderAltro,
-    dove:renderDove, importa:renderImporta, uscita:renderUscita})[S.tab]();
+    dove:renderDove, importa:renderImporta, uscita:renderUscita, assenze:renderAssenze, backup:renderBackup})[S.tab]();
 }
 
 /* ---- ALTRO: menu delle funzioni occasionali ---- */
 function renderAltro(){
+  const nAss = (S.assenzeNote||[]).length, nUsc = (S.uscite||[]).length;
   const voci = [
-    { tab:"dove",    ic:"🔍", tit:"Dov'è",            sub:"Trova un docente o una classe in un momento preciso" },
-    { tab:"uscita",  ic:"🚌", tit:"Uscite didattiche", sub:"Classi in uscita e accompagnatori" },
-    { tab:"importa", ic:"⬆️", tit:"Importa l'orario", sub:"Carica il file Excel — poche volte l'anno" },
+    { tab:"assenze", ic:"📌", tit:"Assenze note",       sub:nAss?`${nAss} annotate — si caricano da sole nel giorno giusto`:"Annota le assenze comunicate in anticipo" },
+    { tab:"uscita",  ic:"🚌", tit:"Uscite didattiche",  sub:nUsc?`${nUsc} registrate`:"Classi in uscita e accompagnatori" },
+    { tab:"dove",    ic:"🔍", tit:"Dov'è",              sub:"Trova un docente o una classe in un momento preciso" },
+    { tab:"importa", ic:"⬆️", tit:"Importa l'orario",   sub:"Carica il file Excel — poche volte l'anno" },
+    { tab:"backup",  ic:"🔐", tit:"Backup e ripristino", sub:"Salva tutto in un file — o rimetti a posto dopo un guaio" },
   ];
   let out = `<h2 class="sec">Altro</h2>`;
   out += voci.map(v=>`<div class="menurow" onclick="S.tab='${v.tab}'; render()">
@@ -729,6 +771,7 @@ function renderOggi(){
   const giornoOk = o.giorni.includes(S.day);
 
   // chips degli assenti già scelti — espandibili per il permesso breve
+  applicaAssenzeNote();
   const chips = Object.keys(S.assentiOggi).map(n=>{
     const ore=S.assentiOggi[n];
     const doc=o.docenti.find(d=>d.nome===n);
@@ -751,8 +794,8 @@ function renderOggi(){
         `</div></div>`;
     }
     return `<div class="achip-wrap">
-      <div class="achip">
-        <span onclick="S.chipAperto='${aperto?'':esc(n)}'; render()">${esc(n)} · ${et} <b class="chev">${aperto?'▲':'▾'}</b></span>
+      <div class="achip${(S.daNote||[]).includes(n)?' danota':''}">
+        <span onclick="S.chipAperto='${aperto?'':esc(n)}'; render()">${(S.daNote||[]).includes(n)?'📌 ':''}${esc(n)} · ${et} <b class="chev">${aperto?'▲':'▾'}</b></span>
         <button onclick="delete S.assentiOggi['${esc(n)}']; if(S.chipAperto==='${esc(n)}')S.chipAperto=''; S.prospetto=null; render()">×</button>
       </div>${orebar}
     </div>`;
@@ -786,6 +829,13 @@ function renderOggi(){
   }
   if(nAA){
     out += `<p class="hint" style="margin-top:-4px; margin-bottom:12px">👦 Alunno assente: ${S.alunnoAssenteOggi.map(esc).join(", ")} — disponibili come criterio f.</p>`;
+  }
+
+  // promemoria: assenze già comunicate nei prossimi giorni
+  const pross = assenzeProssime(S.dataOggi, 3);
+  if(pross.length){
+    const righe = pross.map(x=>`${dataLeggibile(x.iso).replace(/ \d{4}$/,"")}: ${esc(cognomeBreve(x.a.docente))}${x.a.tipo==="breve"?" (permesso breve)":""}`);
+    out += `<div class="promemo">📌 <b>Assenze già comunicate</b><br>${righe.join("<br>")}</div>`;
   }
 
   out += `<div class="field"><label>Aggiungi un assente</label>
@@ -851,7 +901,15 @@ const SETT = ["DOM","LUN","MAR","MER","GIO","VEN","SAB"];
 function isoOggi(){ const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
 function giornoDaData(iso){ const d=new Date(iso+"T12:00:00"); return SETT[d.getDay()]; }
 function dataLeggibile(iso){ const d=new Date(iso+"T12:00:00"); return NOMEGIORNO[SETT[d.getDay()]]+" "+String(d.getDate()).padStart(2,"0")+"/"+String(d.getMonth()+1).padStart(2,"0")+"/"+d.getFullYear(); }
-function cambiaData(iso){ S.dataOggi = iso || isoOggi(); S.alunnoAssenteOggi=[]; S.prospetto=null; render(); }
+function cambiaData(iso){
+  S.dataOggi = iso || isoOggi();
+  S.assentiOggi = {};          /* gli assenti sono del giorno: cambiando data si riparte */
+  S.alunnoAssenteOggi = [];
+  S.override = {}; S.chipAperto = "";
+  S.noteApplicate = null;      /* così le assenze note della nuova data vengono caricate */
+  S.prospetto = null;
+  render();
+}
 
 /* ---------- registro: archiviazione automatica (opzione 1) ---------- */
 function archiviaRegistro(){
@@ -909,6 +967,196 @@ function motivoLabel(e){
   else if(e.tipo && /AFFIAN/i.test(e.tipo)) bits.push("affianc.");
   bits.push(e.motivo);
   return bits.join(" · ");
+}
+
+/* ---- BACKUP e RIPRISTINO ---- */
+const BACKUP_VER = 1;
+function datiBackup(){
+  return {
+    app: "SOStituto", versione: BACKUP_VER,
+    creato: new Date().toISOString(),
+    orario: S.orario || null,
+    lingue: S.lingue || {},
+    flagOggi: S.flagOggi || [],
+    registro: S.registro || {},
+    uscite: S.uscite || [],
+    assenzeNote: S.assenzeNote || []
+  };
+}
+function riepilogoBackup(d){
+  const nd = d.orario ? (d.orario.docenti||[]).length : 0;
+  return [
+    d.orario ? `orario con ${nd} docenti` : "nessun orario",
+    `${Object.keys(d.registro||{}).length} giornate di registro`,
+    `${(d.uscite||[]).length} uscite`,
+    `${(d.assenzeNote||[]).length} assenze note`,
+    `${(d.flagOggi||[]).length} flag`
+  ];
+}
+function esportaBackup(){
+  const d = datiBackup();
+  const txt = JSON.stringify(d);
+  const oggi = isoOggi();
+  const nome = `SOStituto-backup-${oggi}.json`;
+  try{
+    const blob = new Blob([txt], {type:"application/json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = nome;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url), 4000);
+    toast("Backup scaricato: " + nome);
+  }catch(e){
+    copiaTesto(txt);
+    toast("Scarico non riuscito — backup copiato negli appunti");
+  }
+}
+function onFileBackup(ev){
+  const f = ev.target.files && ev.target.files[0];
+  if(!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    let d;
+    try{ d = JSON.parse(r.result); }
+    catch(e){ toast("File non leggibile"); return; }
+    if(!d || d.app!=="SOStituto"){ toast("Non è un backup di SOStituto"); return; }
+    const rig = riepilogoBackup(d);
+    const quando = d.creato ? dataLeggibile(d.creato.slice(0,10)) : "data ignota";
+    const msg = "Ripristinare questo backup?\n\nCreato: "+quando+"\n\n"+rig.map(x=>"• "+x).join("\n")
+              + "\n\nATTENZIONE: i dati attualmente nell'app verranno sostituiti.";
+    if(!confirm(msg)){ ev.target.value=""; return; }
+    S.orario      = d.orario || null;
+    S.lingue      = d.lingue || {};
+    S.flagOggi    = d.flagOggi || [];
+    S.registro    = d.registro || {};
+    S.uscite      = d.uscite || [];
+    S.assenzeNote = d.assenzeNote || [];
+    S.prospetto=null; S.assentiOggi={}; S.noteApplicate=null; S.alunnoAssenteOggi=[];
+    if(S.orario) S.day = giornoDaData(S.dataOggi||isoOggi());
+    save(); saveRegistro();
+    toast("Backup ripristinato");
+    S.tab = "altro"; render();
+  };
+  r.readAsText(f);
+}
+function renderBackup(){
+  const d = datiBackup();
+  const rig = riepilogoBackup(d);
+  el("main").innerHTML = `
+    <div class="backlink" onclick="S.tab='altro'; render()">‹ Altro</div>
+    <h2 class="sec">Backup e ripristino</h2>
+    <p class="hint" style="margin-top:0">I dati dell'app vivono solo su questo dispositivo. Un backup periodico ti mette al riparo se cambi telefono o se il browser cancella i dati.</p>
+
+    <div class="regcard"><div class="reghead" style="cursor:default"><div style="flex:1">
+      <b>Dati attualmente in memoria</b>
+      ${rig.map(x=>`<div class="regsub">• ${esc(x)}</div>`).join("")}
+    </div></div></div>
+
+    <button class="btn" style="width:100%; margin-top:6px" onclick="esportaBackup()">⬇️ Salva un backup</button>
+    <p class="hint">Scarica un file unico con tutto. Conservalo dove preferisci (mail, cloud, chat con te stesso).</p>
+
+    <button class="btn ghost" style="width:100%; margin-top:14px" onclick="el('fileBk').click()">⬆️ Ripristina da backup</button>
+    <input type="file" id="fileBk" accept=".json,application/json" style="display:none">
+    <p class="hint" style="color:var(--red)">Il ripristino sostituisce tutti i dati presenti nell'app. Ti verrà chiesta conferma.</p>`;
+  el("fileBk").addEventListener("change", onFileBackup);
+}
+
+/* ---- ASSENZE NOTE: scheda ---- */
+function renderAssenze(){
+  const o=S.orario;
+  const docs=[...o.docenti].sort((a,b)=>a.nome.localeCompare(b.nome));
+  let out = `<div class="backlink" onclick="S.tab='altro'; render()">‹ Altro</div>
+    <h2 class="sec">Assenze note</h2>`;
+
+  if(!S.assenzaForm){
+    out += `<button class="btn" style="width:100%; margin-bottom:14px" onclick="nuovaAssenza()">+ Annota un'assenza</button>`;
+    const oggi = S.dataOggi || isoOggi();
+    const lista = (S.assenzeNote||[]).slice().sort((a,b)=> a.dal.localeCompare(b.dal));
+    if(!lista.length){
+      out += `<p class="hint">Nessuna assenza annotata. Registra qui le assenze comunicate in anticipo: verranno caricate da sole nel giorno giusto.</p>`;
+    } else {
+      out += lista.map(a=>{
+        const periodo = (a.dal===(a.al||a.dal)) ? dataLeggibile(a.dal) : dataLeggibile(a.dal)+" → "+dataLeggibile(a.al);
+        const tx = a.tipo==="breve"
+          ? "permesso breve · "+((a.ore||[]).map(h=>h+"ª").join(", ")||"ore da indicare")
+          : "intera giornata";
+        const passata = (a.al||a.dal) < oggi;
+        return `<div class="regcard" style="${passata?'opacity:.5':''}"><div class="reghead" style="cursor:default">
+          <div style="flex:1">
+            <b>${esc(a.docente)}</b>
+            <div class="regsub">${esc(periodo)}</div>
+            <div class="regsub">${a.tipo==="breve"?"⏱ ":"📅 "}${esc(tx)}${a.nota?" · "+esc(a.nota):""}</div>
+          </div>
+          <b class="chev" style="color:var(--red); cursor:pointer" onclick="eliminaAssenza('${a.id}')">✕</b>
+        </div></div>`;
+      }).join("");
+    }
+    el("main").innerHTML = out; return;
+  }
+
+  // ---- form ----
+  const f=S.assenzaForm;
+  out += `<div class="field"><label>Docente</label>
+      <select onchange="S.assenzaForm.docente=this.value; render()">
+        <option value="">— scegli docente —</option>
+        ${docs.map(d=>`<option ${f.docente===d.nome?'selected':''}>${esc(d.nome)}</option>`).join("")}
+      </select></div>
+    <div class="field"><label>Dal giorno</label>
+      <input type="date" value="${f.dal}" onchange="S.assenzaForm.dal=this.value; if(S.assenzaForm.al<this.value) S.assenzaForm.al=this.value; render()"></div>
+    <div class="field"><label>Al giorno</label>
+      <input type="date" value="${f.al}" onchange="S.assenzaForm.al=this.value; render()"></div>`;
+
+  const piuGiorni = f.dal !== f.al;
+  out += `<div class="field"><label>Tipo di assenza</label>
+    <div class="pickgrid">
+      <div class="pick ${f.tipo==='giornata'?'on':''}" onclick="S.assenzaForm.tipo='giornata'; render()">Intera giornata</div>
+      <div class="pick ${f.tipo==='breve'?'on':''}" onclick="S.assenzaForm.tipo='breve'; S.assenzaForm.al=S.assenzaForm.dal; render()">Permesso breve orario</div>
+    </div>
+    <p class="hint" style="margin:6px 0 0">${f.tipo==='breve'
+      ? "Il permesso breve orario genera ore da recuperare (entro due mesi)."
+      : "Malattia, permesso retribuito, ferie, formazione, L.104: nessun recupero dovuto."}</p>
+  </div>`;
+
+  if(f.tipo==='breve'){
+    out += `<div class="field"><label>Ore di assenza</label>
+      <div class="orebtns">${o.ore.map(h=>`<div class="oreb ${f.ore.includes(h)?'on':''}" onclick="toggleOraAssenza(${h})">${h}ª</div>`).join("")}</div></div>`;
+  } else if(piuGiorni){
+    out += `<p class="hint">Assenza di più giorni: tutte le ore di ciascun giorno.</p>`;
+  }
+
+  out += `<div class="field"><label>Nota (facoltativa)</label>
+      <input type="text" value="${esc(f.nota||"")}" placeholder="riferimento protocollo, ecc." oninput="S.assenzaForm.nota=this.value"></div>`;
+
+  out += `<div style="display:flex; gap:8px; margin-top:14px">
+      <button class="btn ghost" style="flex:1" onclick="S.assenzaForm=null; render()">Annulla</button>
+      <button class="btn" style="flex:2" onclick="salvaAssenza()">Salva assenza</button>
+    </div>`;
+  el("main").innerHTML = out;
+}
+function nuovaAssenza(){
+  const oggi = S.dataOggi || isoOggi();
+  S.assenzaForm = { id:"a"+Date.now(), docente:"", dal:oggi, al:oggi, tipo:"giornata", ore:[], nota:"" };
+  render();
+}
+function toggleOraAssenza(h){
+  const a=S.assenzaForm.ore, i=a.indexOf(h);
+  if(i>=0) a.splice(i,1); else a.push(h);
+  a.sort((x,y)=>x-y); render();
+}
+function salvaAssenza(){
+  const f=S.assenzaForm;
+  if(!f.docente){ toast("Scegli il docente"); return; }
+  if(f.tipo==="breve" && !f.ore.length){ toast("Indica le ore del permesso"); return; }
+  if(f.tipo==="giornata") f.ore=[];
+  S.assenzeNote = S.assenzeNote || [];
+  const i=S.assenzeNote.findIndex(a=>a.id===f.id);
+  if(i>=0) S.assenzeNote[i]=f; else S.assenzeNote.push(f);
+  S.assenzaForm=null; S.noteApplicate=null; S.prospetto=null; save(); render();
+}
+function eliminaAssenza(id){
+  if(!confirm("Eliminare questa assenza annotata?")) return;
+  S.assenzeNote=(S.assenzeNote||[]).filter(a=>a.id!==id);
+  S.noteApplicate=null; save(); render();
 }
 
 /* ---- USCITE DIDATTICHE ---- */
