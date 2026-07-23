@@ -187,6 +187,28 @@
   .aarow b{font-weight:600; font-size:12.5px; color:var(--ink-soft)}
   .aarow.on{background:#DCEBE7}
   .aarow.on b{color:var(--teal)}
+  .menurow{display:flex; align-items:center; gap:13px; background:var(--paper2); border:1.5px solid var(--rule);
+    border-radius:12px; padding:14px; margin-bottom:10px; cursor:pointer}
+  .menurow .mic{font-size:21px; flex-shrink:0}
+  .menurow .mtx{flex:1; display:flex; flex-direction:column; gap:2px}
+  .menurow .mtx b{font-family:'Zilla Slab',serif; font-size:16.5px}
+  .menurow .mtx i{font-style:normal; font-size:12.5px; color:var(--ink-soft); line-height:1.35}
+  .menurow .mch{color:var(--ink-soft); font-size:20px; flex-shrink:0}
+  .backlink{display:inline-flex; align-items:center; gap:5px; color:var(--teal); font-weight:600;
+    font-size:13.5px; cursor:pointer; margin-bottom:10px}
+  .orebtns{display:flex; gap:6px; flex-wrap:wrap}
+  .oreb{padding:8px 13px; border:1.5px solid var(--rule); border-radius:9px; background:var(--paper2);
+    font-weight:700; font-size:14px; cursor:pointer; color:var(--ink-soft)}
+  .oreb.on{background:var(--teal); border-color:var(--teal); color:#fff}
+  .pickgrid{display:flex; gap:6px; flex-wrap:wrap}
+  .pick{padding:8px 12px; border:1.5px solid var(--rule); border-radius:9px; background:var(--paper2);
+    font-weight:700; font-size:14px; cursor:pointer}
+  .pick.on{background:var(--teal); border-color:var(--teal); color:#fff}
+  .picklist{max-height:260px; overflow-y:auto; border:1.5px solid var(--rule); border-radius:10px; background:var(--paper2)}
+  .pickrow{display:flex; align-items:center; justify-content:space-between; padding:9px 12px;
+    border-bottom:1px solid var(--rule-soft); cursor:pointer; font-size:14.5px}
+  .pickrow.on{background:#DCEBE7; font-weight:700}
+  .pickrow.on b{color:var(--teal)}
   .pnote{background:var(--paper2); border:1px solid var(--rule); border-left:4px solid var(--ink-soft);
     border-radius:10px; padding:12px 14px; margin-top:12px; font-size:13.5px; color:var(--ink-soft); line-height:1.6}
 </style>
@@ -211,13 +233,9 @@
     <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M8 13h3M8 17h3"/></svg>
     <span class="lb">Orario</span>
   </button>
-  <button data-tab="dove">
-    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-    <span class="lb">Dov'è</span>
-  </button>
-  <button data-tab="importa">
-    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 8l5-5 5 5M5 21h14"/></svg>
-    <span class="lb">Importa</span>
+  <button data-tab="altro">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
+    <span class="lb">Altro</span>
   </button>
 </nav>
 
@@ -235,7 +253,8 @@ let S = { orario:null, tab:"oggi", day:"LUN",
           assentiOggi:{}, flagOggi:[], prospetto:null, chipAperto:"",
           override:{}, apertoRiga:"", flagDocSel:"",
           dataOggi:null, registro:{}, regApertoGiorno:"",
-          alunnoAssenteOggi:[], alunnoSel:"", alunnoPanel:false };   /* assentiOggi: {nome: null|[ore]} */
+          alunnoAssenteOggi:[], alunnoSel:"", alunnoPanel:false,
+          uscite:[], uscitaForm:null };   /* assentiOggi: {nome: null|[ore]} */
 
 /* ---------- persistenza ---------- */
 function save(){ try{
@@ -243,6 +262,7 @@ function save(){ try{
   localStorage.setItem("sostituto_lingue", JSON.stringify(S.lingue));
   localStorage.setItem("sostituto_flag", JSON.stringify(S.flagOggi));
   localStorage.setItem("sostituto_alunno", JSON.stringify({data:S.dataOggi, lista:S.alunnoAssenteOggi}));
+  localStorage.setItem("sostituto_uscite", JSON.stringify(S.uscite||[]));
 }catch(e){} }
 function load(){ try{
   const r=localStorage.getItem("sostituto_v1"); if(r) S.orario=JSON.parse(r);
@@ -250,6 +270,7 @@ function load(){ try{
   const f=localStorage.getItem("sostituto_flag"); if(f) S.flagOggi=JSON.parse(f);
   const rg=localStorage.getItem("sostituto_registro"); if(rg) S.registro=JSON.parse(rg);
   const aa=localStorage.getItem("sostituto_alunno"); if(aa){ const o=JSON.parse(aa); if(o && o.data===S.dataOggi) S.alunnoAssenteOggi=o.lista||[]; }
+  const us=localStorage.getItem("sostituto_uscite"); if(us) S.uscite=JSON.parse(us);
 }catch(e){} }
 
 /* ---------- classificazione cella (vocabolario chiuso) ---------- */
@@ -414,11 +435,19 @@ function candidati(o, classe, g, h, assenteObj, ctx, lingua){
     const cdc = classiDi(d).has(classe) ? 0 : 1;
     const tie = [aff, cdc, ctx.fatte[d.nome]||0, d.nome];
     const flagged = ctx.flag.has(d.nome+"|"+classe);
+    // a) PRIVO DI ALUNNI perché la sua classe è in uscita didattica (e lui non accompagna):
+    //    criterio a) della circolare, priorità massima.
+    if(ctx.classeInGita){
+      const cc = (st.t==="ARTIC") ? [st.a,st.b] : [st.det || st.classe];
+      const suaInGita = cc.filter(Boolean).length>0 && cc.filter(Boolean).every(c=>ctx.classeInGita(c,h));
+      if(suaInGita && !ctx.accompagna(d.nome,h)){
+        pool.push([-1,...tie,"classe in gita",d.nome]); continue;
+      }
+    }
     // f) sostegno PRIVO DEL PROPRIO ALUNNO (assente oggi): risorsa libera, criterio f) della circolare.
     //    Sta SOTTO potenziamento (e) e tutto ciò che precede, SOPRA pagamento (g) e sostegno di altra classe (h).
     //    Vale nelle sue ore di sostegno (l'alunno non c'è, non lo sta seguendo).
     //    Supera l'intoccabilità: senza alunno, non c'è caso grave da presidiare.
-    //    (Il criterio a) "privo di alunni" resta per la classe in gita, dalla futura scheda Uscita didattica.)
     if(isSost(d) && ctx.alunnoAssente.has(d.nome) && (st.t==="CLASSE"||st.t==="LINGUA")){
       pool.push([3,...tie,"alunno assente",d.nome]); continue;
     }
@@ -475,15 +504,39 @@ function generaProspetto(o, giorno, assenti, opts){
   const nomiLingua = S.lingue || {};
   const linguaDi = nome => (nome===nomiLingua.FR?"FR":(nome===nomiLingua.SP?"SP":null));
 
+  /* ---- USCITE DIDATTICHE attive in questa data ---- */
+  const uscite = opts.uscite || [];
+  const oraInUscita = (u,h) => !u.ore || !u.ore.length || u.ore.includes(h);
+  const classeInGita = (cl,h) => !!cl && uscite.some(u => (u.classi||[]).includes(cl) && oraInUscita(u,h));
+  const accompagna  = (nome,h) => uscite.some(u => (u.accomp||[]).includes(nome) && oraInUscita(u,h));
+  ctx.classeInGita = classeInGita;
+  ctx.accompagna = accompagna;
+  /* tutte le classi coinvolte dalla cella (per le articolate sono due) */
+  const classiCella = st => (st.t==="ARTIC" ? [st.a, st.b] : [st.det || st.classe]).filter(Boolean);
+  const cellaInGita = (st,h) => { const cc=classiCella(st); return cc.length>0 && cc.every(c=>classeInGita(c,h)); };
+
+  /* gli accompagnatori sono fuori: li tratto come assenti (le loro ore in classi NON in gita vanno coperte) */
+  const giaAssenti = new Set(assenti.map(a=>a.nome));
+  const assentiEff = assenti.slice();
+  for(const u of uscite){
+    for(const nome of (u.accomp||[])){
+      if(giaAssenti.has(nome)) continue;
+      giaAssenti.add(nome);
+      assentiEff.push({ nome, ore: (u.ore && u.ore.length) ? u.ore.slice() : null, accompagnatore:true });
+      ctx.assenti.add(nome);
+    }
+  }
+
   // costruisco gli slot da coprire
   const slot=[];
   const note=[];
-  for(const a of assenti){
+  for(const a of assentiEff){
     const doc=o.docenti.find(d=>d.nome===a.nome); if(!doc) continue;
     const ore = a.ore || o.ore;
     const sost = isSost(doc);
     for(const h of ore){
       const st=statoCella(doc,giorno,h,o.ore);
+      if(cellaInGita(st,h)) continue;   /* la classe è in gita: non c'è nulla da coprire */
       if(st.t==="CLASSE"||st.t==="ARTIC"||st.t==="AR"){
         // il sostegno assente NON si sostituisce (salvo flag) SOLO per le sue ore di sostegno;
         // l'ora di AR (attività alternativa) è lezione vera → si copre come un curricolare
@@ -546,11 +599,29 @@ function generaProspetto(o, giorno, assenti, opts){
   return { giorno, esiti, note, pagamento: ctx.pagamento };
 }
 
+/* tutte le classi presenti nell'orario, ordinate */
+function tutteLeClassi(o){
+  const s=new Set();
+  (o.docenti||[]).forEach(d => classiDi(d).forEach(c => s.add(c)));
+  return [...s].sort();
+}
+
+/* uscite didattiche attive in una data (ISO) */
+function usciteAttive(iso){
+  if(!iso) return [];
+  return (S.uscite||[]).filter(u => iso >= u.dal && iso <= (u.al||u.dal));
+}
+
 /* ricostruisce il contesto della giornata per calcolare le alternative di UNA cella,
    escludendo l'assegnazione di quella cella (così il suo attuale titolare risulta libero) */
 function ricostruisciCtx(o, prosp, cellaEsclusa){
   const assenti = new Set(prosp.esiti.map(e=>e.a.nome));
   const ctx = { assenti, perMateria: contaMaterie(o), fatte:{}, recuperi:{}, flag:new Set(S.flagOggi||[]), alunnoAssente:new Set(S.alunnoAssenteOggi||[]), occupati:{}, pagamento:0 };
+  const _us = usciteAttive(S.dataOggi);
+  const _oraIn = (u,h) => !u.ore || !u.ore.length || u.ore.includes(h);
+  ctx.classeInGita = (cl,h) => !!cl && _us.some(u => (u.classi||[]).includes(cl) && _oraIn(u,h));
+  ctx.accompagna  = (nome,h) => _us.some(u => (u.accomp||[]).includes(nome) && _oraIn(u,h));
+  _us.forEach(u => (u.accomp||[]).forEach(n => assenti.add(n)));   /* accompagnatori: fuori */
   for(const e of prosp.esiti){
     if(e.a.nome===cellaEsclusa.a.nome && e.h===cellaEsclusa.h) continue;  /* escludo questa cella */
     if(e.scelto){
@@ -612,10 +683,30 @@ function fmtCl(c){ return c ? c[0]+"ª "+c.slice(1) : c; }
    ============================================================ */
 const el = id => document.getElementById(id);
 
+const SOTTO_ALTRO = ["dove","importa","uscita"];   /* pagine raggiunte dal menu Altro */
+
 function render(){
-  document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on", b.dataset.tab===S.tab));
+  const attivo = SOTTO_ALTRO.includes(S.tab) ? "altro" : S.tab;
+  document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on", b.dataset.tab===attivo));
   if(!S.orario && S.tab!=="importa"){ renderVuoto(); return; }
-  ({oggi:renderOggi, registro:renderRegistro, orario:renderOrario, dove:renderDove, importa:renderImporta})[S.tab]();
+  ({oggi:renderOggi, registro:renderRegistro, orario:renderOrario, altro:renderAltro,
+    dove:renderDove, importa:renderImporta, uscita:renderUscita})[S.tab]();
+}
+
+/* ---- ALTRO: menu delle funzioni occasionali ---- */
+function renderAltro(){
+  const voci = [
+    { tab:"dove",    ic:"🔍", tit:"Dov'è",            sub:"Trova un docente o una classe in un momento preciso" },
+    { tab:"uscita",  ic:"🚌", tit:"Uscite didattiche", sub:"Classi in uscita e accompagnatori" },
+    { tab:"importa", ic:"⬆️", tit:"Importa l'orario", sub:"Carica il file Excel — poche volte l'anno" },
+  ];
+  let out = `<h2 class="sec">Altro</h2>`;
+  out += voci.map(v=>`<div class="menurow" onclick="S.tab='${v.tab}'; render()">
+      <span class="mic">${v.ic}</span>
+      <span class="mtx"><b>${esc(v.tit)}</b><i>${esc(v.sub)}</i></span>
+      <span class="mch">›</span>
+    </div>`).join("");
+  el("main").innerHTML = out;
 }
 
 function renderVuoto(){
@@ -750,7 +841,7 @@ function lanciaProspetto(){
   const o=S.orario;
   const assenti=Object.keys(S.assentiOggi).map(n=>({nome:n, ore:S.assentiOggi[n]}));
   S.override = S.override || {};              /* {assente|h : nomeScelto|""(=svuota)} */
-  S.prospetto = generaProspetto(o, S.day, assenti, { flag:S.flagOggi, override:S.override, alunnoAssente:S.alunnoAssenteOggi });
+  S.prospetto = generaProspetto(o, S.day, assenti, { flag:S.flagOggi, override:S.override, alunnoAssente:S.alunnoAssenteOggi, uscite:usciteAttive(S.dataOggi) });
   archiviaRegistro();                         /* opzione 1: si salva da sé alla generazione */
   render();
 }
@@ -818,6 +909,105 @@ function motivoLabel(e){
   else if(e.tipo && /AFFIAN/i.test(e.tipo)) bits.push("affianc.");
   bits.push(e.motivo);
   return bits.join(" · ");
+}
+
+/* ---- USCITE DIDATTICHE ---- */
+function renderUscita(){
+  const o=S.orario;
+  const classi = tutteLeClassi(o);
+  const docs = [...o.docenti].sort((a,b)=>a.nome.localeCompare(b.nome));
+  let out = `<div class="backlink" onclick="S.tab='altro'; render()">‹ Altro</div>
+    <h2 class="sec">Uscite didattiche</h2>`;
+
+  if(!S.uscitaForm){
+    out += `<button class="btn" style="width:100%; margin-bottom:14px" onclick="nuovaUscita()">+ Nuova uscita</button>`;
+    const lista = (S.uscite||[]).slice().sort((a,b)=> a.dal.localeCompare(b.dal)).reverse();
+    if(!lista.length){
+      out += `<p class="hint">Nessuna uscita registrata. Le classi in uscita non richiedono sostituzioni; gli accompagnatori risultano fuori sede e i loro colleghi liberi.</p>`;
+    } else {
+      out += lista.map(u=>{
+        const periodo = (u.dal===u.al) ? dataLeggibile(u.dal) : dataLeggibile(u.dal)+" → "+dataLeggibile(u.al);
+        const oreTx = (u.ore && u.ore.length) ? u.ore.map(h=>h+"ª").join(", ") : "giornata intera";
+        return `<div class="regcard"><div class="reghead" style="cursor:default">
+          <div style="flex:1">
+            <b>${esc(u.nota || "Uscita didattica")}</b>
+            <div class="regsub">${esc(periodo)} · ${esc(oreTx)}</div>
+            <div class="regsub">🎓 ${(u.classi||[]).map(esc).join(", ")||"—"}</div>
+            <div class="regsub">🧑‍🏫 ${(u.accomp||[]).map(n=>esc(cognomeBreve(n))).join(", ")||"nessun accompagnatore"}</div>
+          </div>
+          <b class="chev" style="color:var(--red); cursor:pointer" onclick="eliminaUscita('${u.id}')">✕</b>
+        </div></div>`;
+      }).join("");
+    }
+    el("main").innerHTML = out; return;
+  }
+
+  // ---- form ----
+  const f = S.uscitaForm;
+  out += `<div class="field"><label>Descrizione (facoltativa)</label>
+      <input type="text" value="${esc(f.nota||"")}" placeholder="es. Teatro, Settimana bianca" oninput="S.uscitaForm.nota=this.value"></div>
+    <div class="field"><label>Dal giorno</label>
+      <input type="date" value="${f.dal}" onchange="S.uscitaForm.dal=this.value; if(S.uscitaForm.al<this.value) S.uscitaForm.al=this.value; render()"></div>
+    <div class="field"><label>Al giorno</label>
+      <input type="date" value="${f.al}" onchange="S.uscitaForm.al=this.value; render()"></div>`;
+
+  const piuGiorni = f.dal !== f.al;
+  out += `<div class="field"><label>Ore coinvolte</label>`;
+  if(piuGiorni){
+    out += `<p class="hint" style="margin:0">Uscita di più giorni: sono coinvolte tutte le ore di ciascun giorno.</p>`;
+  } else {
+    out += `<div class="orebtns">
+      <div class="oreb ${!f.ore.length?'on':''}" onclick="S.uscitaForm.ore=[]; render()">tutte</div>
+      ${o.ore.map(h=>`<div class="oreb ${f.ore.includes(h)?'on':''}" onclick="toggleOraUscita(${h})">${h}ª</div>`).join("")}
+    </div>`;
+  }
+  out += `</div>`;
+
+  out += `<div class="field"><label>Classi in uscita</label><div class="pickgrid">
+      ${classi.map(c=>`<div class="pick ${f.classi.includes(c)?'on':''}" onclick="togglePick('classi','${esc(c)}')">${esc(c)}</div>`).join("")}
+    </div></div>`;
+
+  out += `<div class="field"><label>Accompagnatori</label>
+      <p class="hint" style="margin:0 0 6px">Includi anche il sostegno che accompagna il proprio alunno.</p>
+      <div class="picklist">
+      ${docs.map(d=>`<div class="pickrow ${f.accomp.includes(d.nome)?'on':''}" onclick="togglePick('accomp','${esc(d.nome)}')">
+          <span>${esc(d.nome)}</span><b>${f.accomp.includes(d.nome)?'✓':''}</b></div>`).join("")}
+    </div></div>`;
+
+  out += `<div style="display:flex; gap:8px; margin-top:14px">
+      <button class="btn ghost" style="flex:1" onclick="S.uscitaForm=null; render()">Annulla</button>
+      <button class="btn" style="flex:2" onclick="salvaUscita()">Salva uscita</button>
+    </div>`;
+  el("main").innerHTML = out;
+}
+function nuovaUscita(){
+  const oggi = S.dataOggi || isoOggi();
+  S.uscitaForm = { id:"u"+Date.now(), nota:"", dal:oggi, al:oggi, ore:[], classi:[], accomp:[] };
+  render();
+}
+function toggleOraUscita(h){
+  const a=S.uscitaForm.ore, i=a.indexOf(h);
+  if(i>=0) a.splice(i,1); else a.push(h);
+  a.sort((x,y)=>x-y); render();
+}
+function togglePick(campo, val){
+  const a=S.uscitaForm[campo], i=a.indexOf(val);
+  if(i>=0) a.splice(i,1); else a.push(val);
+  render();
+}
+function salvaUscita(){
+  const f=S.uscitaForm;
+  if(!f.classi.length){ toast("Scegli almeno una classe"); return; }
+  if(f.dal!==f.al) f.ore=[];                    /* più giorni = tutte le ore */
+  S.uscite = S.uscite || [];
+  const i = S.uscite.findIndex(u=>u.id===f.id);
+  if(i>=0) S.uscite[i]=f; else S.uscite.push(f);
+  S.uscitaForm=null; S.prospetto=null; save(); render();
+}
+function eliminaUscita(id){
+  if(!confirm("Eliminare questa uscita?")) return;
+  S.uscite = (S.uscite||[]).filter(u=>u.id!==id);
+  S.prospetto=null; save(); render();
 }
 
 /* ---- REGISTRO: lista giornate archiviate ---- */
@@ -1079,6 +1269,7 @@ function renderDove(){
       wk+=`<div class="wkrow"><div class="wkday">${g}</div><div class="thours">${cells}</div></div>`;
     }
     el("main").innerHTML = `
+      <div class="backlink" onclick="S.tab='altro'; render()">‹ Altro</div>
       <h2 class="sec">Dov'è un docente</h2>
       ${modeBtns}
       <div class="field"><label>Docente</label>
@@ -1104,6 +1295,7 @@ function renderDove(){
       ans = `<div class="answer" style="border-left-color:var(--ink-soft)"><div class="sub" style="margin:0">Nessun docente risulta in ${esc(fmtCl(S.selClasse))} a quest'ora.</div></div>`;
     }
     el("main").innerHTML = `
+      <div class="backlink" onclick="S.tab='altro'; render()">‹ Altro</div>
       <h2 class="sec">Chi c'è in una classe</h2>
       ${modeBtns}
       <div class="field"><label>Classe</label><select onchange="S.selClasse=this.value; render()">${optCl}</select></div>
@@ -1143,6 +1335,7 @@ function chiInClasse(o, classe, g, h){
 function renderImporta(){
   const has=S.orario;
   el("main").innerHTML = `
+    <div class="backlink" onclick="S.tab='altro'; render()">‹ Altro</div>
     <h2 class="sec">Importa l'orario</h2>
     <div class="drop">
       <p style="margin:0 0 14px; color:var(--ink-soft); font-size:14px">Carica il file Excel dell'orario<br>(foglio “orario”).</p>
