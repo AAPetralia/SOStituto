@@ -811,7 +811,7 @@ function fmtCl(c){ return c ? c[0]+"ª "+c.slice(1) : c; }
    ============================================================ */
 const el = id => document.getElementById(id);
 
-const SOTTO_ALTRO = ["dove","importa","uscita","assenze","backup","potenz","sync"];
+const SOTTO_ALTRO = ["dove","importa","uscita","assenze","backup","potenz","sync","flag"];
 /* in modalità operativa restano solo queste voci del menu Altro */
 const OPERATIVO_TAB = ["dove","sync"];
 /* schede utilizzabili anche prima di avere un orario: sono le vie da cui l'orario arriva */
@@ -824,7 +824,7 @@ function render(){
   document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on", b.dataset.tab===attivo));
   if(!S.orario && !SENZA_ORARIO.includes(S.tab)){ renderVuoto(); return; }
   ({oggi:renderOggi, registro:renderRegistro, orario:renderOrario, altro:renderAltro,
-    dove:renderDove, importa:renderImporta, uscita:renderUscita, assenze:renderAssenze, backup:renderBackup, potenz:renderPotenziamento, sync:renderSync})[S.tab]();
+    dove:renderDove, importa:renderImporta, uscita:renderUscita, assenze:renderAssenze, backup:renderBackup, potenz:renderPotenziamento, sync:renderSync, flag:renderFlag})[S.tab]();
 }
 
 /* ================= STAMPA / PDF ================= */
@@ -1163,6 +1163,7 @@ function renderAltro(){
   const voci = [
     { tab:"assenze", ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v4"/><path d="M9 3h6l-1 6 3 3v2H7v-2l3-3-1-6z"/></svg>`, tit:"Assenze note",       sub:nAss?`${nAss} annotate — si caricano da sole nel giorno giusto`:"Annota le assenze comunicate in anticipo" },
     { tab:"uscita",  ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="11" rx="2"/><path d="M3 10.5h18M7 16v2M17 16v2"/><circle cx="7.5" cy="13" r=".9"/><circle cx="16.5" cy="13" r=".9"/></svg>`, tit:"Uscite didattiche",  sub:nUsc?`${nUsc} registrate`:"Classi in uscita e accompagnatori" },
+    { tab:"flag",    ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.2l7 2.8v5.1c0 4-2.9 7.6-7 8.7-4.1-1.1-7-4.7-7-8.7V6l7-2.8z"/><path d="M9.3 12.1l1.9 1.9 3.5-3.9"/></svg>`, tit:"Sostegni non derogabili", sub:(S.flagOggi||[]).length?`${S.flagOggi.length} segnalati \u2014 non verranno mai spostati`:"Alunni gravi con assistenza continua" },
     { tab:"potenz",  ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.6"/><circle cx="12" cy="12" r=".6" fill="currentColor"/></svg>`, tit:"Potenziamento",      sub:nPno?`${nPno} ore marcate Pno`:"Marca le ore non disponibili senza toccare l'Excel" },
     { tab:"dove",    ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="M20.5 20.5l-4.7-4.7"/></svg>`, tit:"Dov'è",              sub:"Trova un docente o una classe in un momento preciso" },
     { tab:"importa", ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4"/><path d="M8 8l4-4 4 4"/><path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/></svg>`, tit:"Importa l'orario",   sub:"Carica il file Excel — poche volte l'anno" },
@@ -2171,9 +2172,14 @@ function renderImporta(){
     <h2 class="sec" style="margin-top:26px">Docenti di 2ª lingua</h2>
     <p class="hint" style="margin-top:0">Serve per gestire le classi articolate: l'app deve sapere chi fa francese e chi spagnolo. Si imposta una volta.</p>
     <div class="field"><label>Francese</label>${selDocente("FR")}</div>
-    <div class="field"><label>Spagnolo</label>${selDocente("SP")}</div>
-    ${renderFlagSection()}`;
+    <div class="field"><label>Spagnolo</label>${selDocente("SP")}</div>`;
   el("file").addEventListener("change", onFile);
+}
+
+/* ---- pagina: sostegni non derogabili ---- */
+function renderFlag(){
+  el("main").innerHTML = `<div class="backlink" onclick="S.tab='altro'; render()">\u2039 Altro</div>`
+    + renderFlagSection();
 }
 
 /* ---- sezione flag "non derogabile" ---- */
