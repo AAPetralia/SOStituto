@@ -318,7 +318,9 @@ let S = { orario:null, tab:"oggi", day:"LUN",
           alunnoAssenteOggi:[], alunnoSel:"", alunnoPanel:false,
           uscite:[], uscitaForm:null,
           assenzeNote:[], assenzaForm:null, noteApplicate:null, daNote:[],
-          pnoOn:[], potAssign:{}, potSel:"" };   /* assentiOggi: {nome: null|[ore]} */
+          pnoOn:[], potAssign:{}, potSel:"",
+          sync:{url:"",token:"",utente:"",soloLettura:false,ultimoPull:null,info:null}, syncAttivo:false,
+          ruolo:"completo" };   /* completo | operativo */   /* assentiOggi: {nome: null|[ore]} */
 
 /* ---------- persistenza ---------- */
 function save(){ try{
@@ -330,6 +332,8 @@ function save(){ try{
   localStorage.setItem("sostituto_assenze", JSON.stringify(S.assenzeNote||[]));
   localStorage.setItem("sostituto_pno", JSON.stringify(S.pnoOn||[]));
   localStorage.setItem("sostituto_potass", JSON.stringify(S.potAssign||{}));
+  localStorage.setItem("sostituto_sync", JSON.stringify(S.sync||{}));
+  localStorage.setItem("sostituto_ruolo", S.ruolo||"completo");
 }catch(e){} }
 function load(){ try{
   const r=localStorage.getItem("sostituto_v1"); if(r) S.orario=JSON.parse(r);
@@ -341,6 +345,8 @@ function load(){ try{
   const an=localStorage.getItem("sostituto_assenze"); if(an) S.assenzeNote=JSON.parse(an);
   const pn=localStorage.getItem("sostituto_pno"); if(pn) S.pnoOn=JSON.parse(pn);
   const pa=localStorage.getItem("sostituto_potass"); if(pa) S.potAssign=JSON.parse(pa);
+  const sy=localStorage.getItem("sostituto_sync"); if(sy) S.sync=Object.assign(S.sync||{},JSON.parse(sy));
+  const ru=localStorage.getItem("sostituto_ruolo"); if(ru) S.ruolo=ru;
 }catch(e){} }
 
 /* ---------- classificazione cella (vocabolario chiuso) ---------- */
@@ -803,14 +809,18 @@ function fmtCl(c){ return c ? c[0]+"ª "+c.slice(1) : c; }
    ============================================================ */
 const el = id => document.getElementById(id);
 
-const SOTTO_ALTRO = ["dove","importa","uscita","assenze","backup","potenz"];   /* pagine raggiunte dal menu Altro */
+const SOTTO_ALTRO = ["dove","importa","uscita","assenze","backup","potenz","sync"];
+/* in modalità operativa restano solo queste voci del menu Altro */
+const OPERATIVO_TAB = ["dove","sync"];   /* pagine raggiunte dal menu Altro */
 
 function render(){
+  // in modalità operativa le schede di configurazione non sono raggiungibili
+  if(S.ruolo==="operativo" && SOTTO_ALTRO.includes(S.tab) && !OPERATIVO_TAB.includes(S.tab)) S.tab="altro";
   const attivo = SOTTO_ALTRO.includes(S.tab) ? "altro" : S.tab;
   document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on", b.dataset.tab===attivo));
   if(!S.orario && S.tab!=="importa"){ renderVuoto(); return; }
   ({oggi:renderOggi, registro:renderRegistro, orario:renderOrario, altro:renderAltro,
-    dove:renderDove, importa:renderImporta, uscita:renderUscita, assenze:renderAssenze, backup:renderBackup, potenz:renderPotenziamento})[S.tab]();
+    dove:renderDove, importa:renderImporta, uscita:renderUscita, assenze:renderAssenze, backup:renderBackup, potenz:renderPotenziamento, sync:renderSync})[S.tab]();
 }
 
 /* ================= STAMPA / PDF ================= */
@@ -1007,6 +1017,120 @@ function stampaPotenziamento(){
   lanciaStampa(html, "landscape", "Prospetto potenziamento");
 }
 
+/* ================= CONDIVISIONE (foglio Google) ================= */
+function syncCfg(){ S.sync = S.sync || {url:"",token:"",utente:"",soloLettura:false,ultimoPull:null,info:null}; return S.sync; }
+function saveSync(){ try{ localStorage.setItem("sostituto_sync", JSON.stringify(S.sync||{})); }catch(e){} }
+
+function statoDaCondividere(){
+  return { orario:S.orario||null, lingue:S.lingue||{}, flagOggi:S.flagOggi||[],
+    registro:S.registro||{}, uscite:S.uscite||[], assenzeNote:S.assenzeNote||[],
+    pnoOn:S.pnoOn||[], potAssign:S.potAssign||{} };
+}
+function applicaStato(d){
+  if(!d) return;
+  S.orario      = d.orario || null;
+  S.lingue      = d.lingue || {};
+  S.flagOggi    = d.flagOggi || [];
+  S.registro    = d.registro || {};
+  S.uscite      = d.uscite || [];
+  S.assenzeNote = d.assenzeNote || [];
+  S.pnoOn       = d.pnoOn || [];
+  S.potAssign   = d.potAssign || {};
+  S.prospetto=null; S.assentiOggi={}; S.noteApplicate=null; S.alunnoAssenteOggi=[];
+  if(S.orario) S.day = giornoDaData(S.dataOggi||isoOggi());
+  save(); saveRegistro();
+}
+
+function syncScarica(silenzioso){
+  const c = syncCfg();
+  if(!c.url){ if(!silenzioso) toast("Prima imposta il collegamento"); return; }
+  S.syncAttivo = true; if(!silenzioso) render();
+  fetch(c.url + "?token=" + encodeURIComponent(c.token))
+    .then(r=>r.json())
+    .then(j=>{
+      S.syncAttivo=false;
+      if(!j.ok){ toast("Errore: "+(j.errore||"?")); render(); return; }
+      if(!j.dati){ toast("Il foglio è ancora vuoto"); render(); return; }
+      applicaStato(j.dati);
+      c.info = j.info || null;
+      c.ultimoPull = (j.info && j.info.quando) || new Date().toISOString();
+      saveSync();
+      toast("Scaricato" + (j.info && j.info.utente ? " (da "+j.info.utente+")" : ""));
+      render();
+    })
+    .catch(()=>{ S.syncAttivo=false; toast("Collegamento non riuscito"); render(); });
+}
+
+function syncInvia(forza){
+  const c = syncCfg();
+  if(!c.url){ toast("Prima imposta il collegamento"); return; }
+  if(c.soloLettura){ toast("Sei in sola lettura"); return; }
+  if(!c.utente){ toast("Indica prima chi sei"); return; }
+  S.syncAttivo = true; render();
+  fetch(c.url, {
+    method:"POST",
+    headers:{"Content-Type":"text/plain;charset=utf-8"},   /* evita il preflight CORS */
+    body: JSON.stringify({ token:c.token, utente:c.utente, dati:statoDaCondividere(),
+                           basatoSu:c.ultimoPull, forza:!!forza })
+  })
+    .then(r=>r.json())
+    .then(j=>{
+      S.syncAttivo=false;
+      if(j.conflitto){
+        const q = j.info && j.info.quando ? " ("+new Date(j.info.quando).toLocaleString("it-IT")+")" : "";
+        if(confirm(j.errore + q + "\n\nVuoi sovrascrivere comunque le sue modifiche?")) syncInvia(true);
+        else { toast("Invio annullato — scarica prima le sue modifiche"); render(); }
+        return;
+      }
+      if(!j.ok){ toast("Errore: "+(j.errore||"?")); render(); return; }
+      c.info = j.info || null;
+      c.ultimoPull = (j.info && j.info.quando) || new Date().toISOString();
+      saveSync(); toast("Inviato al foglio");
+      render();
+    })
+    .catch(()=>{ S.syncAttivo=false; toast("Collegamento non riuscito"); render(); });
+}
+
+function renderSync(){
+  const c = syncCfg();
+  const quando = c.info && c.info.quando ? new Date(c.info.quando).toLocaleString("it-IT") : null;
+  let out = `<div class="backlink" onclick="S.tab='altro'; render()">‹ Altro</div>
+    <h2 class="sec">Condivisione</h2>
+    <p class="hint" style="margin-top:0">I dati vengono scambiati attraverso un foglio Google della scuola. Ognuno lavora sul proprio dispositivo e sincronizza quando ha finito.</p>`;
+
+  if(c.url && c.info){
+    out += `<div class="promemo">Ultimo aggiornamento del foglio:<br><b>${esc(c.info.utente||"—")}</b> · ${esc(quando||"—")}</div>`;
+  }
+
+  out += `<div style="display:flex; gap:8px; margin-bottom:14px">
+      <button class="btn ghost" style="flex:1" onclick="syncScarica()">${S.syncAttivo?"…":"⬇ Scarica"}</button>
+      ${c.soloLettura ? "" : `<button class="btn" style="flex:1" onclick="syncInvia()">${S.syncAttivo?"…":"⬆ Invia"}</button>`}
+    </div>`;
+  if(c.soloLettura) out += `<p class="hint" style="margin-top:-8px">Sei in <b>sola lettura</b>: puoi scaricare, non inviare.</p>`;
+
+  out += `<div class="field"><label>Chi sei</label>
+      <input type="text" value="${esc(c.utente||"")}" placeholder="es. Petralia" oninput="S.sync.utente=this.value; saveSync()"></div>
+    <div class="field"><label>Indirizzo del foglio (URL dell'applicazione web)</label>
+      <input type="text" value="${esc(c.url||"")}" placeholder="https://script.google.com/macros/s/..." oninput="S.sync.url=this.value.trim(); saveSync()"></div>
+    <div class="field"><label>Parola segreta</label>
+      <input type="text" value="${esc(c.token||"")}" placeholder="la stessa scritta nello script" oninput="S.sync.token=this.value.trim(); saveSync()"></div>
+    <div class="field"><label>Sul foglio condiviso</label>
+      <div class="pickgrid">
+        <div class="pick${!c.soloLettura?' on':''}" onclick="S.sync.soloLettura=false; saveSync(); render()">Posso inviare</div>
+        <div class="pick${c.soloLettura?' on':''}" onclick="S.sync.soloLettura=true; saveSync(); render()">Solo scaricare</div>
+      </div>
+    </div>
+    <div class="field"><label>Modalità di questo dispositivo</label>
+      <div class="pickgrid">
+        <div class="pick${S.ruolo!=="operativo"?' on':''}" onclick="S.ruolo='completo'; save(); render()">Completa</div>
+        <div class="pick${S.ruolo==="operativo"?' on':''}" onclick="S.ruolo='operativo'; save(); render()">Operativa</div>
+      </div>
+      <p class="hint" style="margin:6px 0 0">In modalità <b>operativa</b> restano solo: preparare le sostituzioni, segnare l'alunno assente, consultare orario e registro, stampare e condividere. Orario, assenze note, uscite e potenziamento non sono modificabili.</p>
+    </div>
+    <p class="hint">Lo <b>Scarica</b> sostituisce i dati di questo dispositivo con quelli del foglio. L'<b>Invia</b> fa il contrario. Se qualcuno ha scritto dopo il tuo ultimo scaricamento, l'app ti avvisa prima di sovrascrivere.</p>`;
+  el("main").innerHTML = out;
+}
+
 /* ---- ALTRO: menu delle funzioni occasionali ---- */
 function renderAltro(){
   const nAss = (S.assenzeNote||[]).length, nUsc = (S.uscite||[]).length, nPno = (S.pnoOn||[]).length;
@@ -1016,10 +1140,14 @@ function renderAltro(){
     { tab:"potenz",  ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.6"/><circle cx="12" cy="12" r=".6" fill="currentColor"/></svg>`, tit:"Potenziamento",      sub:nPno?`${nPno} ore marcate Pno`:"Marca le ore non disponibili senza toccare l'Excel" },
     { tab:"dove",    ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="M20.5 20.5l-4.7-4.7"/></svg>`, tit:"Dov'è",              sub:"Trova un docente o una classe in un momento preciso" },
     { tab:"importa", ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4"/><path d="M8 8l4-4 4 4"/><path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/></svg>`, tit:"Importa l'orario",   sub:"Carica il file Excel — poche volte l'anno" },
+    { tab:"sync",    ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5A6.5 6.5 0 0 1 15.5 5.6L18 8"/><path d="M18 4v4h-4"/><path d="M20 14.5A6.5 6.5 0 0 1 8.5 18.4L6 16"/><path d="M6 20v-4h4"/></svg>`, tit:"Condivisione",       sub:(S.sync&&S.sync.url)?((S.sync.soloLettura?"sola lettura":"attiva")+((S.sync.info&&S.sync.info.utente)?" · ultimo: "+S.sync.info.utente:"")):"Collega il foglio Google della scuola" },
     { tab:"backup",  ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10.5" width="16" height="9.5" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/><circle cx="12" cy="15" r="1.1"/></svg>`, tit:"Backup e ripristino", sub:"Salva tutto in un file — o rimetti a posto dopo un guaio" },
   ];
+  const permesse = OPERATIVO_TAB;
+  const lista = (S.ruolo==="operativo") ? voci.filter(v=>permesse.includes(v.tab)) : voci;
   let out = `<h2 class="sec">Altro</h2>`;
-  out += voci.map(v=>`<div class="menurow" onclick="S.tab='${v.tab}'; render()">
+  if(S.ruolo==="operativo") out += `<p class="hint" style="margin-top:0">Modalità <b>operativa</b>: prepari le sostituzioni, la configurazione la gestisce chi ha la modalità completa.</p>`;
+  out += lista.map(v=>`<div class="menurow" onclick="S.tab='${v.tab}'; render()">
       <span class="mic">${v.ic}</span>
       <span class="mtx"><b>${esc(v.tit)}</b><i>${esc(v.sub)}</i></span>
       <span class="mch">›</span>
@@ -1700,7 +1828,7 @@ function renderRegistro(){
       out += `<div style="padding:10px 12px; display:flex; gap:8px">
         <button class="btn ghost" style="flex:1; font-size:13px; padding:8px" onclick="condividiWhatsAppRegistro('${iso}')">📋 WhatsApp</button>
         <button class="btn ghost" style="flex:1; font-size:13px; padding:8px" onclick="stampaRegistro('${iso}')">🖨 PDF</button>
-        <button class="btn ghost" style="flex:1; font-size:13px; padding:8px; color:var(--red); border-color:var(--red)" onclick="eliminaGiorno('${iso}')">🗑 Elimina</button>
+        ${S.ruolo==="operativo" ? "" : `<button class="btn ghost" style="flex:1; font-size:13px; padding:8px; color:var(--red); border-color:var(--red)" onclick="eliminaGiorno('${iso}')">🗑 Elimina</button>`}
       </div>`;
       out += `</div>`;
     }
