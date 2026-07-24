@@ -119,7 +119,9 @@
   .flag{background:#F4DAD7; border:1px solid #E3B7B2; border-radius:9px; padding:10px 12px; margin-top:6px;
     font-size:13.5px; color:#8A2F2A}
   .empty{text-align:center; padding:38px 20px; color:var(--ink-soft)}
-  .empty .ic{font-family:'Zilla Slab',serif; font-size:40px; color:var(--red); font-weight:700}
+  .empty .ic{font-family:'Zilla Slab',serif; font-size:38px; font-weight:700; color:var(--ink); letter-spacing:-.01em}
+  .empty .ic .sos{color:var(--red)}
+  .ver{margin-left:8px; font-size:11.5px; color:var(--ink-soft); opacity:.75; letter-spacing:.3px}
   .hint{font-size:13px; color:var(--ink-soft); margin-top:10px; line-height:1.5}
 
   /* ---- barra ---- */
@@ -277,7 +279,7 @@
 <body>
 <header>
   <div class="wordmark"><span class="sos">SOS</span>tituto</div>
-  <div class="tagline">Orario e sostituzioni · <span id="hdrsub">Istituto Mestica</span></div>
+  <div class="tagline">Orario e sostituzioni · <span id="hdrsub">Mestica</span><span class="ver" id="ver"></span></div>
 </header>
 <main id="main"></main>
 <div id="printarea"></div>
@@ -1193,7 +1195,7 @@ function renderVuoto(){
     azioni += `<button class="btn ghost" style="margin-top:8px; width:100%" onclick="S.tab='sync'; render()">Collega il foglio condiviso</button>`;
   }
   el("main").innerHTML = `<div class="empty">
-    <div class="ic">SOS</div>
+    <div class="ic"><span class="sos">SOS</span>tituto</div>
     <h2 class="sec" style="justify-content:center; margin-top:14px">Nessun orario caricato</h2>
     <p class="hint">${operativo
       ? "Scarica i dati dal foglio condiviso della scuola."
@@ -1533,6 +1535,7 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
+const VERSIONE = "24.07.2026";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -2279,6 +2282,7 @@ document.querySelectorAll("nav button").forEach(b=> b.addEventListener("click", 
 load();
 S.dataOggi = S.dataOggi || isoOggi();
 if(S.orario){ S.day = giornoDaData(S.dataOggi); }
+{ const _v = el("ver"); if(_v) _v.textContent = "v " + VERSIONE; }
 render();
 </script>
 </body>
