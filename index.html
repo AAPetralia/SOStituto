@@ -215,6 +215,11 @@
     font-weight:700; font-size:14px; cursor:pointer; color:var(--ink-soft)}
   .oreb.on{background:var(--teal); border-color:var(--teal); color:#fff}
   .oreb.pno{background:#F0E7D2; border-color:var(--amber); color:var(--amber); text-decoration:line-through}
+  .oreb.assegnata{background:#DCEBE7; border-color:var(--teal); color:var(--teal)}
+  .oreb.sel{outline:2px solid var(--ink); outline-offset:1px}
+  .poted{margin-top:11px; padding:11px; background:var(--paper); border:1.5px dashed var(--rule); border-radius:10px}
+  .poted-lbl{font-size:12.5px; font-weight:700; color:var(--ink-soft); margin-bottom:8px}
+  .poted-sep{height:1px; background:var(--rule); margin:11px 0}
   .pickgrid{display:flex; gap:6px; flex-wrap:wrap}
   .pick{padding:8px 12px; border:1.5px solid var(--rule); border-radius:9px; background:var(--paper2);
     font-weight:700; font-size:14px; cursor:pointer}
@@ -255,6 +260,15 @@
     .pr-page:last-child{page-break-after:auto}
     tr, .pr-blocco{page-break-inside:avoid}
     thead{display:table-header-group}
+    .pr-pot{font-size:8pt; table-layout:fixed}
+    .pr-pot th, .pr-pot td{padding:3px 2px; text-align:center}
+    .pr-pot .pg-nome{width:20%; text-align:left; padding-left:5px; font-size:8.5pt}
+    .pr-pot .pg-day{background:#ddd; font-size:8pt}
+    .pr-pot .pg-h{background:#f0f0f0; font-size:7pt; font-weight:400}
+    .pr-pot .pg-off{background:#f7f7f7}
+    .pr-pot .pg-p{color:#777}
+    .pr-pot .pg-pno{color:#000; background:#eee; font-size:7pt}
+    .pr-pot .pg-cl{background:#e8e8e8}
   }
 </style>
 </head>
@@ -302,7 +316,7 @@ let S = { orario:null, tab:"oggi", day:"LUN",
           alunnoAssenteOggi:[], alunnoSel:"", alunnoPanel:false,
           uscite:[], uscitaForm:null,
           assenzeNote:[], assenzaForm:null, noteApplicate:null, daNote:[],
-          pnoOn:[] };   /* assentiOggi: {nome: null|[ore]} */
+          pnoOn:[], potAssign:{}, potSel:"" };   /* assentiOggi: {nome: null|[ore]} */
 
 /* ---------- persistenza ---------- */
 function save(){ try{
@@ -313,6 +327,7 @@ function save(){ try{
   localStorage.setItem("sostituto_uscite", JSON.stringify(S.uscite||[]));
   localStorage.setItem("sostituto_assenze", JSON.stringify(S.assenzeNote||[]));
   localStorage.setItem("sostituto_pno", JSON.stringify(S.pnoOn||[]));
+  localStorage.setItem("sostituto_potass", JSON.stringify(S.potAssign||{}));
 }catch(e){} }
 function load(){ try{
   const r=localStorage.getItem("sostituto_v1"); if(r) S.orario=JSON.parse(r);
@@ -323,6 +338,7 @@ function load(){ try{
   const us=localStorage.getItem("sostituto_uscite"); if(us) S.uscite=JSON.parse(us);
   const an=localStorage.getItem("sostituto_assenze"); if(an) S.assenzeNote=JSON.parse(an);
   const pn=localStorage.getItem("sostituto_pno"); if(pn) S.pnoOn=JSON.parse(pn);
+  const pa=localStorage.getItem("sostituto_potass"); if(pa) S.potAssign=JSON.parse(pa);
 }catch(e){} }
 
 /* ---------- classificazione cella (vocabolario chiuso) ---------- */
@@ -945,6 +961,50 @@ function stampaRegistro(soloGiorno){
   lanciaStampa(html, "portrait", nomeFile);
 }
 
+/* ---- PROSPETTO POTENZIAMENTO: griglia settimanale da affiggere ---- */
+function stampaPotenziamento(){
+  const o = S.orario;
+  const elenco = orePotenziamento(o);
+  if(!elenco.length){ toast("Nessun docente con ore di potenziamento"); return; }
+  const gg = o.giorni, oo = o.ore;
+
+  const intest1 = gg.map(g=>`<th colspan="${oo.length}" class="pg-day">${esc(g)}</th>`).join("");
+  const intest2 = gg.map(()=> oo.map(h=>`<th class="pg-h">${h}</th>`).join("")).join("");
+
+  const righe = elenco.map(({doc,slot})=>{
+    const set = new Set(slot.map(s=>s.g+"|"+s.h));
+    const celle = gg.map(g=> oo.map(h=>{
+      if(!set.has(g+"|"+h)) return `<td class="pg-off"></td>`;
+      const key = doc.nome+"|"+g+"|"+h;
+      if((S.pnoOn||[]).includes(key)) return `<td class="pg-pno">Pno</td>`;
+      const cls = (S.potAssign||{})[key];
+      return cls ? `<td class="pg-cl"><b>${esc(cls)}</b></td>` : `<td class="pg-p">P</td>`;
+    }).join("")).join("");
+    return `<tr><td class="pg-nome">${esc(doc.nome)}</td>${celle}</tr>`;
+  }).join("");
+
+  const html = `
+    <div class="pr-head">
+      <div class="pr-ist">${esc(ISTITUTO)}</div>
+      <div class="pr-tit">Prospetto del potenziamento</div>
+      <div class="pr-sub">Ore a disposizione e classi assegnate — anno scolastico in corso</div>
+    </div>
+    <table class="pr-tab pr-pot">
+      <thead>
+        <tr><th rowspan="2" class="pg-nome">Docente</th>${intest1}</tr>
+        <tr>${intest2}</tr>
+      </thead>
+      <tbody>${righe}</tbody>
+    </table>
+    <div class="pr-note">
+      <b>P</b> = ora di potenziamento a disposizione &nbsp;·&nbsp;
+      <b>Pno</b> = docente impegnato in altra attività, non disponibile &nbsp;·&nbsp;
+      <b>classe</b> = potenziamento assegnato a quella classe
+    </div>
+    <div class="pr-firma-box">Il responsabile di plesso<br><br>______________________________</div>`;
+  lanciaStampa(html, "landscape", "Prospetto potenziamento");
+}
+
 /* ---- ALTRO: menu delle funzioni occasionali ---- */
 function renderAltro(){
   const nAss = (S.assenzeNote||[]).length, nUsc = (S.uscite||[]).length, nPno = (S.pnoOn||[]).length;
@@ -1220,14 +1280,16 @@ function orePotenziamento(o){
 function renderPotenziamento(){
   const o=S.orario;
   const elenco = orePotenziamento(o);
+  const classi = tutteLeClassi(o);
   const nOff = (S.pnoOn||[]).length;
-  let out = `<div class="backlink" onclick="S.tab='altro'; render()">‹ Altro</div>
+  const nAss = Object.keys(S.potAssign||{}).length;
+  let out = `<div class="backlink" onclick="S.tab='altro'; render()">\u2039 Altro</div>
     <h2 class="sec">Potenziamento</h2>
-    <p class="hint" style="margin-top:0">Tocca un'ora per marcarla <b>Pno</b> quando il docente è impegnato altrove (progetti, attività fuori sede). Non verrà più proposta per le sostituzioni. Ritoccala per riattivarla.</p>`;
+    <p class="hint" style="margin-top:0">Tocca un'ora per assegnarla a una classe o per marcarla <b>Pno</b> (docente impegnato altrove). L'assegnazione a una classe serve solo al prospetto da affiggere: non cambia le sostituzioni.</p>`;
 
   if(nOff){
     out += `<div class="promemo" style="background:#F7EEDD; border-left-color:var(--amber)">
-      ⚠️ <b>${nOff} or${nOff===1?'a':'e'} marcate Pno</b> — non disponibili finché non le riattivi.
+      <b>${nOff} or${nOff===1?'a':'e'} marcate Pno</b> \u2014 non disponibili per le sostituzioni finch\u00e9 non le riattivi.
       <div style="margin-top:8px"><button class="btn ghost" style="padding:6px 12px; font-size:13px" onclick="azzeraPno()">Riattiva tutte</button></div>
     </div>`;
   }
@@ -1237,21 +1299,58 @@ function renderPotenziamento(){
     el("main").innerHTML = out; return;
   }
 
+  out += `<button class="btn" style="width:100%; margin-bottom:14px; padding:10px; font-size:14px" onclick="stampaPotenziamento()">Prospetto del potenziamento in PDF</button>`;
+
   out += elenco.map(({doc,slot})=>{
     const btns = slot.map(s=>{
       const key = doc.nome+"|"+s.g+"|"+s.h;
       const off = (S.pnoOn||[]).includes(key);
-      return `<div class="oreb ${off?'pno':''}" onclick="togglePno('${esc(key)}')">${s.g} ${s.h}ª${off?' · Pno':''}</div>`;
+      const cls = (S.potAssign||{})[key];
+      const sel = S.potSel===key;
+      let et = s.g+" "+s.h+"\u00aa";
+      if(off) et += " \u00b7 Pno"; else if(cls) et += " \u00b7 "+cls;
+      return `<div class="oreb${off?' pno':''}${(cls&&!off)?' assegnata':''}${sel?' sel':''}"
+        onclick="S.potSel='${sel?'':esc(key)}'; render()">${esc(et)}</div>`;
     }).join("");
+
+    // pannello di modifica per l'ora selezionata di questo docente
+    let editor = "";
+    const sel = slot.find(s => S.potSel === doc.nome+"|"+s.g+"|"+s.h);
+    if(sel){
+      const key = doc.nome+"|"+sel.g+"|"+sel.h;
+      const off = (S.pnoOn||[]).includes(key);
+      const cls = (S.potAssign||{})[key] || "";
+      editor = `<div class="poted">
+        <div class="poted-lbl">${sel.g} ${sel.h}\u00aa \u2014 assegna a una classe</div>
+        <div class="pickgrid">
+          <div class="pick${!cls?' on':''}" onclick="assegnaPot('${esc(key)}','')">nessuna</div>
+          ${classi.map(c=>`<div class="pick${cls===c?' on':''}" onclick="assegnaPot('${esc(key)}','${esc(c)}')">${esc(c)}</div>`).join("")}
+        </div>
+        <div class="poted-sep"></div>
+        <div class="oreb${off?' pno':''}" style="display:inline-block" onclick="togglePno('${esc(key)}')">
+          ${off ? "\u2713 non disponibile (Pno)" : "segna non disponibile (Pno)"}</div>
+      </div>`;
+    }
+
     const nOffDoc = slot.filter(s=>(S.pnoOn||[]).includes(doc.nome+"|"+s.g+"|"+s.h)).length;
+    const nAssDoc = slot.filter(s=>(S.potAssign||{})[doc.nome+"|"+s.g+"|"+s.h]).length;
+    const dett = [slot.length+" ore di potenziamento"];
+    if(nAssDoc) dett.push(nAssDoc+" assegnate");
+    if(nOffDoc) dett.push(nOffDoc+" non disponibili");
     return `<div class="regcard"><div class="reghead" style="cursor:default; display:block">
         <b>${esc(doc.nome)}</b>
-        <div class="regsub">${slot.length} ore di potenziamento${nOffDoc?` · ${nOffDoc} non disponibili`:''}</div>
+        <div class="regsub">${dett.join(" \u00b7 ")}</div>
         <div class="orebtns" style="margin-top:9px">${btns}</div>
+        ${editor}
       </div></div>`;
   }).join("");
 
   el("main").innerHTML = out;
+}
+function assegnaPot(key, classe){
+  S.potAssign = S.potAssign || {};
+  if(!classe) delete S.potAssign[key]; else S.potAssign[key] = classe;
+  save(); render();
 }
 function togglePno(key){
   S.pnoOn = S.pnoOn || [];
@@ -1276,7 +1375,8 @@ function datiBackup(){
     registro: S.registro || {},
     uscite: S.uscite || [],
     assenzeNote: S.assenzeNote || [],
-    pnoOn: S.pnoOn || []
+    pnoOn: S.pnoOn || [],
+    potAssign: S.potAssign || {}
   };
 }
 function riepilogoBackup(d){
@@ -1328,6 +1428,7 @@ function onFileBackup(ev){
     S.uscite      = d.uscite || [];
     S.assenzeNote = d.assenzeNote || [];
     S.pnoOn       = d.pnoOn || [];
+    S.potAssign   = d.potAssign || {};
     S.prospetto=null; S.assentiOggi={}; S.noteApplicate=null; S.alunnoAssenteOggi=[];
     if(S.orario) S.day = giornoDaData(S.dataOggi||isoOggi());
     save(); saveRegistro();
