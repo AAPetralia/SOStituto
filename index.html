@@ -245,10 +245,12 @@
     .pr-ist{font-size:10pt; letter-spacing:.4px; text-transform:uppercase}
     .pr-tit{font-size:16pt; font-weight:700; margin-top:3px}
     .pr-sub{font-size:11pt; margin-top:2px}
-    .pr-tab{width:100%; border-collapse:collapse; font-size:9.5pt; margin-bottom:14px}
-    .pr-tab th{background:#eee; border:1px solid #000; padding:5px 6px; text-align:left; font-size:8.5pt;
+    .pr-tab{width:100%; border-collapse:collapse; font-size:8.8pt; margin-bottom:14px; table-layout:fixed}
+    .pr-tab td.nw{white-space:nowrap}
+    .pr-tab td.nome{word-break:normal; overflow-wrap:break-word}
+    .pr-tab th{background:#eee; border:1px solid #000; padding:4px 5px; text-align:left; font-size:7.8pt;
       text-transform:uppercase; letter-spacing:.3px}
-    .pr-tab td{border:1px solid #666; padding:5px 6px; vertical-align:top}
+    .pr-tab td{border:1px solid #666; padding:4px 5px; vertical-align:top; line-height:1.25}
     .pr-tab td.c{text-align:center; white-space:nowrap}
     .pr-firma{width:24%}
     .pr-giorno{font-size:12pt; font-weight:700; margin:14px 0 5px; border-bottom:1px solid #000; padding-bottom:2px}
@@ -846,7 +848,7 @@ function oneriEsteso(r){
   if(r.motivo==="recupero") return "Recupero";
   return "";
 }
-function classePr(r){ return (r.gruppo && r.lingua) ? r.gruppo.replace("·","-") : fmtCl(r.classe); }
+function classePr(r){ return (r.gruppo && r.lingua) ? r.gruppo.replace("·","-") : r.classe; }
 
 /* ---- PROSPETTO del giorno: A4 orizzontale, con colonna firma (circ. prot. 0011096) ---- */
 function stampaProspetto(){
@@ -859,13 +861,13 @@ function stampaProspetto(){
   let corpo = righe.map(e=>{
     const scoperta = !e.scelto;
     return `<tr>
-      <td class="c">${e.h}ª</td>
-      <td>${esc(e.a.nome)}</td>
-      <td class="c">${esc(classePr(e))}</td>
-      <td><b>${scoperta ? "— DA COPRIRE —" : esc(e.scelto)}</b></td>
+      <td class="c nw">${e.h}ª</td>
+      <td class="nome">${esc(e.a.nome)}</td>
+      <td class="c nw">${esc(classePr(e))}</td>
+      <td class="nome"><b>${scoperta ? "— DA COPRIRE —" : esc(e.scelto)}</b></td>
       <td>${esc(tipoEsteso(e))}${e.rice?" · in ora di ricevimento":""}</td>
       <td class="c">${esc(oneriEsteso(e))}</td>
-      <td class="pr-firma"></td>
+      <td></td>
     </tr>`;
   }).join("");
   if(!righe.length) corpo = `<tr><td colspan="7" class="c">Nessuna sostituzione da effettuare.</td></tr>`;
@@ -884,10 +886,10 @@ function stampaProspetto(){
     </div>
     <table class="pr-tab">
       <thead><tr>
-        <th style="width:5%">Ora</th><th style="width:19%">Docente assente</th>
-        <th style="width:8%">Classe</th><th style="width:19%">Docente sostituto</th>
-        <th style="width:19%">Tipo di intervento</th><th style="width:9%">Oneri</th>
-        <th class="pr-firma">Firma del sostituto</th>
+        <th style="width:5%">Ora</th><th style="width:19%">Assente</th>
+        <th style="width:8%">Classe</th><th style="width:19%">Sostituto</th>
+        <th style="width:20%">Tipo</th><th style="width:9%">Oneri</th>
+        <th style="width:20%">Firma</th>
       </tr></thead>
       <tbody>${corpo}</tbody>
     </table>
@@ -897,7 +899,7 @@ function stampaProspetto(){
       <div>Da allegare al registro delle presenze.</div>
     </div>
     <div class="pr-firma-box">Il responsabile di plesso<br><br>______________________________</div>`;
-  lanciaStampa(html, "landscape", "Prospetto sostituzioni "+dataFile(iso));
+  lanciaStampa(html, "portrait", "Prospetto sostituzioni "+dataFile(iso));
 }
 
 /* ---- REGISTRO: A4 verticale, per periodo, con riepilogo per docente ---- */
@@ -926,9 +928,9 @@ function stampaRegistro(soloGiorno){
     blocchi += `<div class="pr-blocco">
       <div class="pr-giorno">${esc(dataLeggibile(iso))}</div>
       <table class="pr-tab">
-        <thead><tr><th style="width:6%">Ora</th><th style="width:23%">Docente assente</th>
-          <th style="width:9%">Classe</th><th style="width:23%">Docente sostituto</th>
-          <th style="width:26%">Tipo di intervento</th><th style="width:13%">Oneri</th></tr></thead>
+        <thead><tr><th style="width:6%">Ora</th><th style="width:23%">Assente</th>
+          <th style="width:9%">Classe</th><th style="width:23%">Sostituto</th>
+          <th style="width:26%">Tipo</th><th style="width:13%">Oneri</th></tr></thead>
         <tbody>${corpo}</tbody>
       </table></div>`;
   }
