@@ -811,14 +811,16 @@ const el = id => document.getElementById(id);
 
 const SOTTO_ALTRO = ["dove","importa","uscita","assenze","backup","potenz","sync"];
 /* in modalità operativa restano solo queste voci del menu Altro */
-const OPERATIVO_TAB = ["dove","sync"];   /* pagine raggiunte dal menu Altro */
+const OPERATIVO_TAB = ["dove","sync"];
+/* schede utilizzabili anche prima di avere un orario: sono le vie da cui l'orario arriva */
+const SENZA_ORARIO = ["importa","altro","sync","backup"];   /* pagine raggiunte dal menu Altro */
 
 function render(){
   // in modalità operativa le schede di configurazione non sono raggiungibili
   if(S.ruolo==="operativo" && SOTTO_ALTRO.includes(S.tab) && !OPERATIVO_TAB.includes(S.tab)) S.tab="altro";
   const attivo = SOTTO_ALTRO.includes(S.tab) ? "altro" : S.tab;
   document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on", b.dataset.tab===attivo));
-  if(!S.orario && S.tab!=="importa"){ renderVuoto(); return; }
+  if(!S.orario && !SENZA_ORARIO.includes(S.tab)){ renderVuoto(); return; }
   ({oggi:renderOggi, registro:renderRegistro, orario:renderOrario, altro:renderAltro,
     dove:renderDove, importa:renderImporta, uscita:renderUscita, assenze:renderAssenze, backup:renderBackup, potenz:renderPotenziamento, sync:renderSync})[S.tab]();
 }
@@ -1044,7 +1046,7 @@ function applicaStato(d){
 function syncScarica(silenzioso){
   const c = syncCfg();
   if(!c.url){ if(!silenzioso) toast("Prima imposta il collegamento"); return; }
-  S.syncAttivo = true; if(!silenzioso) render();
+  S.syncErr=""; S.syncAttivo = true; if(!silenzioso) render();
   fetch(c.url + "?token=" + encodeURIComponent(c.token))
     .then(r=>r.json())
     .then(j=>{
@@ -1058,7 +1060,17 @@ function syncScarica(silenzioso){
       toast("Scaricato" + (j.info && j.info.utente ? " (da "+j.info.utente+")" : ""));
       render();
     })
-    .catch(()=>{ S.syncAttivo=false; toast("Collegamento non riuscito"); render(); });
+    .catch(err=>{ S.syncAttivo=false; S.syncErr=descriviErrore(err); render(); });
+}
+
+/* spiega in italiano cosa è andato storto */
+function descriviErrore(err){
+  const m = (err && err.message) ? err.message : "";
+  if(/Failed to fetch|NetworkError|load failed/i.test(m))
+    return "Non riesco a raggiungere lo script. Di solito significa che in \u201cChi ha accesso\u201d non \u00e8 impostato \u201cChiunque\u201d, oppure che l\u2019indirizzo non finisce con /exec.";
+  if(/JSON|Unexpected token/i.test(m))
+    return "Lo script ha risposto con qualcosa che non capisco: probabilmente una pagina di accesso di Google invece dei dati. Controlla \u201cChi ha accesso\u201d.";
+  return "Collegamento non riuscito" + (m ? " ("+m+")" : "");
 }
 
 function syncInvia(forza){
@@ -1066,7 +1078,7 @@ function syncInvia(forza){
   if(!c.url){ toast("Prima imposta il collegamento"); return; }
   if(c.soloLettura){ toast("Sei in sola lettura"); return; }
   if(!c.utente){ toast("Indica prima chi sei"); return; }
-  S.syncAttivo = true; render();
+  S.syncErr=""; S.syncAttivo = true; render();
   fetch(c.url, {
     method:"POST",
     headers:{"Content-Type":"text/plain;charset=utf-8"},   /* evita il preflight CORS */
@@ -1088,9 +1100,14 @@ function syncInvia(forza){
       saveSync(); toast("Inviato al foglio");
       render();
     })
-    .catch(()=>{ S.syncAttivo=false; toast("Collegamento non riuscito"); render(); });
+    .catch(err=>{ S.syncAttivo=false; S.syncErr=descriviErrore(err); render(); });
 }
 
+function provaCollegamento(){
+  const c = syncCfg();
+  if(!c.url){ toast("Manca l'indirizzo"); return; }
+  window.open(c.url + "?token=" + encodeURIComponent(c.token), "_blank");
+}
 function renderSync(){
   const c = syncCfg();
   const quando = c.info && c.info.quando ? new Date(c.info.quando).toLocaleString("it-IT") : null;
@@ -1098,6 +1115,13 @@ function renderSync(){
     <h2 class="sec">Condivisione</h2>
     <p class="hint" style="margin-top:0">I dati vengono scambiati attraverso un foglio Google della scuola. Ognuno lavora sul proprio dispositivo e sincronizza quando ha finito.</p>`;
 
+  if(S.syncErr){
+    out += `<div class="promemo" style="background:#F4DAD7; border-left-color:var(--red)">${esc(S.syncErr)}</div>`;
+  }
+  if(c.url){
+    out += `<button class="btn ghost" style="width:100%; margin-bottom:12px; font-size:13.5px; padding:9px"
+      onclick="provaCollegamento()">Prova il collegamento nel browser</button>`;
+  }
   if(c.url && c.info){
     out += `<div class="promemo">Ultimo aggiornamento del foglio:<br><b>${esc(c.info.utente||"—")}</b> · ${esc(quando||"—")}</div>`;
   }
@@ -1156,11 +1180,25 @@ function renderAltro(){
 }
 
 function renderVuoto(){
+  const operativo = S.ruolo==="operativo";
+  const haSync = !!(S.sync && S.sync.url);
+  let azioni = "";
+  if(haSync){
+    azioni += `<button class="btn" style="margin-top:14px; width:100%" onclick="S.tab='sync'; render(); syncScarica()">Scarica dal foglio condiviso</button>`;
+  }
+  if(!operativo){
+    azioni += `<button class="btn ${haSync?'ghost':''}" style="margin-top:${haSync?'8':'14'}px; width:100%" onclick="S.tab='importa'; render()">Importa l'orario da Excel</button>`;
+  }
+  if(!haSync){
+    azioni += `<button class="btn ghost" style="margin-top:8px; width:100%" onclick="S.tab='sync'; render()">Collega il foglio condiviso</button>`;
+  }
   el("main").innerHTML = `<div class="empty">
     <div class="ic">SOS</div>
     <h2 class="sec" style="justify-content:center; margin-top:14px">Nessun orario caricato</h2>
-    <p class="hint">Per cominciare, importa il file Excel dell'orario.<br>Lo farai poche volte l'anno, quando l'orario cambia.</p>
-    <button class="btn" style="margin-top:14px" onclick="S.tab='importa'; render()">Importa l'orario</button>
+    <p class="hint">${operativo
+      ? "Scarica i dati dal foglio condiviso della scuola."
+      : "Puoi partire importando il file Excel dell'orario, oppure scaricando tutto dal foglio condiviso."}</p>
+    ${azioni}
   </div>`;
 }
 
