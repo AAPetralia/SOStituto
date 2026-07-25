@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>SOStituto</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Crect%20width%3D%22100%22%20height%3D%22100%22%20rx%3D%2222%22%20fill%3D%22%23F3F0E7%22%20stroke%3D%22%23DDD8C9%22%20stroke-width%3D%222%22/%3E%3Ctext%20x%3D%2250%22%20y%3D%2253%22%20font-family%3D%22Georgia%2Cserif%22%20font-weight%3D%22700%22%20font-size%3D%2237%22%20fill%3D%22%23C0403A%22%20text-anchor%3D%22middle%22%20dominant-baseline%3D%22middle%22%20letter-spacing%3D%22-1%22%3ESOS%3C/text%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="" id="appicon">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="SOStituto">
+<meta name="theme-color" content="#F3F0E7">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -2289,6 +2295,25 @@ load();
 S.dataOggi = S.dataOggi || isoOggi();
 if(S.orario){ S.day = giornoDaData(S.dataOggi); }
 { const _v = el("ver"); if(_v) _v.textContent = "v " + VERSIONE; }
+/* icona per la schermata iniziale di iPhone: la genero da canvas (PNG),
+   così resta tutto dentro il file senza immagini esterne */
+(function(){
+  try{
+    const S_=180, c=document.createElement("canvas"); c.width=c.height=S_;
+    const g=c.getContext("2d");
+    const r=40; g.fillStyle="#F3F0E7";
+    g.beginPath();
+    g.moveTo(r,0); g.arcTo(S_,0,S_,S_,r); g.arcTo(S_,S_,0,S_,r);
+    g.arcTo(0,S_,0,0,r); g.arcTo(0,0,S_,0,r); g.closePath(); g.fill();
+    g.lineWidth=4; g.strokeStyle="#DDD8C9"; g.stroke();
+    g.fillStyle="#C0403A";
+    g.font="700 66px Georgia, 'Times New Roman', serif";
+    g.textAlign="center"; g.textBaseline="middle";
+    g.fillText("SOS", S_/2, S_/2+4);
+    const png=c.toDataURL("image/png");
+    const link=document.getElementById("appicon"); if(link) link.href=png;
+  }catch(e){}
+})();
 render();
 </script>
 </body>
