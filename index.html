@@ -741,7 +741,7 @@ function oreSettimanali(nome){
   const d = (o.docenti||[]).find(x => x.nome === nome);
   if(!d) return 0;
   let n = 0;
-  for(const k in d.cells){ const st = d.cells[k]; if(st && (st.t==="CLASSE"||st.t==="LINGUA")) n++; }
+  for(const k in d.cells){ const st = d.cells[k]; if(st && (st.t==="CLASSE"||st.t==="LINGUA"||st.t==="ARTIC"||st.t==="AR")) n++; }
   return n;
 }
 /* anno scolastico di una data ISO: dal 1° settembre al 31 agosto */
