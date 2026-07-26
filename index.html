@@ -291,6 +291,26 @@
     .pr-pot .pg-pno{color:#000; background:#eee; font-size:7pt}
     .pr-pot .pg-cl{background:#e8e8e8}
   }
+  /* ---- configurazione criteri ---- */
+  .criteria-list{background:var(--paper2); border:1.5px solid var(--rule); border-radius:12px; overflow:hidden}
+  .criterion-row{display:flex; align-items:center; gap:12px; padding:12px 14px;
+    border-top:1px solid var(--rule-soft); transition:background .15s}
+  .criterion-row:first-child{border-top:none}
+  .criterion-row.disabled{background:#F9F7F2; opacity:.65}
+  .criterion-row:hover{background:#FEFDF9}
+  .criterion-checkbox{flex-shrink:0; width:20px; height:20px; cursor:pointer; accent-color:var(--teal)}
+  .criterion-label{flex:1; min-width:0}
+  .criterion-code{font-family:'Zilla Slab',serif; font-weight:700; font-size:14px; color:var(--ink)}
+  .criterion-desc{font-size:13px; color:var(--ink-soft); margin-top:2px; line-height:1.4}
+  .criterion-priority{flex-shrink:0; width:50px}
+  .priority-input{width:100%; padding:7px 8px; border:1.5px solid var(--rule); border-radius:8px;
+    background:var(--paper); font-family:'Zilla Slab',serif; font-weight:700; font-size:16px;
+    text-align:center; color:var(--ink)}
+  .priority-input:focus{outline:none; border-color:var(--teal); background:#fff}
+  .priority-input:disabled{background:var(--paper2); border-color:var(--rule-soft); color:var(--ink-soft)}
+  .feedback{margin-top:14px; padding:12px 14px; border-radius:10px; font-size:14px; text-align:center; display:none}
+  .feedback.show{display:block}
+  .feedback.success{background:#DCF7E8; border:1px solid #A8E6CE; color:#1B6E4A}
 </style>
 </head>
 <body>
@@ -328,6 +348,17 @@ const GIORNI_ORD = ["LUN","MAR","MER","GIO","VEN","SAB","DOM"];
 const NOMEGIORNO = {LUN:"lunedì",MAR:"martedì",MER:"mercoledì",GIO:"giovedì",VEN:"venerdì",SAB:"sabato",DOM:"domenica"};
 const DAYSET = new Set(GIORNI_ORD);
 
+const CRITERIA_DEFAULT = [
+  { code: 'a', label: 'Privi di alunni', desc: 'Insegnanti la cui classe è in uscita/gita', priority: 1 },
+  { code: 'b', label: 'Recupero permessi brevi', desc: 'Ore a recupero entro 2 mesi', priority: 2 },
+  { code: 'c', label: 'Sostegno contitolare', desc: 'Se assente il curricolare, salvo alunni gravi', priority: 3 },
+  { code: 'd', label: 'Flessibilità oraria', desc: 'Ore da recuperare secondo turnazione', priority: 4 },
+  { code: 'e', label: 'Potenziamento', desc: 'Ore a disposizione', priority: 5 },
+  { code: 'f', label: 'Sostegno in assenza alunno', desc: 'Se il proprio alunno è assente', priority: 6 },
+  { code: 'g', label: 'Ora libera/eccedente', desc: 'Pagamento per ore eccedenti', priority: 7 },
+  { code: 'h', label: 'Sostegno di altra classe', desc: 'Via residuale per sicurezza', priority: 8 },
+];
+
 let S = { orario:null, tab:"oggi", day:"LUN",
           doveMode:"docente", selDoc:"", selClasse:"", selHour:1,
           lingue:{ FR:"Basso", SP:"Martinelli" },
@@ -340,6 +371,7 @@ let S = { orario:null, tab:"oggi", day:"LUN",
           pnoOn:[], potAssign:{}, potSel:"",
           sync:{url:"",token:"",utente:"",soloLettura:false,ultimoPull:null,info:null}, syncAttivo:false,
           recuperi:[], recuperoForm:null,   /* debiti da permesso breve: {id, docente, ore, data, scadenza, restituite:0, chiuseManuale:0, origine} */
+          configCriteri:null,   /* configurazione priorità e abilitamento criteri (legge da default se null) */
           ruolo:"completo" };   /* completo | operativo */   /* assentiOggi: {nome: null|[ore]} */
 
 /* ---------- persistenza ---------- */
@@ -354,6 +386,7 @@ function save(){ try{
   localStorage.setItem("sostituto_potass", JSON.stringify(S.potAssign||{}));
   localStorage.setItem("sostituto_sync", JSON.stringify(S.sync||{}));
   localStorage.setItem("sostituto_recuperi", JSON.stringify(S.recuperi||[]));
+  localStorage.setItem("sostituto_config", JSON.stringify(S.configCriteri||[]));
   localStorage.setItem("sostituto_ruolo", S.ruolo||"completo");
 }catch(e){} }
 function load(){ try{
@@ -368,6 +401,7 @@ function load(){ try{
   const pa=localStorage.getItem("sostituto_potass"); if(pa) S.potAssign=JSON.parse(pa);
   const sy=localStorage.getItem("sostituto_sync"); if(sy) S.sync=Object.assign(S.sync||{},JSON.parse(sy));
   const rc=localStorage.getItem("sostituto_recuperi"); if(rc) S.recuperi=JSON.parse(rc);
+  const cf=localStorage.getItem("sostituto_config"); if(cf) S.configCriteri=JSON.parse(cf);
   const ru=localStorage.getItem("sostituto_ruolo"); if(ru) S.ruolo=ru;
 }catch(e){} }
 
@@ -538,9 +572,23 @@ function contaMaterie(o){ const m={}; o.docenti.forEach(d=>m[d.materia]=(m[d.mat
 
 /* candidati per coprire (classe,g,h). ctx = stato dinamico della giornata.
    lingua = "FR"/"SP" se si copre un gruppo linguistico, altrimenti null */
+/* Mappa criterio → posizione nella gerarchia, leggendo la configurazione.
+   Restituisce null per i criteri disattivati: quel ramo viene saltato del tutto. */
+function priorityMap(){
+  const m = {};
+  getConfigCriteri().forEach(c=>{ m[c.code] = c.enabled ? c.priority : null; });
+  return m;
+}
+/* rango finale = priorità del criterio + sottordine interno (per i casi con più gradi) */
+function rango(pri, sub){ return pri + (sub||0)*0.01; }
+
 function candidati(o, classe, g, h, assenteObj, ctx, lingua){
   const materia = assenteObj.materia;
   const affApplicabile = ctx.perMateria[materia] > 1;
+  const PR = (ctx && ctx.pri) ? ctx.pri : priorityMap();
+  /* PVP/PCV: non è un criterio della circolare. Resta agganciato subito sopra il
+     pagamento (g), come nell'ordine originale. Se g è disattivato va in coda. */
+  const PR_EMERG = (PR.g!=null ? PR.g : 9) - 0.5;
   const pool=[];
   for(const d of o.docenti){
     if(ctx.assenti.has(d.nome)) continue;
@@ -550,53 +598,52 @@ function candidati(o, classe, g, h, assenteObj, ctx, lingua){
     const cdc = classiDi(d).has(classe) ? 0 : 1;
     const tie = [aff, cdc, ctx.fatte[d.nome]||0, d.nome];
     const flagged = ctx.flag.has(d.nome+"|"+classe);
-    // a) PRIVO DI ALUNNI perché la sua classe è in uscita didattica (e lui non accompagna):
-    //    criterio a) della circolare, priorità massima.
-    if(ctx.classeInGita){
+    // a) PRIVO DI ALUNNI perché la sua classe è in uscita didattica (e lui non accompagna)
+    if(PR.a!=null && ctx.classeInGita){
       const cc = (st.t==="ARTIC") ? [st.a,st.b] : [st.det || st.classe];
       const suaInGita = cc.filter(Boolean).length>0 && cc.filter(Boolean).every(c=>ctx.classeInGita(c,h));
       if(suaInGita && !ctx.accompagna(d.nome,h)){
-        pool.push([-1,...tie,"classe in gita",d.nome]); continue;
+        pool.push([rango(PR.a),...tie,"classe in gita",d.nome]); continue;
       }
     }
-    // f) sostegno PRIVO DEL PROPRIO ALUNNO (assente oggi): risorsa libera, criterio f) della circolare.
-    //    Sta SOTTO potenziamento (e) e tutto ciò che precede, SOPRA pagamento (g) e sostegno di altra classe (h).
+    // f) sostegno PRIVO DEL PROPRIO ALUNNO (assente oggi): risorsa libera.
     //    Vale nelle sue ore di sostegno (l'alunno non c'è, non lo sta seguendo).
     //    Supera l'intoccabilità: senza alunno, non c'è caso grave da presidiare.
-    if(isSost(d) && ctx.alunnoAssente.has(d.nome) && (st.t==="CLASSE"||st.t==="LINGUA")){
-      pool.push([3,...tie,"alunno assente",d.nome]); continue;
+    if(PR.f!=null && isSost(d) && ctx.alunnoAssente.has(d.nome) && (st.t==="CLASSE"||st.t==="LINGUA")){
+      pool.push([rango(PR.f),...tie,"alunno assente",d.nome]); continue;
     }
-    // 0) recupero piazzabile
-    if((ctx.recuperi[d.nome]||0)>0 && (st.t==="DISP"||st.t==="BUCA"||st.t==="EMERG")){
-      pool.push([0,...tie,"recupero",d.nome]); continue;
+    // b) recupero piazzabile (permesso breve da restituire)
+    if(PR.b!=null && (ctx.recuperi[d.nome]||0)>0 && (st.t==="DISP"||st.t==="BUCA"||st.t==="EMERG")){
+      pool.push([rango(PR.b),...tie,"recupero",d.nome]); continue;
     }
-    // 1) sostegno DELLA classe che copre il proprio curricolare (o gruppo lingua compatibile)
-    if(isSost(d) && !flagged){
-      if(st.t==="CLASSE" && st.det===classe && !lingua){ pool.push([1,...tie,"sostegno della classe",d.nome]); continue; }
-      if(st.t==="LINGUA" && st.classe===classe && lingua && st.lingua===lingua){ pool.push([1,...tie,"sostegno della classe ("+lingua+")",d.nome]); continue; }
+    // c) sostegno DELLA classe che copre il proprio curricolare (o gruppo lingua compatibile)
+    if(PR.c!=null && isSost(d) && !flagged){
+      if(st.t==="CLASSE" && st.det===classe && !lingua){ pool.push([rango(PR.c),...tie,"sostegno della classe",d.nome]); continue; }
+      if(st.t==="LINGUA" && st.classe===classe && lingua && st.lingua===lingua){ pool.push([rango(PR.c),...tie,"sostegno della classe ("+lingua+")",d.nome]); continue; }
     }
-    // 2) potenziamento / disposizione
-    if(st.t==="DISP"){ pool.push([2,...tie,"potenziamento",d.nome]); continue; }
-    // sostegno spostato da altra classe
+    // e) potenziamento / disposizione
+    if(PR.e!=null && st.t==="DISP"){ pool.push([rango(PR.e),...tie,"potenziamento",d.nome]); continue; }
+    // h) sostegno spostato da altra classe (tre gradi di gravità nel sottordine)
     if(isSost(d)){
       if(flagged) continue;                                   /* flag = mai */
       if(st.t==="CLASSE"){
+        if(PR.h==null) continue;                              /* criterio disattivato: salta */
         if(ctx.flag.has(d.nome+"|"+st.det)) continue;         /* non toccare il suo caso grave */
         /* un sostegno spostato fa vigilanza/accompagnamento: vale anche per i gruppi lingua */
         const altri = sostSuClasse(o, st.det, g, h).filter(n=>n!==d.nome);
         // se nella SUA classe c'è un curricolare assente, quel sostegno serve LÌ → penalizza lo spostamento
         const servaCasa = curricolareAssenteInClasse(o, st.det, g, h, ctx, d.nome);
-        if(!altri.length) pool.push([7,...tie,"⚠ unico sostegno di "+st.det,d.nome]);
-        else if(servaCasa) pool.push([6,...tie,"sostegno spostato da "+st.det+" (serviva lì)",d.nome]);
-        else pool.push([5,...tie,"sostegno spostato da "+st.det,d.nome]);
+        if(!altri.length) pool.push([rango(PR.h,2),...tie,"⚠ unico sostegno di "+st.det,d.nome]);
+        else if(servaCasa) pool.push([rango(PR.h,1),...tie,"sostegno spostato da "+st.det+" (serviva lì)",d.nome]);
+        else pool.push([rango(PR.h,0),...tie,"sostegno spostato da "+st.det,d.nome]);
         continue;
       }
       /* un sostegno in ora BUCA è fuori servizio come chiunque → cade nel pagamento sotto */
     }
-    // 4) PVP/PCV emergenza (prima del pagamento)
-    if(st.t==="EMERG"){ pool.push([4,...tie,"PVP/PCV",d.nome]); continue; }
-    // 6) ora buca curricolare = a pagamento
-    if(st.t==="BUCA"){ pool.push([6,...tie,"⚠ pagamento",d.nome]); continue; }
+    // PVP/PCV emergenza (prima del pagamento)
+    if(st.t==="EMERG"){ pool.push([PR_EMERG,...tie,"PVP/PCV",d.nome]); continue; }
+    // g) ora buca curricolare = a pagamento
+    if(PR.g!=null && st.t==="BUCA"){ pool.push([rango(PR.g),...tie,"⚠ pagamento",d.nome]); continue; }
   }
   pool.sort((A,B)=> A[0]-B[0] || A[1]-B[1] || A[2]-B[2] || A[3]-B[3] || String(A[4]).localeCompare(B[4]));
   return pool;
@@ -613,6 +660,7 @@ function generaProspetto(o, giorno, assenti, opts){
     recuperi: Object.assign({}, opts.recuperi||{}),
     flag: new Set(opts.flag||[]),          /* elementi "Nome|Classe" */
     alunnoAssente: new Set(opts.alunnoAssente||[]),   /* sostegni col proprio alunno assente oggi (criterio f) */
+    pri: priorityMap(),   /* gerarchia dei criteri come configurata in Altro → Configurazione criteri */
     occupati: {},
     pagamento: 0
   };
@@ -944,7 +992,7 @@ function fmtCl(c){ return c ? c[0]+"ª "+c.slice(1) : c; }
    ============================================================ */
 const el = id => document.getElementById(id);
 
-const SOTTO_ALTRO = ["dove","importa","uscita","assenze","backup","potenz","sync","flag","recuperi"];
+const SOTTO_ALTRO = ["dove","importa","uscita","assenze","backup","potenz","sync","flag","recuperi","config"];
 /* in modalità operativa restano solo queste voci del menu Altro */
 const OPERATIVO_TAB = ["dove","sync"];
 /* schede utilizzabili anche prima di avere un orario: sono le vie da cui l'orario arriva */
@@ -957,7 +1005,7 @@ function render(){
   document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on", b.dataset.tab===attivo));
   if(!S.orario && !SENZA_ORARIO.includes(S.tab)){ renderVuoto(); return; }
   ({oggi:renderOggi, registro:renderRegistro, orario:renderOrario, altro:renderAltro,
-    dove:renderDove, importa:renderImporta, uscita:renderUscita, assenze:renderAssenze, backup:renderBackup, potenz:renderPotenziamento, sync:renderSync, flag:renderFlag, recuperi:renderRecuperi})[S.tab]();
+    dove:renderDove, importa:renderImporta, uscita:renderUscita, assenze:renderAssenze, backup:renderBackup, potenz:renderPotenziamento, sync:renderSync, flag:renderFlag, recuperi:renderRecuperi, config:renderConfigCriteri})[S.tab]();
 }
 
 /* ================= STAMPA / PDF ================= */
@@ -1174,6 +1222,7 @@ function applicaStato(d){
   S.pnoOn       = d.pnoOn || [];
   S.potAssign   = d.potAssign || {};
   S.recuperi    = d.recuperi || [];
+  if(d.configCriteri) S.configCriteri = d.configCriteri;
   S.prospetto=null; S.assentiOggi={}; S.noteApplicate=null; S.alunnoAssenteOggi=[];
   if(S.orario) S.day = giornoDaData(S.dataOggi||isoOggi());
   save(); saveRegistro();
@@ -1304,6 +1353,7 @@ function renderAltro(){
     { tab:"importa", ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4"/><path d="M8 8l4-4 4 4"/><path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/></svg>`, tit:"Importa l'orario",   sub:"Carica il file Excel — poche volte l'anno" },
     { tab:"sync",    ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5A6.5 6.5 0 0 1 15.5 5.6L18 8"/><path d="M18 4v4h-4"/><path d="M20 14.5A6.5 6.5 0 0 1 8.5 18.4L6 16"/><path d="M6 20v-4h4"/></svg>`, tit:"Condivisione",       sub:(S.sync&&S.sync.url)?((S.sync.soloLettura?"sola lettura":"attiva")+((S.sync.info&&S.sync.info.utente)?" · ultimo: "+S.sync.info.utente:"")):"Collega il foglio Google della scuola" },
     { tab:"backup",  ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10.5" width="16" height="9.5" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/><circle cx="12" cy="15" r="1.1"/></svg>`, tit:"Backup e ripristino", sub:"Salva tutto in un file — o rimetti a posto dopo un guaio" },
+    { tab:"config", ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6M4.22 4.22l4.24 4.24m5.08 5.08l4.24 4.24M1 12h6m6 0h6M4.22 19.78l4.24-4.24m5.08-5.08l4.24-4.24"/></svg>`, tit:"Configurazione criteri", sub:"Attiva/disattiva criteri e ordina la priorità" },
   ];
   const permesse = OPERATIVO_TAB;
   const lista = (S.ruolo==="operativo") ? voci.filter(v=>permesse.includes(v.tab)) : voci;
@@ -1711,7 +1761,8 @@ function datiBackup(){
     assenzeNote: S.assenzeNote || [],
     pnoOn: S.pnoOn || [],
     potAssign: S.potAssign || {},
-    recuperi: S.recuperi || []
+    recuperi: S.recuperi || [],
+    configCriteri: S.configCriteri || null
   };
 }
 function riepilogoBackup(d){
@@ -1766,6 +1817,7 @@ function onFileBackup(ev){
     S.pnoOn       = d.pnoOn || [];
     S.potAssign   = d.potAssign || {};
     S.recuperi    = d.recuperi || [];
+    if(d.configCriteri) S.configCriteri = d.configCriteri;
     S.prospetto=null; S.assentiOggi={}; S.noteApplicate=null; S.alunnoAssenteOggi=[];
     if(S.orario) S.day = giornoDaData(S.dataOggi||isoOggi());
     save(); saveRegistro();
@@ -1888,6 +1940,83 @@ function chiudiOraRecupero(id){
 }
 function eliminaRecupero(id){
   S.recuperi = S.recuperi.filter(x=>x.id!==id); save(); render();
+}
+
+function getConfigCriteri(){
+  if(!S.configCriteri) S.configCriteri = CRITERIA_DEFAULT.map(c=>({...c, enabled:true}));
+  return S.configCriteri;
+}
+function renderConfigCriteri(){
+  const config = getConfigCriteri();
+  const sorted = [...config].sort((a,b)=>{
+    if(!a.enabled && !b.enabled) return a.code.localeCompare(b.code);
+    if(!a.enabled) return 1; if(!b.enabled) return -1;
+    return a.priority - b.priority;
+  });
+  const rows = sorted.map(c=>`
+    <div class="criterion-row ${!c.enabled?'disabled':''}">
+      <input type="checkbox" class="criterion-checkbox" ${c.enabled?'checked':''}
+        onchange="toggleCriterion('${c.code}'); render()">
+      <div class="criterion-label">
+        <div class="criterion-code">${c.code.toUpperCase()}) ${c.label}</div>
+        <div class="criterion-desc">${c.desc}</div>
+      </div>
+      <div class="criterion-priority">
+        <input type="number" class="priority-input" min="1" max="8" 
+          value="${c.priority}" ${!c.enabled?'disabled':''}
+          onchange="updateCriterionPriority('${c.code}', this.value); render()">
+      </div>
+    </div>
+  `).join("");
+  el("main").innerHTML = `
+    <div class="backlink" onclick="S.tab='altro'; render()">‹ Altro</div>
+    <h2 class="sec">Configurazione criteri</h2>
+    <p class="hint" style="margin-top:0">Attiva/disattiva i criteri della circolare e ordina la priorità. Le modifiche influenzeranno le prossime generazioni di sostituzioni. Quelle già registrate rimangono invariate.</p>
+    <div class="criteria-list">${rows}</div>
+    <p class="hint">Il criterio <b>d)</b> compare per completezza ma non ha ancora un automatismo: la flessibilità da attività esterne si autorizza a domanda e non è calcolabile dall'orario. Attivarlo o no non cambia nulla, finché non lo costruiamo.</p>
+    <div style="display:flex; gap:8px; margin-top:16px">
+      <button class="btn ghost" style="flex:1" onclick="resetCriteria()">Ripristina default</button>
+      <button class="btn" style="flex:1" onclick="saveCriteria()">Salva configurazione</button>
+    </div>
+    <div class="feedback" id="feedback"></div>
+  `;
+}
+function toggleCriterion(code){
+  const config = getConfigCriteri();
+  const crit = config.find(c=>c.code===code);
+  if(crit) crit.enabled = !crit.enabled;
+  S.prospetto = null;
+}
+function updateCriterionPriority(code, value){
+  const config = getConfigCriteri();
+  const crit = config.find(c=>c.code===code);
+  if(!crit || !value) return;
+  const n = config.length;
+  const dest = Math.max(1, Math.min(n, parseInt(value)||1));
+  /* tolgo il criterio dalla fila e lo reinserisco alla posizione chiesta,
+     poi rinumero tutti da 1 a n: così non restano mai due numeri uguali */
+  const fila = [...config].sort((a,b)=>a.priority-b.priority || a.code.localeCompare(b.code));
+  const i = fila.indexOf(crit);
+  fila.splice(i,1);
+  fila.splice(dest-1,0,crit);
+  fila.forEach((c,k)=> c.priority = k+1);
+  S.prospetto = null;
+}
+function saveCriteria(){
+  save();
+  const fb = el("feedback");
+  if(fb){
+    fb.textContent = "✓ Configurazione salvata";
+    fb.className = "feedback show success";
+    setTimeout(()=>fb.classList.remove("show"), 3000);
+  }
+}
+function resetCriteria(){
+  if(!confirm("Ripristinare i criteri all'ordine della circolare?")) return;
+  S.configCriteri = CRITERIA_DEFAULT.map(c=>({...c, enabled:true}));
+  S.prospetto = null;
+  save();
+  render();
 }
 
 function renderBackup(){
