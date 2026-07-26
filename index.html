@@ -194,6 +194,17 @@
     font-weight:600; opacity:0; pointer-events:none; transition:.25s; z-index:99; max-width:82%; text-align:center}
   #toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
   .daylabel{margin:0 0 14px; font-family:'Zilla Slab',serif; font-weight:700; color:var(--teal); font-size:16px; text-transform:capitalize}
+  .sub-sec{font-family:'Zilla Slab',serif; font-size:16px; color:var(--ink); margin:22px 0 10px; font-weight:700}
+  .rec-dot{width:11px; height:11px; border-radius:50%; flex-shrink:0; display:inline-block}
+  .rec-dot-ok{background:#3E9E6E} .rec-dot-urgente{background:var(--amber)} .rec-dot-scaduto{background:var(--red)}
+  .regcard.rec-scaduto{border-color:var(--red)} .regcard.rec-urgente{border-color:var(--amber)}
+  .rec-scad{margin-left:auto; font-size:12px; color:var(--ink-soft); font-weight:600}
+  .regcard.rec-scaduto .rec-scad{color:var(--red)} .regcard.rec-urgente .rec-scad{color:#B07A1E}
+  .rec-plaf{font-size:13px; font-weight:700; color:var(--ink-soft)}
+  .rec-plaf.vic{color:#B07A1E} .rec-plaf.sfor{color:var(--red)}
+  .rec-bar{height:7px; background:var(--rule); border-radius:4px; overflow:hidden; margin-top:7px}
+  .rec-bar-fill{height:100%; background:var(--teal); border-radius:4px}
+  .rec-bar-fill.vic{background:var(--amber)} .rec-bar-fill.sfor{background:var(--red)}
   .regcard{background:var(--paper2); border:1.5px solid var(--rule); border-radius:12px; margin-bottom:10px; overflow:hidden}
   .reghead{display:flex; align-items:center; justify-content:space-between; padding:12px 14px; cursor:pointer}
   .reghead b{font-family:'Zilla Slab',serif; font-size:16px; text-transform:capitalize}
@@ -328,6 +339,7 @@ let S = { orario:null, tab:"oggi", day:"LUN",
           assenzeNote:[], assenzaForm:null, noteApplicate:null, daNote:[],
           pnoOn:[], potAssign:{}, potSel:"",
           sync:{url:"",token:"",utente:"",soloLettura:false,ultimoPull:null,info:null}, syncAttivo:false,
+          recuperi:[], recuperoForm:null,   /* debiti da permesso breve: {id, docente, ore, data, scadenza, restituite:0, chiuseManuale:0, origine} */
           ruolo:"completo" };   /* completo | operativo */   /* assentiOggi: {nome: null|[ore]} */
 
 /* ---------- persistenza ---------- */
@@ -341,6 +353,7 @@ function save(){ try{
   localStorage.setItem("sostituto_pno", JSON.stringify(S.pnoOn||[]));
   localStorage.setItem("sostituto_potass", JSON.stringify(S.potAssign||{}));
   localStorage.setItem("sostituto_sync", JSON.stringify(S.sync||{}));
+  localStorage.setItem("sostituto_recuperi", JSON.stringify(S.recuperi||[]));
   localStorage.setItem("sostituto_ruolo", S.ruolo||"completo");
 }catch(e){} }
 function load(){ try{
@@ -354,6 +367,7 @@ function load(){ try{
   const pn=localStorage.getItem("sostituto_pno"); if(pn) S.pnoOn=JSON.parse(pn);
   const pa=localStorage.getItem("sostituto_potass"); if(pa) S.potAssign=JSON.parse(pa);
   const sy=localStorage.getItem("sostituto_sync"); if(sy) S.sync=Object.assign(S.sync||{},JSON.parse(sy));
+  const rc=localStorage.getItem("sostituto_recuperi"); if(rc) S.recuperi=JSON.parse(rc);
   const ru=localStorage.getItem("sostituto_ruolo"); if(ru) S.ruolo=ru;
 }catch(e){} }
 
@@ -708,6 +722,118 @@ function tutteLeClassi(o){
 }
 
 /* ---- ASSENZE NOTE (comunicate in anticipo) ---- */
+/* ================= REGISTRO DEI RECUPERI (permessi brevi) =================
+   Ogni permesso breve apre un DEBITO: ore da restituire entro 2 mesi facendo
+   sostituzioni. Il debito nasce in automatico dalle assenze note di tipo "breve".
+   Due contabilità: (1) debiti aperti con scadenza; (2) plafond annuo per docente
+   (tetto = ore settimanali di insegnamento). */
+
+const GG_SCADENZA = 60;   // due mesi
+
+function isoPiuGiorni(iso, g){
+  const d = new Date(iso + "T00:00:00");
+  d.setDate(d.getDate() + g);
+  return d.toISOString().slice(0,10);
+}
+/* ore settimanali di insegnamento del docente = quante celle "in classe" ha in orario */
+function oreSettimanali(nome){
+  const o = S.orario; if(!o) return 0;
+  const d = (o.docenti||[]).find(x => x.nome === nome);
+  if(!d) return 0;
+  let n = 0;
+  for(const k in d.cells){ const st = d.cells[k]; if(st && (st.t==="CLASSE"||st.t==="LINGUA")) n++; }
+  return n;
+}
+/* anno scolastico di una data ISO: dal 1° settembre al 31 agosto */
+function annoScolastico(iso){
+  const d = new Date(iso+"T00:00:00"); const y = d.getFullYear();
+  return (d.getMonth() >= 8) ? y : y-1;   // mese 8 = settembre
+}
+/* sincronizza i debiti automatici con i permessi brevi presenti nelle assenze note.
+   Crea un debito per ogni permesso breve non ancora tracciato; non tocca quelli manuali. */
+function sincronizzaRecuperi(){
+  S.recuperi = S.recuperi || [];
+  const esistenti = new Set(S.recuperi.filter(r=>r.origine).map(r=>r.origine));
+  for(const a of (S.assenzeNote||[])){
+    if(a.tipo !== "breve" || !a.ore || !a.ore.length) continue;
+    const chiave = "an:" + a.id;
+    if(esistenti.has(chiave)) continue;
+    S.recuperi.push({
+      id: "r" + Date.now() + Math.floor(Math.random()*1000),
+      docente: a.docente,
+      ore: a.ore.length,
+      data: a.dal,
+      scadenza: isoPiuGiorni(a.dal, GG_SCADENZA),
+      restituite: 0,        // scalate dal motore (sostituzioni in recupero effettivamente generate)
+      chiuseManuale: 0,     // chiusure aggiunte a mano da Al
+      origine: chiave,      // link al permesso di provenienza (null se inserito a mano)
+      nota: a.nota || ""
+    });
+  }
+  // rimuovo i debiti automatici il cui permesso è stato cancellato dalle assenze note
+  const idAssenze = new Set((S.assenzeNote||[]).map(a=>"an:"+a.id));
+  S.recuperi = S.recuperi.filter(r => !r.origine || idAssenze.has(r.origine));
+}
+/* ore ancora da restituire per un debito */
+function debitoResiduo(r){ return Math.max(0, r.ore - (r.restituite||0) - (r.chiuseManuale||0)); }
+/* stato semaforo in base ai giorni alla scadenza */
+function semaforoRecupero(r, oggiIso){
+  if(debitoResiduo(r) <= 0) return "chiuso";
+  const oggi = new Date((oggiIso||isoOggi())+"T00:00:00");
+  const scad = new Date(r.scadenza+"T00:00:00");
+  const gg = Math.round((scad - oggi) / 86400000);
+  if(gg < 0)  return "scaduto";
+  if(gg <= 14) return "urgente";
+  return "ok";
+}
+/* mappa docente → ore da recuperare, per alimentare il motore (opts.recuperi) */
+function recuperiPerMotore(){
+  sincronizzaRecuperi();
+  const m = {};
+  for(const r of S.recuperi){
+    const res = debitoResiduo(r);
+    if(res > 0) m[r.docente] = (m[r.docente]||0) + res;
+  }
+  return m;
+}
+/* quando un prospetto viene archiviato, conta i recuperi effettivamente piazzati
+   e li imputa ai debiti aperti del docente, dal più vicino a scadere. */
+function registraRecuperiFatti(prosp){
+  if(!prosp || !prosp.esiti) return;
+  const fattiPerDoc = {};
+  for(const e of prosp.esiti){
+    if(e.scelto && e.motivo === "recupero") fattiPerDoc[e.scelto] = (fattiPerDoc[e.scelto]||0) + 1;
+  }
+  // azzero le restituzioni "da motore" e le ricalcolo dallo stato attuale dei registri,
+  // così il conteggio resta coerente anche se Al rigenera o corregge un prospetto
+  ricalcolaRestituzioni();
+}
+/* ricalcola quante ore ciascun debito ha visto restituite, sommando TUTTI i recuperi
+   presenti nel registro archiviato, imputati per scadenza crescente. */
+function ricalcolaRestituzioni(){
+  sincronizzaRecuperi();
+  // conteggio dei recuperi fatti per docente, da tutte le giornate archiviate
+  const fatti = {};
+  for(const iso in (S.registro||{})){
+    for(const rg of (S.registro[iso].righe||[])){
+      if(rg.scelto && rg.motivo === "recupero") fatti[rg.scelto] = (fatti[rg.scelto]||0) + 1;
+    }
+  }
+  // azzero e re-imputo per docente, debiti ordinati per scadenza
+  for(const r of S.recuperi) r.restituite = 0;
+  for(const doc in fatti){
+    let resto = fatti[doc];
+    const deb = S.recuperi.filter(r=>r.docente===doc).sort((a,b)=> a.scadenza < b.scadenza ? -1 : 1);
+    for(const r of deb){
+      if(resto <= 0) break;
+      const capienza = r.ore - (r.chiuseManuale||0);
+      const imputa = Math.min(resto, capienza);
+      r.restituite = imputa;
+      resto -= imputa;
+    }
+  }
+}
+
 /* record: {id, docente, dal, al, tipo:"giornata"|"breve", ore:[], nota} */
 function assenzeNoteAttive(iso){
   if(!iso) return [];
@@ -817,7 +943,7 @@ function fmtCl(c){ return c ? c[0]+"ª "+c.slice(1) : c; }
    ============================================================ */
 const el = id => document.getElementById(id);
 
-const SOTTO_ALTRO = ["dove","importa","uscita","assenze","backup","potenz","sync","flag"];
+const SOTTO_ALTRO = ["dove","importa","uscita","assenze","backup","potenz","sync","flag","recuperi"];
 /* in modalità operativa restano solo queste voci del menu Altro */
 const OPERATIVO_TAB = ["dove","sync"];
 /* schede utilizzabili anche prima di avere un orario: sono le vie da cui l'orario arriva */
@@ -830,7 +956,7 @@ function render(){
   document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on", b.dataset.tab===attivo));
   if(!S.orario && !SENZA_ORARIO.includes(S.tab)){ renderVuoto(); return; }
   ({oggi:renderOggi, registro:renderRegistro, orario:renderOrario, altro:renderAltro,
-    dove:renderDove, importa:renderImporta, uscita:renderUscita, assenze:renderAssenze, backup:renderBackup, potenz:renderPotenziamento, sync:renderSync, flag:renderFlag})[S.tab]();
+    dove:renderDove, importa:renderImporta, uscita:renderUscita, assenze:renderAssenze, backup:renderBackup, potenz:renderPotenziamento, sync:renderSync, flag:renderFlag, recuperi:renderRecuperi})[S.tab]();
 }
 
 /* ================= STAMPA / PDF ================= */
@@ -1034,7 +1160,7 @@ function saveSync(){ try{ localStorage.setItem("sostituto_sync", JSON.stringify(
 function statoDaCondividere(){
   return { orario:S.orario||null, lingue:S.lingue||{}, flagOggi:S.flagOggi||[],
     registro:S.registro||{}, uscite:S.uscite||[], assenzeNote:S.assenzeNote||[],
-    pnoOn:S.pnoOn||[], potAssign:S.potAssign||{} };
+    pnoOn:S.pnoOn||[], potAssign:S.potAssign||{}, recuperi:S.recuperi||[] };
 }
 function applicaStato(d){
   if(!d) return;
@@ -1046,6 +1172,7 @@ function applicaStato(d){
   S.assenzeNote = d.assenzeNote || [];
   S.pnoOn       = d.pnoOn || [];
   S.potAssign   = d.potAssign || {};
+  S.recuperi    = d.recuperi || [];
   S.prospetto=null; S.assentiOggi={}; S.noteApplicate=null; S.alunnoAssenteOggi=[];
   if(S.orario) S.day = giornoDaData(S.dataOggi||isoOggi());
   save(); saveRegistro();
@@ -1168,6 +1295,7 @@ function renderAltro(){
   const nAss = (S.assenzeNote||[]).length, nUsc = (S.uscite||[]).length, nPno = (S.pnoOn||[]).length;
   const voci = [
     { tab:"assenze", ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v4"/><path d="M9 3h6l-1 6 3 3v2H7v-2l3-3-1-6z"/></svg>`, tit:"Assenze note",       sub:nAss?`${nAss} annotate — si caricano da sole nel giorno giusto`:"Annota le assenze comunicate in anticipo" },
+    { tab:"recuperi", ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 1.5"/><path d="M9 2.5h6"/></svg>`, tit:"Recuperi", sub:(()=>{const n=(S.recuperi||[]).filter(r=>Math.max(0,r.ore-(r.restituite||0)-(r.chiuseManuale||0))>0).length; return n?`${n} debit${n===1?'o':'i'} da recuperare`:"Debiti dei permessi brevi";})() },
     { tab:"uscita",  ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="11" rx="2"/><path d="M3 10.5h18M7 16v2M17 16v2"/><circle cx="7.5" cy="13" r=".9"/><circle cx="16.5" cy="13" r=".9"/></svg>`, tit:"Uscite didattiche",  sub:nUsc?`${nUsc} registrate`:"Classi in uscita e accompagnatori" },
     { tab:"flag",    ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.2l7 2.8v5.1c0 4-2.9 7.6-7 8.7-4.1-1.1-7-4.7-7-8.7V6l7-2.8z"/><path d="M9.3 12.1l1.9 1.9 3.5-3.9"/></svg>`, tit:"Sostegni non derogabili", sub:(S.flagOggi||[]).length?`${S.flagOggi.length} segnalati \u2014 non verranno mai spostati`:"Alunni gravi con assistenza continua" },
     { tab:"potenz",  ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.6"/><circle cx="12" cy="12" r=".6" fill="currentColor"/></svg>`, tit:"Potenziamento",      sub:nPno?`${nPno} ore marcate Pno`:"Marca le ore non disponibili senza toccare l'Excel" },
@@ -1362,7 +1490,7 @@ function lanciaProspetto(){
   const o=S.orario;
   const assenti=Object.keys(S.assentiOggi).map(n=>({nome:n, ore:S.assentiOggi[n]}));
   S.override = S.override || {};              /* {assente|h : nomeScelto|""(=svuota)} */
-  S.prospetto = generaProspetto(o, S.day, assenti, { flag:S.flagOggi, override:S.override, alunnoAssente:S.alunnoAssenteOggi, uscite:usciteAttive(S.dataOggi) });
+  S.prospetto = generaProspetto(o, S.day, assenti, { flag:S.flagOggi, override:S.override, alunnoAssente:S.alunnoAssenteOggi, uscite:usciteAttive(S.dataOggi), recuperi:recuperiPerMotore() });
   archiviaRegistro();                         /* opzione 1: si salva da sé alla generazione */
   render();
 }
@@ -1396,6 +1524,7 @@ function archiviaRegistro(){
     note: (p.note||[]).map(n=>({nome:n.nome, h:n.h, classe:n.classe})),
     salvato: new Date().toISOString()
   };
+  ricalcolaRestituzioni();
   saveRegistro();
 }
 function saveRegistro(){ try{ localStorage.setItem("sostituto_registro", JSON.stringify(S.registro)); }catch(e){} }
@@ -1554,7 +1683,8 @@ function datiBackup(){
     uscite: S.uscite || [],
     assenzeNote: S.assenzeNote || [],
     pnoOn: S.pnoOn || [],
-    potAssign: S.potAssign || {}
+    potAssign: S.potAssign || {},
+    recuperi: S.recuperi || []
   };
 }
 function riepilogoBackup(d){
@@ -1564,6 +1694,7 @@ function riepilogoBackup(d){
     `${Object.keys(d.registro||{}).length} giornate di registro`,
     `${(d.uscite||[]).length} uscite`,
     `${(d.assenzeNote||[]).length} assenze note`,
+    `${(d.recuperi||[]).length} recuperi`,
     `${(d.flagOggi||[]).length} flag`
   ];
 }
@@ -1607,6 +1738,7 @@ function onFileBackup(ev){
     S.assenzeNote = d.assenzeNote || [];
     S.pnoOn       = d.pnoOn || [];
     S.potAssign   = d.potAssign || {};
+    S.recuperi    = d.recuperi || [];
     S.prospetto=null; S.assentiOggi={}; S.noteApplicate=null; S.alunnoAssenteOggi=[];
     if(S.orario) S.day = giornoDaData(S.dataOggi||isoOggi());
     save(); saveRegistro();
@@ -1615,6 +1747,122 @@ function onFileBackup(ev){
   };
   r.readAsText(f);
 }
+/* ---- pagina: registro dei recuperi ---- */
+function renderRecuperi(){
+  sincronizzaRecuperi(); ricalcolaRestituzioni();
+  const oggi = isoOggi();
+  const aperti = S.recuperi.filter(r => debitoResiduo(r) > 0)
+    .sort((a,b)=> a.scadenza < b.scadenza ? -1 : (a.scadenza > b.scadenza ? 1 : 0));
+  const chiusi = S.recuperi.filter(r => debitoResiduo(r) <= 0);
+
+  let out = `<div class="backlink" onclick="S.tab='altro'; render()">‹ Altro</div>
+    <h2 class="sec">Registro dei recuperi</h2>
+    <p class="hint" style="margin-top:0">I permessi brevi vanno recuperati entro due mesi facendo sostituzioni, con precedenza nella classe del docente in permesso. Chi ha un debito aperto viene proposto per primo dal motore.</p>`;
+
+  if(!S.orario){
+    out += `<p class="hint">Importa prima l'orario: serve per calcolare il tetto annuo di ciascun docente.</p>`;
+    el("main").innerHTML = out; return;
+  }
+
+  // pulsante per aggiungere un debito a mano
+  out += `<button class="btn" style="width:100%; margin-bottom:14px; padding:9px; font-size:14px" onclick="S.recuperoForm={docente:'',ore:1,data:'${oggi}'}; render()">+ Aggiungi un recupero a mano</button>`;
+
+  if(S.recuperoForm){
+    const f = S.recuperoForm;
+    const docenti = (S.orario.docenti||[]).map(d=>d.nome);
+    out += `<div class="regcard" style="padding:12px">
+      <div class="field"><label>Docente</label>
+        <select onchange="S.recuperoForm.docente=this.value; render()">
+          <option value="">— scegli —</option>
+          ${docenti.map(n=>`<option${f.docente===n?' selected':''}>${esc(n)}</option>`).join("")}
+        </select></div>
+      <div style="display:flex; gap:10px">
+        <div class="field" style="flex:1"><label>Ore da recuperare</label>
+          <input type="number" min="1" max="2" value="${f.ore}" onchange="S.recuperoForm.ore=+this.value"></div>
+        <div class="field" style="flex:1.4"><label>Data del permesso</label>
+          <input type="date" value="${f.data}" onchange="S.recuperoForm.data=this.value"></div>
+      </div>
+      <div style="display:flex; gap:8px">
+        <button class="btn ghost" style="flex:1" onclick="S.recuperoForm=null; render()">Annulla</button>
+        <button class="btn" style="flex:1" onclick="aggiungiRecuperoManuale()">Salva</button>
+      </div>
+    </div>`;
+  }
+
+  // debiti aperti
+  out += `<h3 class="sub-sec">Debiti aperti${aperti.length?` · ${aperti.length}`:''}</h3>`;
+  if(!aperti.length){
+    out += `<p class="hint">Nessun debito aperto. 🎉</p>`;
+  } else {
+    out += aperti.map(r=>{
+      const sem = semaforoRecupero(r, oggi);
+      const res = debitoResiduo(r);
+      const gg = Math.round((new Date(r.scadenza+"T00:00:00") - new Date(oggi+"T00:00:00"))/86400000);
+      const semTxt = sem==="scaduto" ? `scaduto da ${-gg} gg` : sem==="urgente" ? `scade tra ${gg} gg` : `scade tra ${gg} gg`;
+      const fatte = (r.restituite||0) + (r.chiuseManuale||0);
+      return `<div class="regcard rec-${sem}">
+        <div class="reghead" style="cursor:default; display:block">
+          <div style="display:flex; align-items:center; gap:8px">
+            <span class="rec-dot rec-dot-${sem}"></span>
+            <b>${esc(cognomeBreve(r.docente))}</b>
+            <span class="rec-scad">${semTxt}</span>
+          </div>
+          <div class="regsub">${res} or${res===1?'a':'e'} da recuperare${fatte?` · ${fatte} già ${fatte===1?'restituita':'restituite'}`:''} · permesso del ${dataLeggibile(r.data).replace(/ \d{4}$/,'')}</div>
+          <div style="margin-top:9px; display:flex; gap:7px; flex-wrap:wrap">
+            <button class="btn ghost" style="padding:6px 11px; font-size:12.5px" onclick="chiudiOraRecupero('${r.id}')">Segna 1 ora recuperata a mano</button>
+            <button class="btn ghost" style="padding:6px 11px; font-size:12.5px; color:var(--red); border-color:var(--red)" onclick="eliminaRecupero('${r.id}')">Elimina</button>
+          </div>
+        </div></div>`;
+    }).join("");
+  }
+
+  // plafond annuo per docente
+  out += `<h3 class="sub-sec">Plafond annuo dei permessi brevi</h3>
+    <p class="hint" style="margin-top:0">Ogni docente può chiedere permessi brevi fino al proprio orario settimanale di insegnamento. Qui il consumato dell'anno in corso (visto dal plesso).</p>`;
+  const annoIso = annoScolastico(oggi);
+  const consumo = {};
+  for(const r of S.recuperi){
+    if(annoScolastico(r.data) !== annoIso) continue;
+    consumo[r.docente] = (consumo[r.docente]||0) + r.ore;
+  }
+  const docConsumo = Object.keys(consumo).sort((a,b)=> consumo[b]-consumo[a]);
+  if(!docConsumo.length){
+    out += `<p class="hint">Nessun permesso breve registrato quest'anno.</p>`;
+  } else {
+    out += docConsumo.map(n=>{
+      const tetto = oreSettimanali(n);
+      const usate = consumo[n];
+      const perc = tetto ? Math.min(100, Math.round(100*usate/tetto)) : 0;
+      const vicino = tetto && usate >= tetto*0.75;
+      const sforato = tetto && usate >= tetto;
+      return `<div class="regcard" style="padding:11px 13px">
+        <div style="display:flex; justify-content:space-between; align-items:baseline">
+          <b>${esc(cognomeBreve(n))}</b>
+          <span class="rec-plaf${sforato?' sfor':vicino?' vic':''}">${usate} / ${tetto||'?'} ore</span>
+        </div>
+        <div class="rec-bar"><div class="rec-bar-fill${sforato?' sfor':vicino?' vic':''}" style="width:${perc}%"></div></div>
+      </div>`;
+    }).join("");
+  }
+
+  el("main").innerHTML = out;
+}
+function aggiungiRecuperoManuale(){
+  const f = S.recuperoForm; if(!f || !f.docente){ toast("Scegli il docente"); return; }
+  S.recuperi.push({
+    id:"r"+Date.now(), docente:f.docente, ore:+f.ore||1, data:f.data,
+    scadenza:isoPiuGiorni(f.data, GG_SCADENZA), restituite:0, chiuseManuale:0, origine:null, nota:""
+  });
+  S.recuperoForm=null; save(); render();
+}
+function chiudiOraRecupero(id){
+  const r = S.recuperi.find(x=>x.id===id); if(!r) return;
+  if(debitoResiduo(r) > 0){ r.chiuseManuale = (r.chiuseManuale||0) + 1; save(); render(); }
+}
+function eliminaRecupero(id){
+  S.recuperi = S.recuperi.filter(x=>x.id!==id); save(); render();
+}
+
 function renderBackup(){
   const d = datiBackup();
   const rig = riepilogoBackup(d);
