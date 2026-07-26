@@ -771,8 +771,9 @@ function sincronizzaRecuperi(){
     });
   }
   // rimuovo i debiti automatici il cui permesso è stato cancellato dalle assenze note
+  // (i debiti "oggi:" e quelli manuali non sono governati da questa lista, restano)
   const idAssenze = new Set((S.assenzeNote||[]).map(a=>"an:"+a.id));
-  S.recuperi = S.recuperi.filter(r => !r.origine || idAssenze.has(r.origine));
+  S.recuperi = S.recuperi.filter(r => !r.origine || !r.origine.startsWith("an:") || idAssenze.has(r.origine));
 }
 /* ore ancora da restituire per un debito */
 function debitoResiduo(r){ return Math.max(0, r.ore - (r.restituite||0) - (r.chiuseManuale||0)); }
@@ -1486,10 +1487,36 @@ function toggleOra(nome, h){
   else S.assentiOggi[nome]=[...set].sort((a,b)=>a-b);
   S.prospetto=null; render();
 }
+/* sincronizza i debiti anche per i permessi brevi inseriti al volo nella scheda Sostituzioni
+   (ore parziali oggi), non solo quelli pre-registrati nelle Assenze note. Un debito per
+   docente/giorno, non duplicabile anche rigenerando più volte il prospetto. */
+function sincronizzaRecuperiOggi(){
+  S.recuperi = S.recuperi || [];
+  const daNote = new Set(S.daNote || []);   // questi arrivano già dalle Assenze note: li salta
+  const esistenti = new Set(S.recuperi.filter(r=>r.origine).map(r=>r.origine));
+  for(const nome in S.assentiOggi){
+    const ore = S.assentiOggi[nome];
+    if(!Array.isArray(ore) || !ore.length) continue;   // null = giornata intera, non genera debito
+    if(daNote.has(nome)) continue;                      // già coperto da sincronizzaRecuperi()
+    const chiave = "oggi:" + S.dataOggi + ":" + nome;
+    if(esistenti.has(chiave)) continue;
+    S.recuperi.push({
+      id: "r" + Date.now() + Math.floor(Math.random()*1000),
+      docente: nome,
+      ore: ore.length,
+      data: S.dataOggi,
+      scadenza: isoPiuGiorni(S.dataOggi, GG_SCADENZA),
+      restituite: 0, chiuseManuale: 0,
+      origine: chiave,
+      nota: ""
+    });
+  }
+}
 function lanciaProspetto(){
   const o=S.orario;
   const assenti=Object.keys(S.assentiOggi).map(n=>({nome:n, ore:S.assentiOggi[n]}));
   S.override = S.override || {};              /* {assente|h : nomeScelto|""(=svuota)} */
+  sincronizzaRecuperiOggi();
   S.prospetto = generaProspetto(o, S.day, assenti, { flag:S.flagOggi, override:S.override, alunnoAssente:S.alunnoAssenteOggi, uscite:usciteAttive(S.dataOggi), recuperi:recuperiPerMotore() });
   archiviaRegistro();                         /* opzione 1: si salva da sé alla generazione */
   render();
