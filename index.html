@@ -992,7 +992,7 @@ function fmtCl(c){ return c ? c[0]+"ª "+c.slice(1) : c; }
    ============================================================ */
 const el = id => document.getElementById(id);
 
-const SOTTO_ALTRO = ["dove","importa","uscita","assenze","backup","potenz","sync","flag","recuperi","config"];
+const SOTTO_ALTRO = ["dove","importa","uscita","assenze","backup","potenz","sync","flag","recuperi","config","nuovoanno"];
 /* in modalità operativa restano solo queste voci del menu Altro */
 const OPERATIVO_TAB = ["dove","sync"];
 /* schede utilizzabili anche prima di avere un orario: sono le vie da cui l'orario arriva */
@@ -1005,7 +1005,7 @@ function render(){
   document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on", b.dataset.tab===attivo));
   if(!S.orario && !SENZA_ORARIO.includes(S.tab)){ renderVuoto(); return; }
   ({oggi:renderOggi, registro:renderRegistro, orario:renderOrario, altro:renderAltro,
-    dove:renderDove, importa:renderImporta, uscita:renderUscita, assenze:renderAssenze, backup:renderBackup, potenz:renderPotenziamento, sync:renderSync, flag:renderFlag, recuperi:renderRecuperi, config:renderConfigCriteri})[S.tab]();
+    dove:renderDove, importa:renderImporta, uscita:renderUscita, assenze:renderAssenze, backup:renderBackup, potenz:renderPotenziamento, sync:renderSync, flag:renderFlag, recuperi:renderRecuperi, config:renderConfigCriteri, nuovoanno:renderNuovoAnno})[S.tab]();
 }
 
 /* ================= STAMPA / PDF ================= */
@@ -1354,6 +1354,7 @@ function renderAltro(){
     { tab:"sync",    ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5A6.5 6.5 0 0 1 15.5 5.6L18 8"/><path d="M18 4v4h-4"/><path d="M20 14.5A6.5 6.5 0 0 1 8.5 18.4L6 16"/><path d="M6 20v-4h4"/></svg>`, tit:"Condivisione",       sub:(S.sync&&S.sync.url)?((S.sync.soloLettura?"sola lettura":"attiva")+((S.sync.info&&S.sync.info.utente)?" · ultimo: "+S.sync.info.utente:"")):"Collega il foglio Google della scuola" },
     { tab:"backup",  ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10.5" width="16" height="9.5" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/><circle cx="12" cy="15" r="1.1"/></svg>`, tit:"Backup e ripristino", sub:"Salva tutto in un file — o rimetti a posto dopo un guaio" },
     { tab:"config", ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6M4.22 4.22l4.24 4.24m5.08 5.08l4.24 4.24M1 12h6m6 0h6M4.22 19.78l4.24-4.24m5.08-5.08l4.24-4.24"/></svg>`, tit:"Configurazione criteri", sub:"Attiva/disattiva criteri e ordina la priorità" },
+    { tab:"nuovoanno", ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>`, tit:"Nuovo anno scolastico", sub:"Azzera i dati dell'anno concluso e ricomincia" },
   ];
   const permesse = OPERATIVO_TAB;
   const lista = (S.ruolo==="operativo") ? voci.filter(v=>permesse.includes(v.tab)) : voci;
@@ -1748,7 +1749,7 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "26.07.2026";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const VERSIONE = "12.09.2026";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -2016,6 +2017,101 @@ function resetCriteria(){
   S.configCriteri = CRITERIA_DEFAULT.map(c=>({...c, enabled:true}));
   S.prospetto = null;
   save();
+  render();
+}
+
+/* ---- NUOVO ANNO SCOLASTICO: azzeramento guidato ---- */
+/* Le voci sono divise in due gruppi. Il primo è il lascito dell'anno concluso e si
+   azzera sempre. Il secondo dipende dall'orario nuovo: si azzera solo se l'orario
+   cambia davvero, perché ricostruirlo costa tempo. Configurazione criteri, ruolo
+   del dispositivo e impostazioni di sync non sono toccati da nessuno dei due. */
+const RESET_ANNO = [
+  { k:"registro",   tit:"Registro delle sostituzioni", n:()=>Object.keys(S.registro||{}).length, um:"giornate" },
+  { k:"assenzeNote",tit:"Assenze note",                n:()=>(S.assenzeNote||[]).length,        um:"annotate" },
+  { k:"uscite",     tit:"Uscite didattiche",           n:()=>(S.uscite||[]).length,             um:"registrate" },
+  { k:"recuperi",   tit:"Recuperi da permesso breve",  n:()=>(S.recuperi||[]).length,           um:"posizioni" },
+  { k:"potAssign",  tit:"Assegnazioni potenziamento",  n:()=>Object.keys(S.potAssign||{}).length,um:"assegnazioni" },
+  { k:"pnoOn",      tit:"Potenziamenti non disponibili",n:()=>(S.pnoOn||[]).length,             um:"celle" },
+];
+const RESET_ORARIO = [
+  { k:"orario",  tit:"Orario importato",        n:()=> S.orario ? (S.orario.docenti||[]).length : 0, um:"docenti" },
+  { k:"flagOggi",tit:"Flag sostegno · classe",  n:()=>(S.flagOggi||[]).length,  um:"abbinamenti" },
+  { k:"lingue",  tit:"Docenti di lingua",       n:()=>Object.values(S.lingue||{}).filter(Boolean).length, um:"indicati" },
+];
+
+function renderNuovoAnno(){
+  S.raSel = S.raSel || null;
+  if(!S.raSel){
+    S.raSel = {};
+    RESET_ANNO.forEach(x=> S.raSel[x.k]=true);    /* dati dell'anno: predefinito sì */
+    RESET_ORARIO.forEach(x=> S.raSel[x.k]=false); /* legati all'orario: predefinito no */
+  }
+  const riga = x => {
+    const q = x.n();
+    return `<div class="criterion-row ${!S.raSel[x.k]?'disabled':''}">
+      <input type="checkbox" class="criterion-checkbox" ${S.raSel[x.k]?'checked':''}
+        onchange="S.raSel['${x.k}']=this.checked; render()">
+      <div class="criterion-label">
+        <div class="criterion-code">${esc(x.tit)}</div>
+        <div class="criterion-desc">${q?q+" "+x.um:"già vuoto"}</div>
+      </div>
+    </div>`;
+  };
+  const quanti = Object.values(S.raSel).filter(Boolean).length;
+  el("main").innerHTML = `
+    <div class="backlink" onclick="S.tab='altro'; render()">‹ Altro</div>
+    <h2 class="sec">Nuovo anno scolastico</h2>
+    <p class="hint" style="margin-top:0">Azzera il lascito dell'anno concluso lasciando in piedi le impostazioni. Scegli cosa svuotare, poi conferma.</p>
+
+    <div class="regcard"><div class="reghead" style="cursor:default"><div style="flex:1">
+      <b>1 · Prima di tutto, il backup</b>
+      <div class="regsub">Una volta azzerati, questi dati non tornano. Il backup è l'unica copia che ti resta dell'anno appena chiuso.</div>
+    </div></div></div>
+    <button class="btn" style="width:100%; margin-top:6px" onclick="esportaBackup(); S.raBk=true; render()">⬇️ Salva un backup</button>
+    ${S.raBk ? `<p class="hint" style="color:var(--teal)">✓ Backup scaricato in questa sessione.</p>`
+             : `<p class="hint">Il pulsante di azzeramento si attiva dopo il backup.</p>`}
+
+    <h2 class="sec">2 · Dati dell'anno concluso</h2>
+    <div class="criteria-list">${RESET_ANNO.map(riga).join("")}</div>
+
+    <h2 class="sec">3 · Impostazioni legate all'orario</h2>
+    <p class="hint" style="margin-top:0">Da svuotare solo se l'orario cambia: i flag e i docenti di lingua andranno reimpostati a mano dopo l'import del nuovo orario.</p>
+    <div class="criteria-list">${RESET_ORARIO.map(riga).join("")}</div>
+
+    <h2 class="sec">Non vengono toccati</h2>
+    <div class="regcard"><div class="reghead" style="cursor:default"><div style="flex:1">
+      <div class="regsub">• Configurazione criteri</div>
+      <div class="regsub">• Ruolo di questo dispositivo</div>
+      <div class="regsub">• Indirizzo e codice di sincronizzazione</div>
+    </div></div></div>
+
+    ${(S.sync&&S.sync.url) ? `<p class="hint" style="color:var(--red)">⚠ La sincronizzazione è configurata. Dopo l'azzeramento, il primo invio svuota anche la copia condivisa: avvisa chi altro usa l'app prima di procedere.</p>` : ``}
+
+    <button class="btn" style="width:100%; margin-top:14px; background:${(S.raBk&&quanti)?'var(--red)':'#C9C4B6'}"
+      ${(S.raBk&&quanti)?'':'disabled'} onclick="confermaNuovoAnno()">
+      Azzera le voci selezionate${quanti?" ("+quanti+")":""}
+    </button>`;
+}
+
+function confermaNuovoAnno(){
+  const sel = [...RESET_ANNO, ...RESET_ORARIO].filter(x=>S.raSel[x.k]);
+  if(!sel.length) return;
+  const elenco = sel.map(x=>"• "+x.tit).join("\n");
+  if(!confirm("Verranno svuotate queste voci:\n\n"+elenco+"\n\nL'operazione non è reversibile. Procedo?")) return;
+  if(!confirm("Ultima conferma: azzero definitivamente?")) return;
+
+  const vuoto = { registro:{}, assenzeNote:[], uscite:[], recuperi:[], potAssign:{}, pnoOn:[],
+                  orario:null, flagOggi:[], lingue:{} };
+  sel.forEach(x=>{ S[x.k] = (Array.isArray(vuoto[x.k]) ? [] : vuoto[x.k]); });
+  if(S.raSel.registro) localStorage.removeItem("sostituto_registro");
+  if(S.raSel.orario)   localStorage.removeItem("sostituto_v1");
+
+  /* stato della giornata: sempre ripulito, deriva dai dati appena svuotati */
+  S.prospetto=null; S.assentiOggi={}; S.noteApplicate=null; S.alunnoAssenteOggi=[]; S.override={};
+  S.raSel=null; S.raBk=false;
+  save(); saveRegistro();
+  alert("Fatto. " + (S.orario ? "L'orario è ancora in memoria." : "Ora importa l'orario del nuovo anno da Altro → Importa orario."));
+  S.tab = S.orario ? "altro" : "importa";
   render();
 }
 
