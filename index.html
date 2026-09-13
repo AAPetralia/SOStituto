@@ -387,7 +387,7 @@ function save(){ try{
   localStorage.setItem("sostituto_potass", JSON.stringify(S.potAssign||{}));
   localStorage.setItem("sostituto_sync", JSON.stringify(S.sync||{}));
   localStorage.setItem("sostituto_recuperi", JSON.stringify(S.recuperi||[]));
-  localStorage.setItem("sostituto_config", JSON.stringify(S.configCriteri||[]));
+  if(S.configCriteri && S.configCriteri.length) localStorage.setItem("sostituto_config", JSON.stringify(S.configCriteri));
   localStorage.setItem("sostituto_ruolo", S.ruolo||"completo");
 }catch(e){} }
 function load(){ try{
@@ -402,7 +402,8 @@ function load(){ try{
   const pa=localStorage.getItem("sostituto_potass"); if(pa) S.potAssign=JSON.parse(pa);
   const sy=localStorage.getItem("sostituto_sync"); if(sy) S.sync=Object.assign(S.sync||{},JSON.parse(sy));
   const rc=localStorage.getItem("sostituto_recuperi"); if(rc) S.recuperi=JSON.parse(rc);
-  const cf=localStorage.getItem("sostituto_config"); if(cf) S.configCriteri=JSON.parse(cf);
+  const cf=localStorage.getItem("sostituto_config");
+  if(cf){ const v=JSON.parse(cf); if(Array.isArray(v) && v.length) S.configCriteri=v; }
   const uf=localStorage.getItem("sostituto_uscfoglio"); if(uf) S.uscFoglio=JSON.parse(uf);
   const ru=localStorage.getItem("sostituto_ruolo"); if(ru) S.ruolo=ru;
 }catch(e){} }
@@ -662,7 +663,7 @@ function generaProspetto(o, giorno, assenti, opts){
     recuperi: Object.assign({}, opts.recuperi||{}),
     flag: new Set(opts.flag||[]),          /* elementi "Nome|Classe" */
     alunnoAssente: new Set(opts.alunnoAssente||[]),   /* sostegni col proprio alunno assente oggi (criterio f) */
-    pri: priorityMap(),   /* gerarchia dei criteri come configurata in Altro → Configurazione criteri */
+    pri: (getConfigCriteri(), priorityMap()),   /* gerarchia dei criteri come configurata in Altro → Configurazione criteri */
     occupati: {},
     pagamento: 0
   };
@@ -1751,7 +1752,7 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "12.09.2026";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const VERSIONE = "13.09.2026";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -1946,7 +1947,15 @@ function eliminaRecupero(id){
 }
 
 function getConfigCriteri(){
-  if(!S.configCriteri) S.configCriteri = CRITERIA_DEFAULT.map(c=>({...c, enabled:true}));
+  const valida = Array.isArray(S.configCriteri) && S.configCriteri.length
+    && S.configCriteri.every(c=>c && c.code && typeof c.priority==="number");
+  if(!valida) S.configCriteri = CRITERIA_DEFAULT.map(c=>({...c, enabled:true}));
+  /* se un criterio manca (versione vecchia, file rimaneggiato) lo rimetto in coda
+     invece di perderlo: meglio un criterio in più che un motore muto */
+  else CRITERIA_DEFAULT.forEach(d=>{
+    if(!S.configCriteri.some(c=>c.code===d.code))
+      S.configCriteri.push({...d, priority:S.configCriteri.length+1, enabled:true});
+  });
   return S.configCriteri;
 }
 function renderConfigCriteri(){
