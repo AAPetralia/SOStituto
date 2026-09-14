@@ -1801,7 +1801,7 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "14.09.2026";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const VERSIONE = "14.09.2026c";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -2122,14 +2122,14 @@ function uscScarica(){
     .then(j=>{
       S.uscAttivo=false;
       if(!j.ok){ S.uscErr = "Il foglio ha risposto: " + (j.errore||"errore sconosciuto"); render(); return; }
-      preparaAnteprima(j.uscite||[], j.info||null);
+      preparaAnteprima(j.uscite||[], j.info||null, j.scartate||[]);
       render();
     })
     .catch(err=>{ S.uscAttivo=false; S.uscErr=descriviErrore(err); render(); });
 }
 
 /* costruisce l'anteprima: cosa entra, cosa cambia, cosa sparisce, cosa non torna */
-function preparaAnteprima(righe, info){
+function preparaAnteprima(righe, info, scartate){
   const classiNote = new Set(tutteLeClassi(S.orario));
   const voci=[], problemi=[];
   righe.forEach(r=>{
@@ -2149,7 +2149,7 @@ function preparaAnteprima(righe, info){
   });
   const precedenti = (S.uscite||[]).filter(u=>u.origine==="foglio");
   const manuali    = (S.uscite||[]).filter(u=>u.origine!=="foglio");
-  S.uscAnteprima = { voci, problemi, info,
+  S.uscAnteprima = { voci, problemi, info, scartate: scartate||[],
     nuove: voci.filter(v=>!precedenti.some(p=>p.rif===v.rif)).length,
     tolte: precedenti.filter(p=>!voci.some(v=>v.rif===p.rif)).length,
     manuali: manuali.length };
@@ -2209,10 +2209,25 @@ function renderUscFoglio(){
   }
 
   /* ---- anteprima ---- */
+  const nfo = a.info||{}; const tr = nfo.trovate||{};
   out += `<div class="regcard"><div class="reghead" style="cursor:default"><div style="flex:1">
       <b>${a.voci.length} uscite confermate sul foglio</b>
       <div class="regsub">${a.nuove} nuove · ${a.tolte} non più presenti · ${a.manuali} inserite a mano restano intatte</div>
     </div></div></div>`;
+
+  /* cosa ha letto davvero lo script: serve quando il risultato non torna */
+  if(nfo.scheda){
+    const male = [];
+    if(!tr.stato) male.push("Stato"); if(!tr.dal) male.push("Dal"); if(!tr.descrizione) male.push("Descrizione");
+    if(!tr.classi) male.push("colonne classe");
+    out += `<div class="promemo"${male.length?' style="background:#F4DAD7; border-left-color:var(--red)"':''}>
+      Letta la scheda <b>${esc(nfo.scheda)}</b> · ${nfo.righe||0} righe compilate<br>
+      Colonne riconosciute: ${tr.classi||0} classi · ${tr.acc||0} accompagnatori · ${tr.ore||0} ore
+      ${male.length?`<br><b>Intestazioni non trovate: ${male.join(", ")}</b>`:""}
+    </div>`;
+    if(male.length && nfo.intestazioni)
+      out += `<div class="promemo"><b>Intestazioni presenti sul foglio:</b><br>${esc(nfo.intestazioni)}</div>`;
+  }
 
   if(a.problemi.length){
     out += `<h2 class="sec">Da controllare</h2>
@@ -2222,9 +2237,16 @@ function renderUscFoglio(){
       </div>`).join("");
   }
 
+  if(a.scartate && a.scartate.length){
+    out += `<h2 class="sec">Righe saltate</h2>
+      <p class="hint" style="margin-top:0">Presenti sul foglio ma non importabili. Le prime due voci sono normali; le altre indicano qualcosa da correggere.</p>`;
+    out += a.scartate.map(x=>`<div class="promemo" style="background:#F7EEDD; border-left-color:var(--amber)">
+        <b>Riga ${x.riga}${x.nota?" · "+esc(x.nota):""}</b><br>${esc(x.motivo)}
+      </div>`).join("");
+  }
   out += `<h2 class="sec">Cosa verrà scritto</h2>`;
   if(!a.voci.length){
-    out += `<p class="hint">Nessuna uscita confermata sul foglio. Controlla la colonna Stato.</p>`;
+    out += `<p class="hint">Nessuna uscita importabile. ${a.scartate&&a.scartate.length?"Vedi sopra il motivo riga per riga.":"Sul foglio non risultano righe compilate."}</p>`;
   } else {
     out += a.voci.slice().sort((x,y)=>x.dal.localeCompare(y.dal)).map(u=>{
       const periodo = (u.dal===u.al) ? dataLeggibile(u.dal) : dataLeggibile(u.dal)+" → "+dataLeggibile(u.al);
