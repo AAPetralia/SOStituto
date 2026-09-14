@@ -362,7 +362,7 @@ const CRITERIA_DEFAULT = [
 let S = { orario:null, tab:"oggi", day:"LUN",
           doveMode:"docente", selDoc:"", selClasse:"", selHour:1,
           lingue:{ FR:"Basso", SP:"Martinelli" },
-          assentiOggi:{}, flagOggi:[], prospetto:null, chipAperto:"",
+          assentiOggi:{}, breveOggi:{}, recScartati:[], flagOggi:[], prospetto:null, chipAperto:"",
           override:{}, apertoRiga:"", flagDocSel:"",
           dataOggi:null, registro:{}, regApertoGiorno:"",
           alunnoAssenteOggi:[], alunnoSel:"", alunnoPanel:false,
@@ -388,6 +388,7 @@ function save(){ try{
   localStorage.setItem("sostituto_sync", JSON.stringify(S.sync||{}));
   localStorage.setItem("sostituto_recuperi", JSON.stringify(S.recuperi||[]));
   if(S.configCriteri && S.configCriteri.length) localStorage.setItem("sostituto_config", JSON.stringify(S.configCriteri));
+  localStorage.setItem("sostituto_recscartati", JSON.stringify(S.recScartati||[]));
   localStorage.setItem("sostituto_ruolo", S.ruolo||"completo");
 }catch(e){} }
 function load(){ try{
@@ -405,6 +406,7 @@ function load(){ try{
   const cf=localStorage.getItem("sostituto_config");
   if(cf){ const v=JSON.parse(cf); if(Array.isArray(v) && v.length) S.configCriteri=v; }
   const uf=localStorage.getItem("sostituto_uscfoglio"); if(uf) S.uscFoglio=JSON.parse(uf);
+  const rs=localStorage.getItem("sostituto_recscartati"); if(rs) S.recScartati=JSON.parse(rs);
   const ru=localStorage.getItem("sostituto_ruolo"); if(ru) S.ruolo=ru;
 }catch(e){} }
 
@@ -901,6 +903,7 @@ function applicaAssenzeNote(){
   for(const a of assenzeNoteAttive(iso)){
     if(a.docente in S.assentiOggi) continue;
     S.assentiOggi[a.docente] = (a.tipo==="breve" && a.ore && a.ore.length) ? a.ore.slice() : null;
+    S.breveOggi[a.docente] = (a.tipo==="breve");   /* deciso in Assenze note, non si richiede */
     S.daNote.push(a.docente);
   }
 }
@@ -1226,7 +1229,7 @@ function applicaStato(d){
   S.potAssign   = d.potAssign || {};
   S.recuperi    = d.recuperi || [];
   if(d.configCriteri) S.configCriteri = d.configCriteri;
-  S.prospetto=null; S.assentiOggi={}; S.noteApplicate=null; S.alunnoAssenteOggi=[];
+  S.prospetto=null; S.assentiOggi={}; S.breveOggi={}; S.noteApplicate=null; S.alunnoAssenteOggi=[];
   if(S.orario) S.day = giornoDaData(S.dataOggi||isoOggi());
   save(); saveRegistro();
 }
@@ -1412,7 +1415,13 @@ function renderOggi(){
     const ore=S.assentiOggi[n];
     const doc=o.docenti.find(d=>d.nome===n);
     const inClasse=o.ore.filter(hh=>["CLASSE","ARTIC","AR"].includes(statoCella(doc,S.day,hh,o.ore).t));
-    const et = ore ? "permesso · "+ore.map(h=>h+"ª").join(" ") : "tutto il giorno";
+    const base = ore ? ore.map(h=>h+"ª").join(" ") : "tutto il giorno";
+    const daNota0 = (S.daNote||[]).includes(n);
+    const marca = daNota0 ? "" :
+      (S.breveOggi[n]===true ? " · ⏱ da recuperare"
+       : S.breveOggi[n]===false ? ""
+       : " · ❓ motivo");
+    const et = base + marca;
     const aperto = S.chipAperto===n;
     // ore attualmente "assenti" = ore (se permesso) oppure tutte le inClasse (se giornata intera)
     const oreAssenti = new Set(ore || inClasse);
@@ -1428,6 +1437,19 @@ function renderOggi(){
           return `<div class="orab ${on?'on':''}" onclick="toggleOra('${esc(n)}',${h})">${h}ª</div>`;
         }).join("") +
         `</div></div>`;
+      /* motivo dell'assenza: lo indica l'utente, l'app non lo deduce più dalle ore */
+      const daNota = (S.daNote||[]).includes(n);
+      if(daNota){
+        orebar += `<div class="orebar"><div class="orebar-lbl">📌 Motivo già indicato in Assenze note${S.breveOggi[n]?" · permesso breve":""}</div></div>`;
+      } else {
+        const scelta = S.breveOggi[n];
+        orebar += `<div class="orebar">
+          <div class="orebar-lbl">È un permesso breve da recuperare?</div>
+          <div class="orebtns">
+            <div class="orab ${scelta===true?'on':''}" style="flex:1; min-width:96px" onclick="segnaBreve('${esc(n)}',true)">⏱ Sì, da recuperare</div>
+            <div class="orab ${scelta===false?'on':''}" style="flex:1; min-width:96px" onclick="segnaBreve('${esc(n)}',false)">No, altro motivo</div>
+          </div></div>`;
+      }
     }
     return `<div class="achip-wrap">
       <div class="achip${(S.daNote||[]).includes(n)?' danota':''}">
@@ -1541,6 +1563,12 @@ function toggleOra(nome, h){
   else S.assentiOggi[nome]=[...set].sort((a,b)=>a-b);
   S.prospetto=null; render();
 }
+/* ore in cui il docente è davvero in classe quel giorno */
+function oreInClasse(nome, g){
+  const o=S.orario; if(!o) return [];
+  const d=(o.docenti||[]).find(x=>x.nome===nome); if(!d) return [];
+  return o.ore.filter(h=>["CLASSE","ARTIC","AR","LINGUA"].includes(statoCella(d,g,h,o.ore).t));
+}
 /* sincronizza i debiti anche per i permessi brevi inseriti al volo nella scheda Sostituzioni
    (ore parziali oggi), non solo quelli pre-registrati nelle Assenze note. Un debito per
    docente/giorno, non duplicabile anche rigenerando più volte il prospetto. */
@@ -1548,16 +1576,23 @@ function sincronizzaRecuperiOggi(){
   S.recuperi = S.recuperi || [];
   const daNote = new Set(S.daNote || []);   // questi arrivano già dalle Assenze note: li salta
   const esistenti = new Set(S.recuperi.filter(r=>r.origine).map(r=>r.origine));
+  const scartati = new Set(S.recScartati || []);
   for(const nome in S.assentiOggi){
     const ore = S.assentiOggi[nome];
-    if(!Array.isArray(ore) || !ore.length) continue;   // null = giornata intera, non genera debito
     if(daNote.has(nome)) continue;                      // già coperto da sincronizzaRecuperi()
+    /* niente più deduzione dalla forma dell'assenza: conta solo ciò che è stato indicato.
+       Così un permesso breve che copre tutte le ore del giorno viene contato, e una
+       visita di due ore con certificato non genera un debito che non esiste. */
+    if(S.breveOggi[nome] !== true) continue;
     const chiave = "oggi:" + S.dataOggi + ":" + nome;
     if(esistenti.has(chiave)) continue;
+    if(scartati.has(chiave)) continue;                  // cancellato a mano: non deve rinascere
+    const nOre = Array.isArray(ore) && ore.length ? ore.length : oreInClasse(nome, S.day).length;
+    if(!nOre) continue;
     S.recuperi.push({
       id: "r" + Date.now() + Math.floor(Math.random()*1000),
       docente: nome,
-      ore: ore.length,
+      ore: nOre,
       data: S.dataOggi,
       scadenza: isoPiuGiorni(S.dataOggi, GG_SCADENZA),
       restituite: 0, chiuseManuale: 0,
@@ -1565,6 +1600,20 @@ function sincronizzaRecuperiOggi(){
       nota: ""
     });
   }
+}
+/* registra se l'assenza è un permesso breve. Cambiando idea, il debito già creato
+   viene tolto: la scelta resta l'unica fonte di verità. */
+function segnaBreve(nome, val){
+  S.breveOggi = S.breveOggi || {};
+  S.breveOggi[nome] = val;
+  if(val===false){
+    const chiave = "oggi:" + S.dataOggi + ":" + nome;
+    S.recuperi = (S.recuperi||[]).filter(r=>r.origine!==chiave);
+  } else {
+    /* se era stato scartato in precedenza, la nuova scelta lo riabilita */
+    S.recScartati = (S.recScartati||[]).filter(k=>k!=="oggi:"+S.dataOggi+":"+nome);
+  }
+  S.prospetto=null; save(); render();
 }
 function lanciaProspetto(){
   const o=S.orario;
@@ -1583,7 +1632,7 @@ function giornoDaData(iso){ const d=new Date(iso+"T12:00:00"); return SETT[d.get
 function dataLeggibile(iso){ const d=new Date(iso+"T12:00:00"); return NOMEGIORNO[SETT[d.getDay()]]+" "+String(d.getDate()).padStart(2,"0")+"/"+String(d.getMonth()+1).padStart(2,"0")+"/"+d.getFullYear(); }
 function cambiaData(iso){
   S.dataOggi = iso || isoOggi();
-  S.assentiOggi = {};          /* gli assenti sono del giorno: cambiando data si riparte */
+  S.assentiOggi = {}; S.breveOggi = {};   /* gli assenti sono del giorno: cambiando data si riparte */
   S.alunnoAssenteOggi = [];
   S.override = {}; S.chipAperto = "";
   S.noteApplicate = null;      /* così le assenze note della nuova data vengono caricate */
@@ -1752,7 +1801,7 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "13.09.2026";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const VERSIONE = "14.09.2026";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -1822,7 +1871,7 @@ function onFileBackup(ev){
     S.potAssign   = d.potAssign || {};
     S.recuperi    = d.recuperi || [];
     if(d.configCriteri) S.configCriteri = d.configCriteri;
-    S.prospetto=null; S.assentiOggi={}; S.noteApplicate=null; S.alunnoAssenteOggi=[];
+    S.prospetto=null; S.assentiOggi={}; S.breveOggi={}; S.noteApplicate=null; S.alunnoAssenteOggi=[];
     if(S.orario) S.day = giornoDaData(S.dataOggi||isoOggi());
     save(); saveRegistro();
     toast("Backup ripristinato");
@@ -1943,6 +1992,13 @@ function chiudiOraRecupero(id){
   if(debitoResiduo(r) > 0){ r.chiuseManuale = (r.chiuseManuale||0) + 1; save(); render(); }
 }
 function eliminaRecupero(id){
+  const r = (S.recuperi||[]).find(x=>x.id===id);
+  /* i debiti nati dalla scheda Sostituzioni si ricreavano a ogni rigenerazione del
+     prospetto: ora la cancellazione viene ricordata e non tornano più. */
+  if(r && r.origine && r.origine.indexOf("oggi:")===0){
+    S.recScartati = S.recScartati || [];
+    if(!S.recScartati.includes(r.origine)) S.recScartati.push(r.origine);
+  }
   S.recuperi = S.recuperi.filter(x=>x.id!==id); save(); render();
 }
 
@@ -2276,7 +2332,7 @@ function confermaNuovoAnno(){
   if(S.raSel.orario)   localStorage.removeItem("sostituto_v1");
 
   /* stato della giornata: sempre ripulito, deriva dai dati appena svuotati */
-  S.prospetto=null; S.assentiOggi={}; S.noteApplicate=null; S.alunnoAssenteOggi=[]; S.override={};
+  S.prospetto=null; S.assentiOggi={}; S.breveOggi={}; S.noteApplicate=null; S.alunnoAssenteOggi=[]; S.override={};
   S.raSel=null; S.raBk=false;
   save(); saveRegistro();
   alert("Fatto. " + (S.orario ? "L'orario è ancora in memoria." : "Ora importa l'orario del nuovo anno da Altro → Importa orario."));
