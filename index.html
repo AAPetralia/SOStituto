@@ -261,6 +261,39 @@
   #printarea{display:none}
   @media print{
     header, nav, main, #toast{display:none !important}
+    /* ---- coperture settimanali, A3: due giorni per pagina ---- */
+    .cp-head{border-bottom:1.5pt solid #000; padding-bottom:3px; margin-bottom:4px}
+    .cp-tit{font-size:14pt; font-weight:700}
+    .cp-sub{font-size:8pt; text-transform:uppercase; letter-spacing:.4px; margin-top:1px}
+    .cp-leg{display:flex; flex-wrap:wrap; gap:12px; font-size:7.5pt; margin-bottom:4px; align-items:center}
+    .cp-leg span{display:flex; align-items:center; gap:4px; white-space:nowrap}
+    .cp-leg i.sw{width:11px; height:11px; border:.6pt solid #777; display:inline-block; flex:none}
+    .cp-leg i.sw.v2{background:#9CD9B4} .cp-leg i.sw.v{background:#D5EFDF}
+    .cp-leg i.sw.a{background:#F7E4C4} .cp-leg i.sw.r{background:#F5D8D5}
+    .cp-leg i.sw.n{background:#fff}
+    .cp-lgn{color:#444}
+    .cp-conta{font-size:8pt; margin-bottom:4px; padding:2px 6px; border:.6pt solid #999; display:inline-block}
+    /* inline-block invece di flex: l'impaginazione a stampa lo gestisce molto meglio */
+    .cp-griglia{font-size:0}
+    .cp-day{display:inline-block; vertical-align:top; page-break-inside:avoid;
+      break-inside:avoid; margin:0 14px 6px 0; font-size:initial}
+    .cp-dtit{font-size:9.5pt; font-weight:700; letter-spacing:1.2px; margin-bottom:1px}
+    /* il font qui fissa anche l'unità ch usata per le colonne */
+    .cp-tb{border-collapse:collapse; table-layout:fixed; font-size:6.6pt}
+    .cp-tb th, .cp-tb td{border:.5pt solid #999; padding:.8pt 2.5pt; vertical-align:top}
+    .cp-tb thead th{background:#333; color:#fff; font-size:7pt; text-align:center; padding:1.5pt}
+    .cp-tb thead th:first-child{text-align:left}
+    .cp-c0{width:26px}
+    .cp-tb tbody th{background:#EDEAE0; font-size:8pt; font-weight:700; text-align:left}
+    .cp-tb td{height:13pt}
+    .cp-v2{background:#9CD9B4} .cp-v{background:#D5EFDF}
+    .cp-a{background:#F7E4C4}  .cp-r{background:#F5D8D5}
+    .cp-n{background:#fff}
+    .cp-cur{font-size:6.6pt; line-height:1.1}
+    .cp-sos{font-size:6.6pt; font-weight:700; line-height:1.1}
+    .cp-bloc{text-decoration:underline}
+    .cp-asi{font-size:6.1pt; font-style:italic; color:#333; line-height:1.08}
+    .cp-pie{font-size:7.5pt; color:#444; margin-top:4px; border-top:.6pt solid #999; padding-top:3px}
     #printarea{display:block !important}
     body{background:#fff; color:#000; margin:0}
     .pr-head{border-bottom:2px solid #000; padding-bottom:6px; margin-bottom:12px}
@@ -1067,7 +1100,9 @@ const ISTITUTO = "Istituto Comprensivo \"Via Tacito\" · Plesso Mestica — Civi
 function impostaPagina(orientamento){
   let st = document.getElementById("pagecss");
   if(!st){ st = document.createElement("style"); st.id="pagecss"; document.head.appendChild(st); }
-  st.textContent = `@page { size: A4 ${orientamento}; margin: 12mm 10mm; }`;
+  const f = /^A[34] /.test(orientamento) ? orientamento : "A4 "+orientamento;
+  const marg = f.indexOf("A3")===0 ? "10mm 8mm" : "12mm 10mm";
+  st.textContent = `@page { size: ${f}; margin: ${marg}; }`;
 }
 /* data in forma adatta a un nome di file: 20-10-2026 */
 function dataFile(iso){
@@ -1097,6 +1132,75 @@ function oneriEsteso(r){
   return "";
 }
 function classePr(r){ return (r.gruppo && r.lingua) ? r.gruppo.replace("·","-") : r.classe; }
+
+
+/* ---- COPERTURE della settimana: A3 orizzontale, un riquadro per giorno ----
+   Nelle celle i cognomi di chi è in aula. Serve come quadro d'insieme da
+   appendere o da portare a una riunione, non come strumento del giorno. */
+function cogn(n){ return String(n||"").split(/\s+/)[0]; }
+
+function stampaCoperture(){
+  const o=S.orario;
+  if(!o){ toast("Serve prima l'orario"); return; }
+  const classi=tutteLeClassi(o), ore=o.ore;
+  const tot={v2:0,v:0,a:0,r:0};
+  /* le colonne si stringono sul cognome più lungo che comparirà davvero:
+     lo spazio guadagnato serve ad affiancare due giorni per riga */
+  let lung=6;
+  classi.forEach(c=>o.giorni.forEach(g=>ore.forEach(h=>{
+    const x=statoCopertura(c,g,h);
+    x.cur.concat(x.sos).forEach(n=>lung=Math.max(lung,cogn(n).length));
+    x.sos.forEach(n=>{ if(!x.liberi.includes(n)) lung=Math.max(lung,cogn(n).length+2); });
+    x.asis.forEach(n=>lung=Math.max(lung,cogn(n).length));
+  })));
+  const wCol=(lung+1.2).toFixed(1)+"ch";
+
+  const blocchi = o.giorni.map(g=>{
+    const righe = classi.map(c=>{
+      const celle = ore.map(h=>{
+        const x=statoCopertura(c,g,h);
+        if(tot[x.t]!==undefined) tot[x.t]++;
+        if(x.t==="n") return `<td class="cp-n"></td>`;
+        let dentro = x.cur.map(n=>`<div class="cp-cur">${esc(cogn(n))}</div>`).join("");
+        dentro += x.sos.map(n=>{
+          const bl=!x.liberi.includes(n);
+          return `<div class="cp-sos${bl?" cp-bloc":""}">${esc(cogn(n))}${bl?" ✦":""}</div>`;
+        }).join("");
+        dentro += x.asis.map(n=>`<div class="cp-asi">${esc(cogn(n))}</div>`).join("");
+        return `<td class="cp-${x.t}">${dentro}</td>`;
+      }).join("");
+      return `<tr><th>${esc(c)}</th>${celle}</tr>`;
+    }).join("");
+    return `<div class="cp-day">
+      <div class="cp-dtit">${esc(g)}</div>
+      <table class="cp-tb">
+        <colgroup><col class="cp-c0">${ore.map(()=>`<col style="width:${wCol}">`).join("")}</colgroup>
+        <thead><tr><th>Classe</th>${ore.map(h=>`<th>${h}ª</th>`).join("")}</tr></thead>
+        <tbody>${righe}</tbody>
+      </table></div>`;
+  }).join("");
+
+  const html = `
+  <div class="cp-wrap">
+    <div class="cp-head">
+      <div class="cp-tit">Coperture settimanali — seconda presenza in aula</div>
+      <div class="cp-sub">${esc(ISTITUTO)}</div>
+    </div>
+    <div class="cp-leg">
+      <span><i class="sw v2"></i>doppio sostegno</span>
+      <span><i class="sw v"></i>un sostegno spostabile</span>
+      <span><i class="sw a"></i>sostegno vincolato (✦)</span>
+      <span><i class="sw r"></i>solo curricolare</span>
+      <span><i class="sw n"></i>nessuna lezione</span>
+      <span class="cp-lgn">tondo = curricolare · <b>grassetto</b> = sostegno · <i>corsivo</i> = assistente comunale</span>
+    </div>
+    <div class="cp-conta">Settimana: ${tot.v2} celle con doppia riserva · ${tot.v} con riserva · ${tot.a} con sostegno vincolato · <b>${tot.r} senza alcuna riserva</b></div>
+    <div class="cp-griglia">${blocchi}</div>
+    <div class="cp-pie">Gli assistenti all'autonomia non sostituiscono e non vanno sostituiti: la loro presenza non costituisce riserva.</div>
+  </div>`;
+
+  lanciaStampa(html, "A3 landscape", "Coperture-settimanali");
+}
 
 /* ---- PROSPETTO del giorno: A4 orizzontale, con colonna firma (circ. prot. 0011096) ---- */
 function stampaProspetto(){
@@ -1850,7 +1954,7 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "20.09.2026b";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const VERSIONE = "20.09.2026e";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -2230,6 +2334,7 @@ function renderCoperture(){
       <div class="lg"><div class="sw n"><span class="cop-pall" style="position:static"></span></div><div><b>Pallino</b> — c'è un assistente comunale: altro adulto in aula, ma non sostituisce e non va sostituito.</div></div>
     </div>
 
+    <button class="btn" style="width:100%; margin-top:14px" onclick="stampaCoperture()">🖨 Stampa la settimana (PDF A3)</button>
     ${(S.assistenti&&S.assistenti.length)
       ? `<p class="hint" style="margin-top:14px">${S.assistenti.length} assistenti caricati · <span style="color:var(--teal); font-weight:600" onclick="S.tab='assist'; render()">aggiorna</span></p>`
       : `<button class="btn ghost" style="width:100%; margin-top:14px" onclick="S.tab='assist'; render()">+ Importa orario assistenti</button>`}`;
@@ -2304,27 +2409,46 @@ function leggiAssistenti(wb){
   const matCol=dayRow.findIndex(x=>up(x)==="MATERIE");
   const docCol=dayRow.findIndex(x=>up(x)==="DOCENTI");
   const DAY=["LUN","MAR","MER","GIO","VEN","SAB"];
-  const col2slot={}; let curDay=null;
+
+  /* La riga sotto l'intestazione contiene i numeri delle ore, oppure è già il primo
+     docente: capita nei file compilati a mano. Distinguo guardando se sotto le colonne
+     dei giorni ci sono numeri puri; se ci trovo codici classe (3B, 2C) è una riga dati,
+     e le ore le deduco dalla posizione dentro il blocco del giorno. */
+  let numeri=0, testi=0;
+  for(let c=docCol+1;c<dayRow.length;c++){
+    const v=String(hourRow[c]==null?"":hourRow[c]).trim();
+    if(!v) continue;
+    if(/^\d{1,2}$/.test(v)) numeri++; else testi++;
+  }
+  const rigaOre = numeri>0 && numeri>=testi;
+
+  const col2slot={}; let curDay=null, pos=0;
   for(let c=docCol+1;c<dayRow.length;c++){
     const dv=up(dayRow[c]).slice(0,3);
-    if(DAY.includes(dv)) curDay=dv;
-    const hv=String(hourRow[c]==null?"":hourRow[c]).match(/\d+/);
-    if(curDay && hv) col2slot[c]={g:curDay,h:+hv[0]};
+    if(DAY.includes(dv)){ curDay=dv; pos=0; }
+    if(!curDay) continue;
+    if(rigaOre){
+      const hv=String(hourRow[c]==null?"":hourRow[c]).match(/\d+/);
+      if(hv) col2slot[c]={g:curDay,h:+hv[0]};
+    } else {
+      pos++; col2slot[c]={g:curDay,h:pos};
+    }
   }
   if(!Object.keys(col2slot).length) return {errore:"Non riconosco la griglia dei giorni e delle ore."};
+  const primaRiga = hdr + (rigaOre ? 2 : 1);
 
   /* prima passata: il file dichiara da qualche parte una sezione ASSISTENTI?
      Va saputo PRIMA di scorrere le righe, altrimenti le categorie che stanno
      sopra il marcatore (tipicamente il sostegno) passerebbero il filtro. */
   let misto=false;
   if(matCol>=0){
-    for(let r=hdr+2;r<grid.length;r++){
+    for(let r=primaRiga;r<grid.length;r++){
       const m=String((grid[r]||[])[matCol]==null?"":(grid[r]||[])[matCol]);
       if(/ASSISTENT/i.test(m)){ misto=true; break; }
     }
   }
   const lista=[]; let cat=null;
-  for(let r=hdr+2;r<grid.length;r++){
+  for(let r=primaRiga;r<grid.length;r++){
     const row=grid[r]||[];
     const mat = matCol>=0 ? String(row[matCol]==null?"":row[matCol]) : "";
     if(mat.trim()) cat=mat.toUpperCase();
