@@ -1390,7 +1390,10 @@ function saveSync(){ try{ localStorage.setItem("sostituto_sync", JSON.stringify(
 function statoDaCondividere(){
   return { orario:S.orario||null, lingue:S.lingue||{}, flagOggi:S.flagOggi||[],
     registro:S.registro||{}, uscite:S.uscite||[], assenzeNote:S.assenzeNote||[],
-    pnoOn:S.pnoOn||[], potAssign:S.potAssign||{}, recuperi:S.recuperi||[] };
+    pnoOn:S.pnoOn||[], potAssign:S.potAssign||{}, recuperi:S.recuperi||[],
+    /* da tenere allineati con datiBackup(): tutto ciò che un altro dispositivo
+       deve ritrovare, non solo l'orario e il registro */
+    assistenti:S.assistenti||[], configCriteri:S.configCriteri||null, potAuto:S.potAuto||[] };
 }
 function applicaStato(d){
   if(!d) return;
@@ -1405,6 +1408,7 @@ function applicaStato(d){
   S.recuperi    = d.recuperi || [];
   if(d.configCriteri) S.configCriteri = d.configCriteri;
   if(d.assistenti) S.assistenti = d.assistenti;
+  if(d.potAuto) S.potAuto = d.potAuto;
   S.prospetto=null; S.assentiOggi={}; S.breveOggi={}; S.noteApplicate=null; S.alunnoAssenteOggi=[];
   if(S.orario) S.day = giornoDaData(S.dataOggi||isoOggi());
   save(); saveRegistro();
@@ -1978,7 +1982,7 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "20.09.2026i";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const VERSIONE = "20.09.2026l";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -1993,7 +1997,8 @@ function datiBackup(){
     potAssign: S.potAssign || {},
     recuperi: S.recuperi || [],
     configCriteri: S.configCriteri || null,
-    assistenti: S.assistenti || []
+    assistenti: S.assistenti || [],
+    potAuto: S.potAuto || []
   };
 }
 function riepilogoBackup(d){
@@ -2050,6 +2055,7 @@ function onFileBackup(ev){
     S.recuperi    = d.recuperi || [];
     if(d.configCriteri) S.configCriteri = d.configCriteri;
     if(d.assistenti) S.assistenti = d.assistenti;
+    if(d.potAuto) S.potAuto = d.potAuto;
     S.prospetto=null; S.assentiOggi={}; S.breveOggi={}; S.noteApplicate=null; S.alunnoAssenteOggi=[];
     if(S.orario) S.day = giornoDaData(S.dataOggi||isoOggi());
     save(); saveRegistro();
