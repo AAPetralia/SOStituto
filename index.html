@@ -1137,7 +1137,19 @@ function classePr(r){ return (r.gruppo && r.lingua) ? r.gruppo.replace("·","-")
 /* ---- COPERTURE della settimana: A3 orizzontale, un riquadro per giorno ----
    Nelle celle i cognomi di chi è in aula. Serve come quadro d'insieme da
    appendere o da portare a una riunione, non come strumento del giorno. */
-function cogn(n){ return String(n||"").split(/\s+/)[0]; }
+/* Il cognome può essere di più parole: "DEL MASTRO Pamela", "LO SCOCCO Giusy".
+   Nei file di Mestica il cognome è in maiuscolo e il nome no, quindi prendo tutte
+   le parole maiuscole iniziali. Se non ce ne sono (file scritti in minuscolo,
+   "Mayerle Anna") ricado sulla prima parola. */
+function cogn(n){
+  const t=String(n||"").trim().split(/\s+/).filter(Boolean);
+  if(!t.length) return "";
+  const su=[];
+  for(const w of t){
+    if(w===w.toUpperCase() && /[A-ZÀ-Ù]/.test(w)) su.push(w); else break;
+  }
+  return su.length ? su.join(" ") : t[0];
+}
 
 function stampaCoperture(){
   const o=S.orario;
@@ -1954,7 +1966,7 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "20.09.2026e";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const VERSIONE = "20.09.2026g";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -2316,6 +2328,23 @@ function renderCoperture(){
       <tbody>${corpo}</tbody>
     </table></div>
 
+    ${(()=>{
+      /* diagnosi: cosa vede davvero l'app dentro l'orario caricato */
+      const mat={}; let nSost=0;
+      (o.docenti||[]).forEach(d=>{
+        const m=(d.materia||"(vuota)").trim()||"(vuota)";
+        mat[m]=(mat[m]||0)+1;
+        if(isSost(d)) nSost++;
+      });
+      const voci=Object.entries(mat).sort((a,b)=>b[1]-a[1]);
+      const male = nSost===0;
+      return `<div class="promemo"${male?' style="background:#F4DAD7; border-left-color:var(--red)"':''}>
+        <b>${(o.docenti||[]).length} docenti nell'orario · ${nSost} riconosciuti come sostegno</b>
+        ${male?`<br><b>Nessun sostegno riconosciuto.</b> L'app cerca la parola "sostegno" nella colonna MATERIE. Ecco cosa c'è scritto davvero:`:``}
+        <div style="font-size:12.5px; margin-top:5px; line-height:1.5">${
+          voci.map(([m,n])=>`${esc(m)} <span style="color:#9A9484">×${n}</span>`).join(" · ")}</div>
+      </div>`;
+    })()}
     <div class="copriep">
       <div class="rq"><div class="n" style="color:#14543A">${conta.v2}</div><div class="l">doppia riserva</div></div>
       <div class="rq"><div class="n" style="color:var(--v-tx)">${conta.v}</div><div class="l">con riserva</div></div>
@@ -2334,7 +2363,8 @@ function renderCoperture(){
       <div class="lg"><div class="sw n"><span class="cop-pall" style="position:static"></span></div><div><b>Pallino</b> — c'è un assistente comunale: altro adulto in aula, ma non sostituisce e non va sostituito.</div></div>
     </div>
 
-    <button class="btn" style="width:100%; margin-top:14px" onclick="stampaCoperture()">🖨 Stampa la settimana (PDF A3)</button>
+    <div class="promemo" style="margin-top:14px">Nella finestra di stampa scegli <b>A3</b> e <b>orizzontale</b>, e accendi <b>Grafica di sfondo</b> (in Altre impostazioni): senza quella il browser scarta i colori e restano solo i nomi.</div>
+    <button class="btn" style="width:100%" onclick="stampaCoperture()">🖨 Stampa la settimana (PDF A3)</button>
     ${(S.assistenti&&S.assistenti.length)
       ? `<p class="hint" style="margin-top:14px">${S.assistenti.length} assistenti caricati · <span style="color:var(--teal); font-weight:600" onclick="S.tab='assist'; render()">aggiorna</span></p>`
       : `<button class="btn ghost" style="width:100%; margin-top:14px" onclick="S.tab='assist'; render()">+ Importa orario assistenti</button>`}`;
