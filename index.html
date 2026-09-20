@@ -177,6 +177,9 @@
   .prow.manuale .pmot{color:var(--teal); font-weight:700}
   .prow{cursor:pointer}
   .prow .chev{font-size:11px; color:var(--ink-soft); margin-left:3px}
+  .alt-piu{padding:9px 12px; text-align:center; font-size:13px; font-weight:600;
+    color:var(--teal); cursor:pointer; border-top:1px solid var(--rule-soft)}
+  .alt-piu:active{background:var(--paper)}
   .altbox{background:#EFEBDD; border-top:1px solid var(--rule); padding:8px 12px 10px}
   .alt-lbl{font-size:12px; color:var(--ink-soft); margin-bottom:6px; padding-left:2px}
   .altrow{display:flex; align-items:center; justify-content:space-between; gap:8px;
@@ -362,7 +365,7 @@ const CRITERIA_DEFAULT = [
 let S = { orario:null, tab:"oggi", day:"LUN",
           doveMode:"docente", selDoc:"", selClasse:"", selHour:1,
           lingue:{ FR:"Basso", SP:"Martinelli" },
-          assentiOggi:{}, breveOggi:{}, recScartati:[], flagOggi:[], prospetto:null, chipAperto:"",
+          assentiOggi:{}, breveOggi:{}, recScartati:[], flagOggi:[], prospetto:null, chipAperto:"", altTutte:"",
           override:{}, apertoRiga:"", flagDocSel:"",
           dataOggi:null, registro:{}, regApertoGiorno:"",
           alunnoAssenteOggi:[], alunnoSel:"", alunnoPanel:false,
@@ -1682,7 +1685,7 @@ function scegliManuale(assente, h, nome){
   S.apertoRiga = "";
   lanciaProspetto();
 }
-function apriAlternative(assente,h){ S.apertoRiga = (S.apertoRiga===assente+"|"+h)?"":(assente+"|"+h); render(); }
+function apriAlternative(assente,h){ S.altTutte=""; S.apertoRiga = (S.apertoRiga===assente+"|"+h)?"":(assente+"|"+h); render(); }
 
 /* etichetta classe: per le articolate mostra il gruppo (2A·2C), altrimenti la classe */
 function clLabel(e){
@@ -1801,7 +1804,7 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "14.09.2026c";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const VERSIONE = "20.09.2026";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -2689,12 +2692,22 @@ function renderProspettoHTML(p){
           <span class="pto">${esc(e.scelto)} ${chevron}</span><span class="pmot">${esc(motivoLabel(e))}</span></div>${riceWarn}`;
       }
       if(aperto){
-        const alt = alternativeCella(e).filter(a=>a.nome!==e.scelto).slice(0,3);
+        /* di norma mostro le prime 3 della graduatoria. Le vie residuali (tipicamente
+           il sostegno di altra classe) stanno sotto il potenziamento e resterebbero
+           invisibili: "mostra tutte" le fa vedere senza allungare sempre l'elenco. */
+        const tutte = alternativeCella(e).filter(a=>a.nome!==e.scelto);
+        const chiave = e.a.nome+"|"+e.h;
+        const espanso = S.altTutte === chiave;
+        const alt = espanso ? tutte : tutte.slice(0,3);
         html += `<div class="altbox">`;
         if(alt.length){
           html += `<div class="alt-lbl">Al posto ${e.scelto?'di '+esc(e.scelto):'(vuoto)'}, scegli:</div>`;
           html += alt.map(a=>`<div class="altrow" onclick="event.stopPropagation(); scegliManuale('${esc(e.a.nome)}',${e.h},'${esc(a.nome)}')">
             <span>${esc(a.nome)}</span><span class="altmot">${esc(a.motivo)}</span></div>`).join("");
+          if(tutte.length>3){
+            html += `<div class="alt-piu" onclick="event.stopPropagation(); S.altTutte='${espanso?"":esc(chiave)}'; render()">
+              ${espanso ? "▲ mostra solo le prime 3" : "▼ mostra tutte ("+tutte.length+")"}</div>`;
+          }
         } else {
           html += `<div class="alt-lbl">Nessun altro docente disponibile per quest'ora.</div>`;
         }
