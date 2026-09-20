@@ -295,7 +295,11 @@
     .cp-asi{font-size:6.1pt; font-style:italic; color:#333; line-height:1.08}
     .cp-pie{font-size:7.5pt; color:#444; margin-top:4px; border-top:.6pt solid #999; padding-top:3px}
     #printarea{display:block !important}
-    body{background:#fff; color:#000; margin:0}
+    /* il layout a schermo è largo al massimo 640px per il telefono: in stampa
+       quel limite va tolto, altrimenti su A3 il contenuto resta in una colonna
+       stretta e metà foglio resta bianco */
+    body{background:#fff; color:#000; margin:0; max-width:none; width:auto; padding:0}
+    #printarea{max-width:none; width:auto}
     .pr-head{border-bottom:2px solid #000; padding-bottom:6px; margin-bottom:12px}
     .pr-ist{font-size:10pt; letter-spacing:.4px; text-transform:uppercase}
     .pr-tit{font-size:16pt; font-weight:700; margin-top:3px}
@@ -1966,7 +1970,7 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "20.09.2026g";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const VERSIONE = "20.09.2026h";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
