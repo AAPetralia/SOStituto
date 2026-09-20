@@ -270,6 +270,7 @@
     .cp-leg i.sw{width:11px; height:11px; border:.6pt solid #777; display:inline-block; flex:none}
     .cp-leg i.sw.v2{background:#9CD9B4} .cp-leg i.sw.v{background:#D5EFDF}
     .cp-leg i.sw.a{background:#F7E4C4} .cp-leg i.sw.r{background:#F5D8D5}
+    .cp-leg i.sw.p{background:#D6E8F5}
     .cp-leg i.sw.n{background:#fff}
     .cp-lgn{color:#444}
     .cp-conta{font-size:8pt; margin-bottom:4px; padding:2px 6px; border:.6pt solid #999; display:inline-block}
@@ -288,10 +289,12 @@
     .cp-tb td{height:13pt}
     .cp-v2{background:#9CD9B4} .cp-v{background:#D5EFDF}
     .cp-a{background:#F7E4C4}  .cp-r{background:#F5D8D5}
+    .cp-p{background:#D6E8F5}
     .cp-n{background:#fff}
     .cp-cur{font-size:6.6pt; line-height:1.1}
     .cp-sos{font-size:6.6pt; font-weight:700; line-height:1.1}
     .cp-bloc{text-decoration:underline}
+    .cp-pot{font-size:6.6pt; font-weight:700; color:#0A4A7F; line-height:1.1}
     .cp-asi{font-size:6.1pt; font-style:italic; color:#333; line-height:1.08}
     .cp-pie{font-size:7.5pt; color:#444; margin-top:4px; border-top:.6pt solid #999; padding-top:3px}
     #printarea{display:block !important}
@@ -368,6 +371,7 @@
   .cop.v2{background:#BCE6CC}
   .cop.v{background:#DCF2E4}
   .cop.a{background:#FAEBD2}
+  .cop.p{background:#DCEBF7}
   .cop.r{background:#F7DEDC}
   .cop.n{background:transparent}
   .cop-pall{width:7px;height:7px;border-radius:50%;background:var(--teal);
@@ -444,7 +448,7 @@ const CRITERIA_DEFAULT = [
 let S = { orario:null, tab:"oggi", day:"LUN",
           doveMode:"docente", selDoc:"", selClasse:"", selHour:1,
           lingue:{ FR:"Basso", SP:"Martinelli" },
-          assentiOggi:{}, breveOggi:{}, recScartati:[], assistenti:[], copGiorno:"", copSel:null, flagOggi:[], prospetto:null, chipAperto:"", altTutte:"",
+          assentiOggi:{}, breveOggi:{}, recScartati:[], assistenti:[], copGiorno:"", copSel:null, potAuto:[], flagOggi:[], prospetto:null, chipAperto:"", altTutte:"",
           override:{}, apertoRiga:"", flagDocSel:"",
           dataOggi:null, registro:{}, regApertoGiorno:"",
           alunnoAssenteOggi:[], alunnoSel:"", alunnoPanel:false,
@@ -472,6 +476,7 @@ function save(){ try{
   if(S.configCriteri && S.configCriteri.length) localStorage.setItem("sostituto_config", JSON.stringify(S.configCriteri));
   localStorage.setItem("sostituto_recscartati", JSON.stringify(S.recScartati||[]));
   localStorage.setItem("sostituto_assistenti", JSON.stringify(S.assistenti||[]));
+  localStorage.setItem("sostituto_potauto", JSON.stringify(S.potAuto||[]));
   localStorage.setItem("sostituto_ruolo", S.ruolo||"completo");
 }catch(e){} }
 function load(){ try{
@@ -491,6 +496,7 @@ function load(){ try{
   const uf=localStorage.getItem("sostituto_uscfoglio"); if(uf) S.uscFoglio=JSON.parse(uf);
   const rs=localStorage.getItem("sostituto_recscartati"); if(rs) S.recScartati=JSON.parse(rs);
   const as=localStorage.getItem("sostituto_assistenti"); if(as) S.assistenti=JSON.parse(as);
+  const pau=localStorage.getItem("sostituto_potauto"); if(pau) S.potAuto=JSON.parse(pau);
   const ru=localStorage.getItem("sostituto_ruolo"); if(ru) S.ruolo=ru;
 }catch(e){} }
 
@@ -1182,6 +1188,7 @@ function stampaCoperture(){
           const bl=!x.liberi.includes(n);
           return `<div class="cp-sos${bl?" cp-bloc":""}">${esc(cogn(n))}${bl?" ✦":""}</div>`;
         }).join("");
+        dentro += (x.pot||[]).map(n=>`<div class="cp-pot">${esc(cogn(n))} ⚡</div>`).join("");
         dentro += x.asis.map(n=>`<div class="cp-asi">${esc(cogn(n))}</div>`).join("");
         return `<td class="cp-${x.t}">${dentro}</td>`;
       }).join("");
@@ -1206,6 +1213,7 @@ function stampaCoperture(){
       <span><i class="sw v2"></i>doppio sostegno</span>
       <span><i class="sw v"></i>un sostegno spostabile</span>
       <span><i class="sw a"></i>sostegno vincolato (✦)</span>
+      <span><i class="sw p"></i>potenziamento assegnato</span>
       <span><i class="sw r"></i>solo curricolare</span>
       <span><i class="sw n"></i>nessuna lezione</span>
       <span class="cp-lgn">tondo = curricolare · <b>grassetto</b> = sostegno · <i>corsivo</i> = assistente comunale</span>
@@ -1970,7 +1978,7 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "20.09.2026h";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const VERSIONE = "20.09.2026i";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -2287,17 +2295,91 @@ function assistentiIn(classe, g, h){
 }
 
 /* v2 doppia riserva · v riserva · a sostegno vincolato · r solo curricolare · n nessuna lezione */
+/* potenziatori assegnati a questa classe in questa ora (scheda Potenziamento) */
+function potIn(classe, g, h){
+  const pa=S.potAssign||{}, out=[];
+  for(const k in pa){
+    if(pa[k]!==classe) continue;
+    const i=k.lastIndexOf("|"), j=k.lastIndexOf("|", i-1);
+    if(k.slice(j+1,i)===g && +k.slice(i+1)===h) out.push(k.slice(0,j));
+  }
+  return out;
+}
+
 function statoCopertura(classe, g, h){
   const {cur, sos} = presenzeIn(classe,g,h);
   const asis = assistentiIn(classe,g,h);
-  if(!cur.length && !sos.length) return {t:"n", cur, sos, asis, liberi:[]};
+  if(!cur.length && !sos.length) return {t:"n", cur, sos, asis, pot:[], liberi:[]};
+  const pot = potIn(classe,g,h);
   const liberi = sos.filter(n=>!(S.flagOggi||[]).includes(n+"|"+classe));
   let t;
-  if(!sos.length)          t = "r";
+  if(!sos.length)          t = pot.length ? "p" : "r";   /* p = turata dal potenziamento */
   else if(!liberi.length)  t = "a";
   else if(liberi.length>1 || sos.length>1) t = "v2";
   else                     t = "v";
-  return {t, cur, sos, asis, liberi};
+  return {t, cur, sos, asis, pot, liberi};
+}
+
+/* ---- abbinamento potenziamento → celle rosse ----
+   Offerta: le ore P di ciascun potenziatore, escluse le Pno e quelle già assegnate.
+   Domanda: le celle senza alcuna seconda presenza.
+   In ogni ora si incrociano le due liste. Le classi più scoperte nella settimana
+   vengono servite per prime, perché hanno meno occasioni di essere raggiunte;
+   a parità, va il docente che conosce la classe, e fra questi chi ha ricevuto
+   meno assegnazioni, così il carico resta distribuito. */
+function proponiPotenziamento(){
+  const o=S.orario; if(!o) return;
+  const classi=tutteLeClassi(o);
+  const pa=S.potAssign={...(S.potAssign||{})};
+  const pno=new Set(S.pnoOn||[]);
+
+  /* quanto è scoperta ciascuna classe nella settimana */
+  const scoperte={};
+  classi.forEach(c=>{ scoperte[c]=0;
+    o.giorni.forEach(g=>o.ore.forEach(h=>{ if(statoCopertura(c,g,h).t==="r") scoperte[c]++; })); });
+
+  const carico={};
+  orePotenziamento(o).forEach(({doc,slot})=>{
+    carico[doc.nome]=slot.filter(s=>pa[doc.nome+"|"+s.g+"|"+s.h]).length;
+  });
+
+  const nuovi=[];
+  o.giorni.forEach(g=>o.ore.forEach(h=>{
+    /* chi è libero in questa ora */
+    let liberi = orePotenziamento(o)
+      .filter(({doc,slot})=> slot.some(s=>s.g===g&&s.h===h))
+      .map(({doc})=>doc)
+      .filter(d=> !pno.has(d.nome+"|"+g+"|"+h) && !pa[d.nome+"|"+g+"|"+h]);
+    if(!liberi.length) return;
+    /* quali classi restano scoperte in questa ora */
+    const rosse = classi.filter(c=>statoCopertura(c,g,h).t==="r")
+                        .sort((a,b)=> scoperte[b]-scoperte[a] || a.localeCompare(b));
+    for(const c of rosse){
+      if(!liberi.length) break;
+      const conosce = liberi.filter(d=>classiDi(d).has(c));
+      const rosa = conosce.length ? conosce : liberi;
+      rosa.sort((x,y)=> (carico[x.nome]||0)-(carico[y.nome]||0) || x.nome.localeCompare(y.nome));
+      const scelto = rosa[0];
+      const key = scelto.nome+"|"+g+"|"+h;
+      pa[key]=c; carico[scelto.nome]=(carico[scelto.nome]||0)+1;
+      nuovi.push(key);
+      liberi = liberi.filter(d=>d!==scelto);
+    }
+  }));
+
+  S.potAuto = (S.potAuto||[]).concat(nuovi);
+  save(); render();
+  toast(nuovi.length ? nuovi.length+" ore assegnate" : "Nessuna assegnazione possibile");
+}
+
+function togliProposte(){
+  const auto=new Set(S.potAuto||[]);
+  if(!auto.size){ toast("Nessuna proposta da togliere"); return; }
+  if(!confirm("Tolgo le "+auto.size+" assegnazioni proposte? Quelle fatte a mano restano.")) return;
+  const pa={...(S.potAssign||{})};
+  auto.forEach(k=>delete pa[k]);
+  S.potAssign=pa; S.potAuto=[];
+  save(); render();
 }
 
 function renderCoperture(){
@@ -2307,7 +2389,7 @@ function renderCoperture(){
   S.copGiorno = o.giorni.includes(S.copGiorno) ? S.copGiorno : (o.giorni.includes(S.day)?S.day:o.giorni[0]);
   const g=S.copGiorno, classi=tutteLeClassi(o), ore=o.ore;
 
-  const conta={v2:0,v:0,a:0,r:0,asis:0};
+  const conta={v2:0,v:0,a:0,r:0,p:0,asis:0};
   const celle={};
   classi.forEach(c=>{ celle[c]=ore.map(h=>{
     const x=statoCopertura(c,g,h);
@@ -2353,6 +2435,7 @@ function renderCoperture(){
       <div class="rq"><div class="n" style="color:#14543A">${conta.v2}</div><div class="l">doppia riserva</div></div>
       <div class="rq"><div class="n" style="color:var(--v-tx)">${conta.v}</div><div class="l">con riserva</div></div>
       <div class="rq"><div class="n" style="color:var(--a-tx)">${conta.a}</div><div class="l">vincolato</div></div>
+      <div class="rq"><div class="n" style="color:#0A4A7F">${conta.p}</div><div class="l">dal potenz.</div></div>
       <div class="rq"><div class="n" style="color:var(--r-tx)">${conta.r}</div><div class="l">senza riserva</div></div>
     </div>
 
@@ -2363,10 +2446,16 @@ function renderCoperture(){
       <div class="lg"><div class="sw v2"></div><div><b>Verde scuro</b> — più di un sostegno in aula: c'è margine anche se uno resta.</div></div>
       <div class="lg"><div class="sw v"></div><div><b>Verde</b> — un sostegno che, se serve, può coprire altrove.</div></div>
       <div class="lg"><div class="sw a"></div><div><b>Arancio</b> — il sostegno c'è ma è intoccabile: presidia un caso grave, non è riserva.</div></div>
+      <div class="lg"><div class="sw p"></div><div><b>Azzurro</b> — ora scoperta a cui è stato assegnato un potenziatore.</div></div>
       <div class="lg"><div class="sw r"></div><div><b>Rosso</b> — solo il curricolare. Se manca lui, la classe resta senza nessuno.</div></div>
       <div class="lg"><div class="sw n"><span class="cop-pall" style="position:static"></span></div><div><b>Pallino</b> — c'è un assistente comunale: altro adulto in aula, ma non sostituisce e non va sostituito.</div></div>
     </div>
 
+    <button class="btn" style="width:100%; margin-top:14px" onclick="proponiPotenziamento()">⚡ Assegna il potenziamento alle celle rosse</button>
+    ${(S.potAuto&&S.potAuto.length)
+      ? `<button class="btn ghost" style="width:100%; margin-top:8px" onclick="togliProposte()">Togli le ${S.potAuto.length} proposte</button>
+         <p class="hint">Le assegnazioni finiscono nella scheda Potenziamento e nel prospetto da affiggere. Non cambiano le sostituzioni: un potenziatore assegnato resta disponibile se serve.</p>`
+      : `<p class="hint">Riempie le ore scoperte con i potenziatori liberi in quell'ora, senza toccare le assegnazioni fatte a mano.</p>`}
     <div class="promemo" style="margin-top:14px">Nella finestra di stampa scegli <b>A3</b> e <b>orizzontale</b>, e accendi <b>Grafica di sfondo</b> (in Altre impostazioni): senza quella il browser scarta i colori e restano solo i nomi.</div>
     <button class="btn" style="width:100%" onclick="stampaCoperture()">🖨 Stampa la settimana (PDF A3)</button>
     ${(S.assistenti&&S.assistenti.length)
@@ -2385,12 +2474,14 @@ function copDettHtml(c,h){
     const blocc = !x.liberi.includes(n);
     r+=`<div class="rw">🧑‍🏫 ${esc(n)}<span class="qs"> · sostegno${
       blocc?` · <b style="color:var(--a-tx)">intoccabile</b>`:""}</span></div>`; });
+  (x.pot||[]).forEach(n=> r+=`<div class="rw">⚡ ${esc(n)}<span class="qs"> · potenziamento assegnato</span></div>`);
   x.asis.forEach(n=> r+=`<div class="rw">🤝 ${esc(n)}<span class="qs"> · assistente comunale</span></div>`);
   if(!x.sos.length) r+=`<div class="rw qs">nessun sostegno in orario</div>`;
   r+=`<div class="rw" style="margin-top:7px">${
     x.t==="v2"?"✅ Doppia riserva: un sostegno può coprire altrove senza lasciare scoperto il caso."
     :x.t==="v"?"✅ C'è margine: il sostegno può coprire altrove."
     :x.t==="a"?"⚠️ Nessun margine: il sostegno presidia un caso grave e resta qui."
+    :x.t==="p"?"⚡ Ora scoperta turata dal potenziamento. Resta comunque senza riserva se il potenziatore viene chiamato altrove."
     :"⛔ Nessuna riserva in questa classe."}${
     x.asis.length?`<br><span class="qs">L'assistente è in aula ma non può sostituire né essere sostituito.</span>`:""}</div>`;
   return `<div class="tit">${esc(c)} · ${h}ª · ${esc(S.copGiorno)}</div>${r}`;
