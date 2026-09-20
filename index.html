@@ -314,6 +314,48 @@
   .feedback{margin-top:14px; padding:12px 14px; border-radius:10px; font-size:14px; text-align:center; display:none}
   .feedback.show{display:block}
   .feedback.success{background:#DCF7E8; border:1px solid #A8E6CE; color:#1B6E4A}
+  /* ---- vista coperture ---- */
+  .copdays{display:flex;gap:5px;margin-bottom:12px}
+  .copday{flex:1;padding:8px 0;text-align:center;border:1.5px solid var(--rule);border-radius:9px;
+    background:var(--paper2);font-weight:700;font-size:12px;cursor:pointer;color:var(--ink-soft)}
+  .copday.on{background:var(--teal);border-color:var(--teal);color:#fff}
+  .copgrid{background:var(--paper2);border:1.5px solid var(--rule);border-radius:12px;overflow:hidden}
+  .copgrid table{width:100%;border-collapse:collapse}
+  .copgrid thead th{background:var(--ink);color:#fff;font-size:11px;font-weight:700;padding:6px 0;
+    font-family:'Zilla Slab',serif;text-align:center}
+  .copgrid thead th:first-child{text-align:left;padding-left:9px}
+  .copgrid tbody th{font-family:'Zilla Slab',serif;font-weight:700;font-size:13px;text-align:left;
+    padding-left:9px;background:var(--rule-soft);width:44px;border-top:1px solid var(--rule)}
+  .copgrid tbody td{border-top:1px solid var(--rule);border-left:1px solid var(--rule-soft);padding:0}
+  .cop{height:38px;display:flex;align-items:center;justify-content:center;cursor:pointer}
+  .cop.v2{background:#BCE6CC}
+  .cop.v{background:#DCF2E4}
+  .cop.a{background:#FAEBD2}
+  .cop.r{background:#F7DEDC}
+  .cop.n{background:transparent}
+  .cop-pall{width:7px;height:7px;border-radius:50%;background:var(--teal);
+    box-shadow:0 0 0 2px rgba(255,255,255,.75)}
+  .copriep{display:flex;gap:6px;margin-top:11px}
+  .copriep .rq{flex:1;background:var(--paper2);border:1.5px solid var(--rule);border-radius:10px;
+    padding:8px 4px;text-align:center}
+  .copriep .n{font-family:'Zilla Slab',serif;font-weight:700;font-size:19px;line-height:1.1}
+  .copriep .l{font-size:10.5px;color:var(--ink-soft);margin-top:2px}
+  .copdet{margin-top:12px;background:var(--paper2);border:1.5px solid var(--rule);
+    border-radius:11px;padding:11px 13px;min-height:70px}
+  .copdet .tit{font-family:'Zilla Slab',serif;font-weight:700;font-size:15px;margin-bottom:4px}
+  .copdet .rw{font-size:13.5px;color:var(--ink);line-height:1.6}
+  .copdet .qs{color:#9A9484}
+  .copvuoto{font-size:13.5px;color:var(--ink-soft);font-style:italic}
+  .coplg{margin-top:12px;display:flex;flex-direction:column;gap:6px}
+  .coplg .lg{display:flex;align-items:flex-start;gap:8px;font-size:12.5px;line-height:1.45;color:var(--ink-soft)}
+  .coplg .sw{flex-shrink:0;width:17px;height:17px;border-radius:5px;border:1.5px solid var(--rule);margin-top:1px;
+    display:flex;align-items:center;justify-content:center}
+  .coplg .sw.v2{background:#BCE6CC;border-color:#6FBF92}
+  .coplg .sw.v{background:#DCF2E4;border-color:#8FCFAA}
+  .coplg .sw.a{background:#FAEBD2;border-color:#E0BE77}
+  .coplg .sw.r{background:#F7DEDC;border-color:#E2A29D}
+  .coplg .sw.n{background:var(--paper2)}
+  .coplg b{font-weight:700;color:var(--ink)}
 </style>
 </head>
 <body>
@@ -365,7 +407,7 @@ const CRITERIA_DEFAULT = [
 let S = { orario:null, tab:"oggi", day:"LUN",
           doveMode:"docente", selDoc:"", selClasse:"", selHour:1,
           lingue:{ FR:"Basso", SP:"Martinelli" },
-          assentiOggi:{}, breveOggi:{}, recScartati:[], flagOggi:[], prospetto:null, chipAperto:"", altTutte:"",
+          assentiOggi:{}, breveOggi:{}, recScartati:[], assistenti:[], copGiorno:"", copSel:null, flagOggi:[], prospetto:null, chipAperto:"", altTutte:"",
           override:{}, apertoRiga:"", flagDocSel:"",
           dataOggi:null, registro:{}, regApertoGiorno:"",
           alunnoAssenteOggi:[], alunnoSel:"", alunnoPanel:false,
@@ -392,6 +434,7 @@ function save(){ try{
   localStorage.setItem("sostituto_recuperi", JSON.stringify(S.recuperi||[]));
   if(S.configCriteri && S.configCriteri.length) localStorage.setItem("sostituto_config", JSON.stringify(S.configCriteri));
   localStorage.setItem("sostituto_recscartati", JSON.stringify(S.recScartati||[]));
+  localStorage.setItem("sostituto_assistenti", JSON.stringify(S.assistenti||[]));
   localStorage.setItem("sostituto_ruolo", S.ruolo||"completo");
 }catch(e){} }
 function load(){ try{
@@ -410,6 +453,7 @@ function load(){ try{
   if(cf){ const v=JSON.parse(cf); if(Array.isArray(v) && v.length) S.configCriteri=v; }
   const uf=localStorage.getItem("sostituto_uscfoglio"); if(uf) S.uscFoglio=JSON.parse(uf);
   const rs=localStorage.getItem("sostituto_recscartati"); if(rs) S.recScartati=JSON.parse(rs);
+  const as=localStorage.getItem("sostituto_assistenti"); if(as) S.assistenti=JSON.parse(as);
   const ru=localStorage.getItem("sostituto_ruolo"); if(ru) S.ruolo=ru;
 }catch(e){} }
 
@@ -1001,7 +1045,7 @@ function fmtCl(c){ return c ? c[0]+"ª "+c.slice(1) : c; }
    ============================================================ */
 const el = id => document.getElementById(id);
 
-const SOTTO_ALTRO = ["dove","importa","uscita","assenze","backup","potenz","sync","flag","recuperi","config","nuovoanno","uscfoglio"];
+const SOTTO_ALTRO = ["dove","importa","uscita","assenze","backup","potenz","sync","flag","recuperi","config","nuovoanno","uscfoglio","coperture","assist"];
 /* in modalità operativa restano solo queste voci del menu Altro */
 const OPERATIVO_TAB = ["dove","sync"];
 /* schede utilizzabili anche prima di avere un orario: sono le vie da cui l'orario arriva */
@@ -1014,7 +1058,7 @@ function render(){
   document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on", b.dataset.tab===attivo));
   if(!S.orario && !SENZA_ORARIO.includes(S.tab)){ renderVuoto(); return; }
   ({oggi:renderOggi, registro:renderRegistro, orario:renderOrario, altro:renderAltro,
-    dove:renderDove, importa:renderImporta, uscita:renderUscita, assenze:renderAssenze, backup:renderBackup, potenz:renderPotenziamento, sync:renderSync, flag:renderFlag, recuperi:renderRecuperi, config:renderConfigCriteri, nuovoanno:renderNuovoAnno, uscfoglio:renderUscFoglio})[S.tab]();
+    dove:renderDove, importa:renderImporta, uscita:renderUscita, assenze:renderAssenze, backup:renderBackup, potenz:renderPotenziamento, sync:renderSync, flag:renderFlag, recuperi:renderRecuperi, config:renderConfigCriteri, nuovoanno:renderNuovoAnno, uscfoglio:renderUscFoglio, coperture:renderCoperture, assist:renderAssist})[S.tab]();
 }
 
 /* ================= STAMPA / PDF ================= */
@@ -1232,6 +1276,7 @@ function applicaStato(d){
   S.potAssign   = d.potAssign || {};
   S.recuperi    = d.recuperi || [];
   if(d.configCriteri) S.configCriteri = d.configCriteri;
+  if(d.assistenti) S.assistenti = d.assistenti;
   S.prospetto=null; S.assentiOggi={}; S.breveOggi={}; S.noteApplicate=null; S.alunnoAssenteOggi=[];
   if(S.orario) S.day = giornoDaData(S.dataOggi||isoOggi());
   save(); saveRegistro();
@@ -1363,6 +1408,7 @@ function renderAltro(){
     { tab:"sync",    ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5A6.5 6.5 0 0 1 15.5 5.6L18 8"/><path d="M18 4v4h-4"/><path d="M20 14.5A6.5 6.5 0 0 1 8.5 18.4L6 16"/><path d="M6 20v-4h4"/></svg>`, tit:"Condivisione",       sub:(S.sync&&S.sync.url)?((S.sync.soloLettura?"sola lettura":"attiva")+((S.sync.info&&S.sync.info.utente)?" · ultimo: "+S.sync.info.utente:"")):"Collega il foglio Google della scuola" },
     { tab:"backup",  ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10.5" width="16" height="9.5" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/><circle cx="12" cy="15" r="1.1"/></svg>`, tit:"Backup e ripristino", sub:"Salva tutto in un file — o rimetti a posto dopo un guaio" },
     { tab:"config", ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6M4.22 4.22l4.24 4.24m5.08 5.08l4.24 4.24M1 12h6m6 0h6M4.22 19.78l4.24-4.24m5.08-5.08l4.24-4.24"/></svg>`, tit:"Configurazione criteri", sub:"Attiva/disattiva criteri e ordina la priorità" },
+    { tab:"coperture", ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16M15 4v16"/></svg>`, tit:"Coperture", sub:"Dove c'è una seconda presenza in aula, e dove no" },
     { tab:"nuovoanno", ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>`, tit:"Nuovo anno scolastico", sub:"Azzera i dati dell'anno concluso e ricomincia" },
   ];
   const permesse = OPERATIVO_TAB;
@@ -1804,7 +1850,7 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "20.09.2026";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const VERSIONE = "20.09.2026b";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -1818,7 +1864,8 @@ function datiBackup(){
     pnoOn: S.pnoOn || [],
     potAssign: S.potAssign || {},
     recuperi: S.recuperi || [],
-    configCriteri: S.configCriteri || null
+    configCriteri: S.configCriteri || null,
+    assistenti: S.assistenti || []
   };
 }
 function riepilogoBackup(d){
@@ -1874,6 +1921,7 @@ function onFileBackup(ev){
     S.potAssign   = d.potAssign || {};
     S.recuperi    = d.recuperi || [];
     if(d.configCriteri) S.configCriteri = d.configCriteri;
+    if(d.assistenti) S.assistenti = d.assistenti;
     S.prospetto=null; S.assentiOggi={}; S.breveOggi={}; S.noteApplicate=null; S.alunnoAssenteOggi=[];
     if(S.orario) S.day = giornoDaData(S.dataOggi||isoOggi());
     save(); saveRegistro();
@@ -2088,6 +2136,212 @@ function resetCriteria(){
   S.prospetto = null;
   save();
   render();
+}
+
+/* ================= VISTA COPERTURE =================
+   Mappa strutturale della seconda presenza in aula, classe per classe e ora per ora.
+   Non guarda le assenze del giorno: dice dove l'orario lascia margine e dove no.
+   Curricolari e sostegno vengono dall'orario principale; gli assistenti comunali
+   non ci sono (non sono personale della scuola) e si importano a parte.
+   Gli assistenti NON entrano mai fra i candidati alle sostituzioni: non hanno la
+   vigilanza sulla classe e sono assegnati a un alunno, non all'aula. */
+
+function presenzeIn(classe, g, h){
+  const o=S.orario, cur=[], sos=[];
+  if(!o) return {cur, sos};
+  for(const d of o.docenti){
+    const st = statoCella(d,g,h,o.ore);
+    let suQuesta = false;
+    if(st.t==="CLASSE")      suQuesta = (st.det===classe);
+    else if(st.t==="LINGUA") suQuesta = (st.classe===classe);
+    else if(st.t==="ARTIC")  suQuesta = (st.a===classe || st.b===classe);
+    else if(st.t==="AR")     suQuesta = (st.det===classe);
+    if(!suQuesta) continue;
+    (isSost(d) ? sos : cur).push(d.nome);
+  }
+  return {cur, sos};
+}
+
+function assistentiIn(classe, g, h){
+  return (S.assistenti||[]).filter(a=>a.cells[g+"|"+h]===classe).map(a=>a.nome);
+}
+
+/* v2 doppia riserva · v riserva · a sostegno vincolato · r solo curricolare · n nessuna lezione */
+function statoCopertura(classe, g, h){
+  const {cur, sos} = presenzeIn(classe,g,h);
+  const asis = assistentiIn(classe,g,h);
+  if(!cur.length && !sos.length) return {t:"n", cur, sos, asis, liberi:[]};
+  const liberi = sos.filter(n=>!(S.flagOggi||[]).includes(n+"|"+classe));
+  let t;
+  if(!sos.length)          t = "r";
+  else if(!liberi.length)  t = "a";
+  else if(liberi.length>1 || sos.length>1) t = "v2";
+  else                     t = "v";
+  return {t, cur, sos, asis, liberi};
+}
+
+function renderCoperture(){
+  const o=S.orario;
+  if(!o){ el("main").innerHTML=`<div class="backlink" onclick="S.tab='altro'; render()">‹ Altro</div>
+    <h2 class="sec">Coperture</h2><p class="hint">Serve prima l'orario. Importalo da Altro → Importa orario.</p>`; return; }
+  S.copGiorno = o.giorni.includes(S.copGiorno) ? S.copGiorno : (o.giorni.includes(S.day)?S.day:o.giorni[0]);
+  const g=S.copGiorno, classi=tutteLeClassi(o), ore=o.ore;
+
+  const conta={v2:0,v:0,a:0,r:0,asis:0};
+  const celle={};
+  classi.forEach(c=>{ celle[c]=ore.map(h=>{
+    const x=statoCopertura(c,g,h);
+    if(conta[x.t]!==undefined) conta[x.t]++;
+    if(x.asis.length) conta.asis++;
+    return x; }); });
+
+  const corpo = classi.map(c=>`<tr><th>${esc(c)}</th>` + celle[c].map((x,i)=>
+    `<td><div class="cop ${x.t}" onclick="copDett('${esc(c)}',${ore[i]})">${
+      x.asis.length?'<span class="cop-pall"></span>':''}</div></td>`).join("") + `</tr>`).join("");
+
+  el("main").innerHTML = `
+    <div class="backlink" onclick="S.tab='altro'; render()">‹ Altro</div>
+    <h2 class="sec">Coperture</h2>
+    <p class="hint" style="margin-top:0">Dove c'è una seconda presenza in aula oltre al curricolare. È la fotografia dell'orario, non della giornata: serve a vedere dove c'è margine prima ancora che arrivi un'assenza.</p>
+
+    <div class="copdays">${o.giorni.map(x=>
+      `<div class="copday ${x===g?'on':''}" onclick="S.copGiorno='${x}'; S.copSel=null; render()">${x}</div>`).join("")}</div>
+
+    <div class="copgrid"><table>
+      <thead><tr><th>Classe</th>${ore.map(h=>`<th>${h}ª</th>`).join("")}</tr></thead>
+      <tbody>${corpo}</tbody>
+    </table></div>
+
+    <div class="copriep">
+      <div class="rq"><div class="n" style="color:#14543A">${conta.v2}</div><div class="l">doppia riserva</div></div>
+      <div class="rq"><div class="n" style="color:var(--v-tx)">${conta.v}</div><div class="l">con riserva</div></div>
+      <div class="rq"><div class="n" style="color:var(--a-tx)">${conta.a}</div><div class="l">vincolato</div></div>
+      <div class="rq"><div class="n" style="color:var(--r-tx)">${conta.r}</div><div class="l">senza riserva</div></div>
+    </div>
+
+    <div class="copdet" id="copdet">${S.copSel ? copDettHtml(S.copSel.c, S.copSel.h)
+      : `<div class="copvuoto">Tocca una cella per vedere chi c'è.</div>`}</div>
+
+    <div class="coplg">
+      <div class="lg"><div class="sw v2"></div><div><b>Verde scuro</b> — più di un sostegno in aula: c'è margine anche se uno resta.</div></div>
+      <div class="lg"><div class="sw v"></div><div><b>Verde</b> — un sostegno che, se serve, può coprire altrove.</div></div>
+      <div class="lg"><div class="sw a"></div><div><b>Arancio</b> — il sostegno c'è ma è intoccabile: presidia un caso grave, non è riserva.</div></div>
+      <div class="lg"><div class="sw r"></div><div><b>Rosso</b> — solo il curricolare. Se manca lui, la classe resta senza nessuno.</div></div>
+      <div class="lg"><div class="sw n"><span class="cop-pall" style="position:static"></span></div><div><b>Pallino</b> — c'è un assistente comunale: altro adulto in aula, ma non sostituisce e non va sostituito.</div></div>
+    </div>
+
+    ${(S.assistenti&&S.assistenti.length)
+      ? `<p class="hint" style="margin-top:14px">${S.assistenti.length} assistenti caricati · <span style="color:var(--teal); font-weight:600" onclick="S.tab='assist'; render()">aggiorna</span></p>`
+      : `<button class="btn ghost" style="width:100%; margin-top:14px" onclick="S.tab='assist'; render()">+ Importa orario assistenti</button>`}`;
+}
+
+function copDett(c,h){ S.copSel={c,h}; render(); el("copdet").scrollIntoView({block:"nearest"}); }
+function copDettHtml(c,h){
+  const x=statoCopertura(c,S.copGiorno,h);
+  if(x.t==="n") return `<div class="tit">${esc(c)} · ${h}ª · ${esc(S.copGiorno)}</div>
+    <div class="rw">Nessuna lezione in orario.</div>`;
+  let r="";
+  x.cur.forEach(n=> r+=`<div class="rw">📘 ${esc(n)}<span class="qs"> · curricolare</span></div>`);
+  x.sos.forEach(n=>{
+    const blocc = !x.liberi.includes(n);
+    r+=`<div class="rw">🧑‍🏫 ${esc(n)}<span class="qs"> · sostegno${
+      blocc?` · <b style="color:var(--a-tx)">intoccabile</b>`:""}</span></div>`; });
+  x.asis.forEach(n=> r+=`<div class="rw">🤝 ${esc(n)}<span class="qs"> · assistente comunale</span></div>`);
+  if(!x.sos.length) r+=`<div class="rw qs">nessun sostegno in orario</div>`;
+  r+=`<div class="rw" style="margin-top:7px">${
+    x.t==="v2"?"✅ Doppia riserva: un sostegno può coprire altrove senza lasciare scoperto il caso."
+    :x.t==="v"?"✅ C'è margine: il sostegno può coprire altrove."
+    :x.t==="a"?"⚠️ Nessun margine: il sostegno presidia un caso grave e resta qui."
+    :"⛔ Nessuna riserva in questa classe."}${
+    x.asis.length?`<br><span class="qs">L'assistente è in aula ma non può sostituire né essere sostituito.</span>`:""}</div>`;
+  return `<div class="tit">${esc(c)} · ${h}ª · ${esc(S.copGiorno)}</div>${r}`;
+}
+
+/* ---- import dell'orario degli assistenti ---- */
+function renderAssist(){
+  const n=(S.assistenti||[]).length;
+  el("main").innerHTML=`
+    <div class="backlink" onclick="S.tab='coperture'; render()">‹ Coperture</div>
+    <h2 class="sec">Orario assistenti</h2>
+    <p class="hint" style="margin-top:0">Assistenti all'autonomia e alla comunicazione del Comune. Stesso formato dell'orario docenti: intestazione MATERIE / DOCENTI, giorni e ore. Compaiono nella vista coperture; <b>non entrano mai fra i candidati alle sostituzioni</b>.</p>
+    ${n?`<div class="promemo">${n} assistenti caricati.<br>${(S.assistenti||[]).map(a=>esc(cognomeBreve(a.nome))).join(" · ")}</div>`:""}
+    <input type="file" id="fileAssist" accept=".xlsx,.xls" style="display:none" onchange="caricaAssistenti(this)">
+    <button class="btn" style="width:100%" onclick="el('fileAssist').click()">📄 Scegli il file</button>
+    ${n?`<button class="btn ghost" style="width:100%; margin-top:8px; color:var(--red); border-color:var(--red)" onclick="if(confirm('Rimuovere gli assistenti caricati?')){S.assistenti=[]; save(); render();}">Rimuovi</button>`:""}
+    <div id="assistEsito"></div>`;
+}
+
+function caricaAssistenti(inp){
+  const f=inp.files&&inp.files[0]; if(!f) return;
+  const rd=new FileReader();
+  rd.onload=e=>{
+    try{
+      const wb=XLSX.read(new Uint8Array(e.target.result), {type:"array"});
+      const res=leggiAssistenti(wb);
+      if(res.errore){ el("assistEsito").innerHTML=`<div class="promemo" style="background:#F4DAD7; border-left-color:var(--red)">${esc(res.errore)}</div>`; return; }
+      S.assistenti=res.lista; save();
+      toast(res.lista.length+" assistenti caricati");
+      S.tab="coperture"; render();
+    }catch(err){ el("assistEsito").innerHTML=`<div class="promemo" style="background:#F4DAD7; border-left-color:var(--red)">Non riesco a leggere il file: ${esc(String(err))}</div>`; }
+  };
+  rd.readAsArrayBuffer(f);
+}
+
+/* Accetta sia un file dei soli assistenti, sia uno misto: in quel caso prende solo
+   le righe la cui colonna MATERIE parla di assistenti. */
+function leggiAssistenti(wb){
+  const ws = wb.Sheets["orario"] || wb.Sheets[wb.SheetNames[0]];
+  if(!ws) return {errore:"Nessun foglio leggibile nel file."};
+  const grid = XLSX.utils.sheet_to_json(ws, {header:1, raw:true, defval:null});
+  let hdr=-1;
+  for(let r=0;r<Math.min(grid.length,30);r++){
+    const row=(grid[r]||[]).map(x=>String(x==null?"":x).trim().toUpperCase());
+    if(row.includes("DOCENTI")){ hdr=r; break; }
+  }
+  if(hdr<0) return {errore:'Non trovo la riga di intestazione con la colonna "DOCENTI".'};
+  const dayRow=grid[hdr]||[], hourRow=grid[hdr+1]||[];
+  const up=x=>String(x==null?"":x).trim().toUpperCase();
+  const matCol=dayRow.findIndex(x=>up(x)==="MATERIE");
+  const docCol=dayRow.findIndex(x=>up(x)==="DOCENTI");
+  const DAY=["LUN","MAR","MER","GIO","VEN","SAB"];
+  const col2slot={}; let curDay=null;
+  for(let c=docCol+1;c<dayRow.length;c++){
+    const dv=up(dayRow[c]).slice(0,3);
+    if(DAY.includes(dv)) curDay=dv;
+    const hv=String(hourRow[c]==null?"":hourRow[c]).match(/\d+/);
+    if(curDay && hv) col2slot[c]={g:curDay,h:+hv[0]};
+  }
+  if(!Object.keys(col2slot).length) return {errore:"Non riconosco la griglia dei giorni e delle ore."};
+
+  /* prima passata: il file dichiara da qualche parte una sezione ASSISTENTI?
+     Va saputo PRIMA di scorrere le righe, altrimenti le categorie che stanno
+     sopra il marcatore (tipicamente il sostegno) passerebbero il filtro. */
+  let misto=false;
+  if(matCol>=0){
+    for(let r=hdr+2;r<grid.length;r++){
+      const m=String((grid[r]||[])[matCol]==null?"":(grid[r]||[])[matCol]);
+      if(/ASSISTENT/i.test(m)){ misto=true; break; }
+    }
+  }
+  const lista=[]; let cat=null;
+  for(let r=hdr+2;r<grid.length;r++){
+    const row=grid[r]||[];
+    const mat = matCol>=0 ? String(row[matCol]==null?"":row[matCol]) : "";
+    if(mat.trim()) cat=mat.toUpperCase();
+    const nome=String(row[docCol]==null?"":row[docCol]).trim();
+    if(!nome) continue;
+    /* se il file contiene anche altre categorie, tengo solo gli assistenti */
+    if(misto && !/ASSISTENT/.test(cat||"")) continue;
+    const cells={};
+    for(const c in col2slot){
+      const v=String(row[c]==null?"":row[c]).trim().toUpperCase();
+      if(/^[1-9][A-D]$/.test(v)) cells[col2slot[c].g+"|"+col2slot[c].h]=v;
+    }
+    if(!Object.keys(cells).length) continue;
+    lista.push({ nome: nome.replace(/\s*\(.*$/,"").trim(), cells });
+  }
+  if(!lista.length) return {errore:"Nessun assistente trovato. Controlla che le celle contengano le classi (es. 2C) e che la colonna MATERIE dica ASSISTENTI."};
+  return {lista};
 }
 
 /* ================= IMPORT USCITE DAL FOGLIO VIAGGI =================
