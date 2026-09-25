@@ -1414,9 +1414,165 @@ function applicaStato(d){
   save(); saveRegistro();
 }
 
+
+/* ---- diff fra due sincronizzazioni, per il messaggio WhatsApp ----
+   Confronta l'ultimo stato noto (baseline) con quello nuovo e produce un
+   elenco di righe leggibili, nome per nome, capato per non fare un messaggio
+   infinito. Non tocca S: è puro confronto fra due istantanee. */
+const DIFF_CAP = 6;
+function limita(righe){
+  if(righe.length<=DIFF_CAP) return righe;
+  return righe.slice(0,DIFF_CAP).concat(["   …e altre "+(righe.length-DIFF_CAP)]);
+}
+function diffById(prima, dopo, idFn, labelFn){
+  prima=prima||[]; dopo=dopo||[];
+  const pm=new Map(prima.map(x=>[idFn(x),x])), dm=new Map(dopo.map(x=>[idFn(x),x]));
+  const add=[], rim=[];
+  dm.forEach((x,k)=>{ if(!pm.has(k)) add.push("  + "+labelFn(x)); });
+  pm.forEach((x,k)=>{ if(!dm.has(k)) rim.push("  – "+labelFn(x)); });
+  return limita(add.concat(rim));
+}
+function diffStringSet(prima, dopo, labelFn){
+  prima=new Set(prima||[]); dopo=new Set(dopo||[]);
+  const add=[], rim=[];
+  dopo.forEach(x=>{ if(!prima.has(x)) add.push("  + "+labelFn(x)); });
+  prima.forEach(x=>{ if(!dopo.has(x)) rim.push("  – "+labelFn(x)); });
+  return limita(add.concat(rim));
+}
+function diffKeyMap(prima, dopo, labelFn){
+  prima=prima||{}; dopo=dopo||{};
+  const add=[], rim=[];
+  for(const k in dopo){ if(!(k in prima) || prima[k]!==dopo[k]) add.push("  + "+labelFn(k,dopo[k])); }
+  for(const k in prima){ if(!(k in dopo)) rim.push("  – "+labelFn(k,prima[k])); }
+  return limita(add.concat(rim));
+}
+
+function diffStati(prima, dopo){
+  const sez=[];   // {tit, righe}
+
+  /* registro: giorno per giorno, riga per riga (assente → sostituto) */
+  {
+    const pr=(prima&&prima.registro)||{}, dr=(dopo&&dopo.registro)||{};
+    const giorni=new Set([...Object.keys(pr), ...Object.keys(dr)]);
+    const righe=[];
+    [...giorni].sort().forEach(iso=>{
+      const a=pr[iso], b=dr[iso];
+      const sig=r=>r.h+"ª "+cognomeBreve(r.assente)+" → "+(r.scelto?cognomeBreve(r.scelto):"(vuoto)");
+      if(a && !b){ righe.push("🗓 "+dataLeggibile(iso)+": – giorno rimosso dal registro"); return; }
+      if(!a && b){
+        righe.push("🗓 "+dataLeggibile(iso)+": nuovo · "+(b.righe||[]).length+" sostituzioni");
+        limita((b.righe||[]).map(r=>"  + "+sig(r))).forEach(x=>righe.push(x));
+        return;
+      }
+      if(a && b){
+        const sa=new Set((a.righe||[]).map(sig)), sb=new Set((b.righe||[]).map(sig));
+        const add=[...sb].filter(x=>!sa.has(x)), rim=[...sa].filter(x=>!sb.has(x));
+        if(add.length||rim.length){
+          righe.push("🗓 "+dataLeggibile(iso)+":");
+          limita(add.map(x=>"  + "+x).concat(rim.map(x=>"  – "+x))).forEach(x=>righe.push(x));
+        }
+      }
+    });
+    if(righe.length) sez.push({tit:"📋 Registro sostituzioni", righe});
+  }
+
+  /* assenze note */
+  {
+    const righe=diffById(prima&&prima.assenzeNote, dopo&&dopo.assenzeNote, x=>x.id,
+      x=>cognomeBreve(x.docente)+" · "+(x.dal===x.al||!x.al?x.dal:x.dal+"→"+x.al)+(x.tipo==="breve"?" (permesso breve)":""));
+    if(righe.length) sez.push({tit:"🗓 Assenze note", righe});
+  }
+
+  /* uscite didattiche */
+  {
+    const righe=diffById(prima&&prima.uscite, dopo&&dopo.uscite, x=>x.id,
+      x=>(x.nota||"Uscita")+" · "+x.dal+(x.classi&&x.classi.length?" · "+x.classi.join(","):""));
+    if(righe.length) sez.push({tit:"🚌 Uscite didattiche", righe});
+  }
+
+  /* recuperi (permessi brevi da restituire) */
+  {
+    const righe=diffById(prima&&prima.recuperi, dopo&&dopo.recuperi, x=>x.id,
+      x=>cognomeBreve(x.docente)+" · "+x.ore+"h");
+    if(righe.length) sez.push({tit:"⏱ Recuperi", righe});
+  }
+
+  /* potenziamento assegnato */
+  {
+    const righe=diffKeyMap(prima&&prima.potAssign, dopo&&dopo.potAssign,
+      (k,classe)=>{ const p=k.split("|"); return cognomeBreve(p[0])+" → "+classe+" ("+p[1]+" "+p[2]+"ª)"; });
+    if(righe.length) sez.push({tit:"⚡ Potenziamento", righe});
+  }
+
+  /* flag: abbinamenti sostegno-classe intoccabili */
+  {
+    const righe=diffStringSet(prima&&prima.flagOggi, dopo&&dopo.flagOggi,
+      s=>{ const p=s.split("|"); return cognomeBreve(p[0])+" intoccabile su "+p[1]; });
+    if(righe.length) sez.push({tit:"🔒 Sostegni intoccabili", righe});
+  }
+
+  /* assistenti comunali */
+  {
+    const righe=diffById(prima&&prima.assistenti, dopo&&dopo.assistenti, x=>x.nome, x=>cognomeBreve(x.nome));
+    if(righe.length) sez.push({tit:"🤝 Assistenti", righe});
+  }
+
+  /* orario: non riga per riga (poco leggibile), solo il fatto che sia cambiato */
+  {
+    const po=prima&&prima.orario, doo=dopo&&dopo.orario;
+    const np=po?(po.docenti||[]).length:0, nd=doo?(doo.docenti||[]).length:0;
+    if(JSON.stringify(po)!==JSON.stringify(doo)){
+      const riga = !po ? "nuovo orario importato ("+nd+" docenti)"
+                 : !doo ? "orario rimosso"
+                 : np!==nd ? "orario aggiornato ("+np+" → "+nd+" docenti)"
+                 : "orario aggiornato";
+      sez.push({tit:"📅 Orario", righe:["  "+riga]});
+    }
+  }
+
+  /* criteri e lingue: cambiano raramente, basta segnalarlo */
+  if(JSON.stringify(prima&&prima.configCriteri)!==JSON.stringify(dopo&&dopo.configCriteri))
+    sez.push({tit:"⚙️ Configurazione criteri", righe:["  modificata"]});
+  if(JSON.stringify(prima&&prima.lingue)!==JSON.stringify(dopo&&dopo.lingue))
+    sez.push({tit:"🗣 Docenti di lingua", righe:["  aggiornati"]});
+
+  return sez;
+}
+
+function testoModificheSync(sez, direzione, altrui){
+  if(!sez.length) return "";
+  const chi = altrui ? " da "+altrui : "";
+  let t = "📲 SOStituto — modifiche "+(direzione==="scarica"?"scaricate"+chi:"inviate")+"\n";
+  t += new Date().toLocaleString("it-IT",{weekday:"long",day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})+"\n\n";
+  sez.forEach(s=>{ t+=s.tit+"\n"+s.righe.join("\n")+"\n\n"; });
+  return t.trim();
+}
+
+function salvaBaseline(dati){ try{ localStorage.setItem("sostituto_syncbase", JSON.stringify(dati)); }catch(e){} }
+function leggiBaseline(){ try{ const s=localStorage.getItem("sostituto_syncbase"); return s?JSON.parse(s):null; }catch(e){ return null; } }
+
+/* tiene solo cifre e l'eventuale + iniziale; toglie lo 00 internazionale */
+function puliscoNumero(n){
+  let t=String(n||"").trim().replace(/[^\d+]/g,"");
+  if(t.startsWith("00")) t=t.slice(2); else if(t.startsWith("+")) t=t.slice(1);
+  return t;
+}
+function condividiModificheSync(){
+  const d = S.sync && S.sync.ultimoDiffTesto;
+  if(!d){ toast("Nessuna modifica da condividere"); return; }
+  const num = puliscoNumero(S.sync && S.sync.numeroDest);
+  if(num.length>=8){
+    /* verso un numero preciso: il messaggio arriva già scritto, l'invio resta un tocco dell'utente */
+    window.open("https://wa.me/"+num+"?text="+encodeURIComponent(d), "_blank");
+  } else if(navigator.share){
+    navigator.share({text:d}).catch(()=>copiaTesto(d));
+  } else copiaTesto(d);
+}
+
 function syncScarica(silenzioso){
   const c = syncCfg();
   if(!c.url){ if(!silenzioso) toast("Prima imposta il collegamento"); return; }
+  const prima = statoDaCondividere();   /* quello che avevo prima di scaricare */
   S.syncErr=""; S.syncAttivo = true; if(!silenzioso) render();
   fetch(c.url + "?token=" + encodeURIComponent(c.token))
     .then(r=>r.json())
@@ -1427,6 +1583,10 @@ function syncScarica(silenzioso){
       applicaStato(j.dati);
       c.info = j.info || null;
       c.ultimoPull = (j.info && j.info.quando) || new Date().toISOString();
+      const sez = diffStati(prima, j.dati);
+      c.ultimoDiffTesto = testoModificheSync(sez, "scarica", j.info && j.info.utente);
+      c.ultimoDiffQuando = new Date().toISOString();
+      salvaBaseline(j.dati);
       saveSync();
       toast("Scaricato" + (j.info && j.info.utente ? " (da "+j.info.utente+")" : ""));
       render();
@@ -1449,11 +1609,13 @@ function syncInvia(forza){
   if(!c.url){ toast("Prima imposta il collegamento"); return; }
   if(c.soloLettura){ toast("Sei in sola lettura"); return; }
   if(!c.utente){ toast("Indica prima chi sei"); return; }
+  const dati = statoDaCondividere();
+  const baseline = leggiBaseline();   /* l'ultimo stato noto: quello che confronto per il diff */
   S.syncErr=""; S.syncAttivo = true; render();
   fetch(c.url, {
     method:"POST",
     headers:{"Content-Type":"text/plain;charset=utf-8"},   /* evita il preflight CORS */
-    body: JSON.stringify({ token:c.token, utente:c.utente, dati:statoDaCondividere(),
+    body: JSON.stringify({ token:c.token, utente:c.utente, dati,
                            basatoSu:c.ultimoPull, forza:!!forza })
   })
     .then(r=>r.json())
@@ -1468,6 +1630,11 @@ function syncInvia(forza){
       if(!j.ok){ toast("Errore: "+(j.errore||"?")); render(); return; }
       c.info = j.info || null;
       c.ultimoPull = (j.info && j.info.quando) || new Date().toISOString();
+      const sez = baseline ? diffStati(baseline, dati) : [];
+      c.ultimoDiffTesto = baseline ? testoModificheSync(sez, "invia", null)
+        : "📲 SOStituto — primo invio da questo dispositivo: nessun confronto disponibile.";
+      c.ultimoDiffQuando = new Date().toISOString();
+      salvaBaseline(dati);
       saveSync(); toast("Inviato al foglio");
       render();
     })
@@ -1496,6 +1663,12 @@ function renderSync(){
   if(c.url && c.info){
     out += `<div class="promemo">Ultimo aggiornamento del foglio:<br><b>${esc(c.info.utente||"—")}</b> · ${esc(quando||"—")}</div>`;
   }
+  if(c.ultimoDiffTesto){
+    const dq = c.ultimoDiffQuando ? new Date(c.ultimoDiffQuando).toLocaleString("it-IT") : "";
+    out += `<button class="btn ghost" style="width:100%; margin-bottom:12px; color:#25925a; border-color:#25925a"
+      onclick="condividiModificheSync()">📋 Condividi le modifiche su WhatsApp</button>
+      <p class="hint" style="margin-top:-8px">Dell'ultima sincronizzazione${dq?" · "+esc(dq):""}. Sparisce alla prossima.</p>`;
+  }
 
   out += `<div style="display:flex; gap:8px; margin-bottom:14px">
       <button class="btn ghost" style="flex:1" onclick="syncScarica()">${S.syncAttivo?"…":"⬇ Scarica"}</button>
@@ -1505,6 +1678,9 @@ function renderSync(){
 
   out += `<div class="field"><label>Chi sei</label>
       <input type="text" value="${esc(c.utente||"")}" placeholder="es. Petralia" oninput="S.sync.utente=this.value; saveSync()"></div>
+    <div class="field"><label>Numero WhatsApp per le modifiche (facoltativo)</label>
+      <input type="tel" value="${esc(c.numeroDest||"")}" placeholder="+39 333 1234567" oninput="S.sync.numeroDest=this.value; saveSync()"></div>
+    ${c.numeroDest ? "" : `<p class="hint" style="margin-top:-8px">Vuoto: alla condivisione scegli tu il contatto ogni volta.</p>`}
     <div class="field"><label>Indirizzo del foglio (URL dell'applicazione web)</label>
       <input type="text" value="${esc(c.url||"")}" placeholder="https://script.google.com/macros/s/..." oninput="S.sync.url=this.value.trim(); saveSync()"></div>
     <div class="field"><label>Parola segreta</label>
@@ -1982,7 +2158,7 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "20.09.2026l";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const VERSIONE = "20.09.2026n";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
