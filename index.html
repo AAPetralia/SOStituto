@@ -1808,12 +1808,18 @@ function renderOggi(){
   // le assenze già comunicate vanno caricate PRIMA di contare gli assenti,
   // altrimenti il conteggio resta a zero e non compaiono né i chip né il bottone
   applicaAssenzeNote();
+  /* un'assenza segnata su un nome che l'orario, reimportato nel frattempo, non ha
+     più (rinominato o rimosso) mandava in errore l'intera scheda: qui si toglie
+     da sola invece di bloccare tutto. */
+  { const nomiValidi=new Set(o.docenti.map(d=>d.nome));
+    for(const n in S.assentiOggi){ if(!nomiValidi.has(n)){ delete S.assentiOggi[n]; delete S.breveOggi[n]; } } }
   const assentiN = Object.keys(S.assentiOggi).length;
 
   // chips degli assenti già scelti — espandibili per il permesso breve
   const chips = Object.keys(S.assentiOggi).map(n=>{
     const ore=S.assentiOggi[n];
     const doc=o.docenti.find(d=>d.nome===n);
+    if(!doc) return "";   /* rete di sicurezza in più: non dovrebbe più servire dopo la pulizia sopra */
     const inClasse=o.ore.filter(hh=>["CLASSE","ARTIC","AR"].includes(statoCella(doc,S.day,hh,o.ore).t));
     const base = ore ? ore.map(h=>h+"ª").join(" ") : "tutto il giorno";
     const daNota0 = (S.daNote||[]).includes(n);
@@ -2201,7 +2207,7 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "26.09.2026d";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const VERSIONE = "26.09.2026e";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
