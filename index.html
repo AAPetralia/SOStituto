@@ -459,6 +459,7 @@ let S = { orario:null, tab:"oggi", day:"LUN",
           recuperi:[], recuperoForm:null,   /* debiti da permesso breve: {id, docente, ore, data, scadenza, restituite:0, chiuseManuale:0, origine} */
           configCriteri:null,   /* configurazione priorità e abilitamento criteri (legge da default se null) */
           uscFoglio:{url:"",token:"",ultimo:null}, uscAnteprima:null, uscAttivo:false, uscErr:"",
+          linguaSostegno:{},
           ruolo:"completo" };   /* completo | operativo */   /* assentiOggi: {nome: null|[ore]} */
 
 /* ---------- persistenza ---------- */
@@ -476,6 +477,7 @@ function save(){ try{
   if(S.configCriteri && S.configCriteri.length) localStorage.setItem("sostituto_config", JSON.stringify(S.configCriteri));
   localStorage.setItem("sostituto_recscartati", JSON.stringify(S.recScartati||[]));
   localStorage.setItem("sostituto_assistenti", JSON.stringify(S.assistenti||[]));
+  localStorage.setItem("sostituto_linguasost", JSON.stringify(S.linguaSostegno||{}));
   localStorage.setItem("sostituto_potauto", JSON.stringify(S.potAuto||[]));
   localStorage.setItem("sostituto_ruolo", S.ruolo||"completo");
 }catch(e){} }
@@ -496,6 +498,7 @@ function load(){ try{
   const uf=localStorage.getItem("sostituto_uscfoglio"); if(uf) S.uscFoglio=JSON.parse(uf);
   const rs=localStorage.getItem("sostituto_recscartati"); if(rs) S.recScartati=JSON.parse(rs);
   const as=localStorage.getItem("sostituto_assistenti"); if(as) S.assistenti=JSON.parse(as);
+  const lgs=localStorage.getItem("sostituto_linguasost"); if(lgs) S.linguaSostegno=JSON.parse(lgs);
   const pau=localStorage.getItem("sostituto_potauto"); if(pau) S.potAuto=JSON.parse(pau);
   const ru=localStorage.getItem("sostituto_ruolo"); if(ru) S.ruolo=ru;
 }catch(e){} }
@@ -645,7 +648,7 @@ function classiDi(doc){
 function sostSuClasse(o, classe, g, h){          /* sostegni presenti in una classe a quell'ora */
   const out=[];
   for(const d of o.docenti){ if(!isSost(d)) continue;
-    const c=statoCella(d,g,h,o.ore);
+    const c=statoLinguaEff(d,g,h,o.ore);
     if((c.t==="CLASSE" && c.det===classe) || (c.t==="LINGUA" && c.classe===classe)) out.push(d.nome);
   }
   return out;
@@ -688,7 +691,7 @@ function candidati(o, classe, g, h, assenteObj, ctx, lingua){
   for(const d of o.docenti){
     if(ctx.assenti.has(d.nome)) continue;
     if(ctx.occupati[g+"|"+h] && ctx.occupati[g+"|"+h].has(d.nome)) continue;  /* già impegnato */
-    const st = statoCella(d,g,h,o.ore);
+    const st = statoLinguaEff(d,g,h,o.ore);
     const aff = (affApplicabile && d.materia===materia) ? 0 : 1;
     const cdc = classiDi(d).has(classe) ? 0 : 1;
     const tie = [aff, cdc, ctx.fatte[d.nome]||0, d.nome];
@@ -899,6 +902,7 @@ function sincronizzaRecuperi(){
   const esistenti = new Set(S.recuperi.filter(r=>r.origine).map(r=>r.origine));
   for(const a of (S.assenzeNote||[])){
     if(a.tipo !== "breve" || !a.ore || !a.ore.length) continue;
+    if(a.recuperabile===false) continue;   /* segnato a mano come non da recuperare */
     const chiave = "an:" + a.id;
     if(esistenti.has(chiave)) continue;
     S.recuperi.push({
@@ -913,10 +917,15 @@ function sincronizzaRecuperi(){
       nota: a.nota || ""
     });
   }
-  // rimuovo i debiti automatici il cui permesso è stato cancellato dalle assenze note
-  // (i debiti "oggi:" e quelli manuali non sono governati da questa lista, restano)
-  const idAssenze = new Set((S.assenzeNote||[]).map(a=>"an:"+a.id));
-  S.recuperi = S.recuperi.filter(r => !r.origine || !r.origine.startsWith("an:") || idAssenze.has(r.origine));
+  // rimuovo i debiti automatici il cui permesso è stato cancellato dalle assenze note,
+  // o segnato in seguito come non da recuperare: in entrambi i casi non deve restare
+  // in giro (i debiti "oggi:" e quelli manuali non sono governati da questa lista)
+  const noteById = {}; (S.assenzeNote||[]).forEach(a=>{ noteById["an:"+a.id]=a; });
+  S.recuperi = S.recuperi.filter(r=>{
+    if(!r.origine || !r.origine.startsWith("an:")) return true;
+    const nota = noteById[r.origine];
+    return !!nota && nota.recuperabile!==false;
+  });
 }
 /* ore ancora da restituire per un debito */
 function debitoResiduo(r){ return Math.max(0, r.ore - (r.restituite||0) - (r.chiuseManuale||0)); }
@@ -1088,7 +1097,7 @@ function fmtCl(c){ return c ? c[0]+"ª "+c.slice(1) : c; }
    ============================================================ */
 const el = id => document.getElementById(id);
 
-const SOTTO_ALTRO = ["dove","importa","uscita","assenze","backup","potenz","sync","flag","recuperi","config","nuovoanno","uscfoglio","coperture","assist"];
+const SOTTO_ALTRO = ["dove","importa","uscita","assenze","backup","potenz","sync","flag","recuperi","config","nuovoanno","uscfoglio","coperture","assist","linguasost"];
 /* in modalità operativa restano solo queste voci del menu Altro */
 const OPERATIVO_TAB = ["dove","sync"];
 /* schede utilizzabili anche prima di avere un orario: sono le vie da cui l'orario arriva */
@@ -1101,7 +1110,7 @@ function render(){
   document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on", b.dataset.tab===attivo));
   if(!S.orario && !SENZA_ORARIO.includes(S.tab)){ renderVuoto(); return; }
   ({oggi:renderOggi, registro:renderRegistro, orario:renderOrario, altro:renderAltro,
-    dove:renderDove, importa:renderImporta, uscita:renderUscita, assenze:renderAssenze, backup:renderBackup, potenz:renderPotenziamento, sync:renderSync, flag:renderFlag, recuperi:renderRecuperi, config:renderConfigCriteri, nuovoanno:renderNuovoAnno, uscfoglio:renderUscFoglio, coperture:renderCoperture, assist:renderAssist})[S.tab]();
+    dove:renderDove, importa:renderImporta, uscita:renderUscita, assenze:renderAssenze, backup:renderBackup, potenz:renderPotenziamento, sync:renderSync, flag:renderFlag, recuperi:renderRecuperi, config:renderConfigCriteri, nuovoanno:renderNuovoAnno, uscfoglio:renderUscFoglio, coperture:renderCoperture, assist:renderAssist, linguasost:renderLinguaSostegno})[S.tab]();
 }
 
 /* ================= STAMPA / PDF ================= */
@@ -1388,7 +1397,7 @@ function syncCfg(){ S.sync = S.sync || {url:"",token:"",utente:"",soloLettura:fa
 function saveSync(){ try{ localStorage.setItem("sostituto_sync", JSON.stringify(S.sync||{})); }catch(e){} }
 
 function statoDaCondividere(){
-  return { orario:S.orario||null, lingue:S.lingue||{}, flagOggi:S.flagOggi||[],
+  return { orario:S.orario||null, lingue:S.lingue||{}, flagOggi:S.flagOggi||[], linguaSostegno:S.linguaSostegno||{},
     registro:S.registro||{}, uscite:S.uscite||[], assenzeNote:S.assenzeNote||[],
     pnoOn:S.pnoOn||[], potAssign:S.potAssign||{}, recuperi:S.recuperi||[],
     /* da tenere allineati con datiBackup(): tutto ciò che un altro dispositivo
@@ -1399,6 +1408,7 @@ function applicaStato(d){
   if(!d) return;
   S.orario      = d.orario || null;
   S.lingue      = d.lingue || {};
+  S.linguaSostegno = d.linguaSostegno || {};
   S.flagOggi    = d.flagOggi || [];
   S.registro    = d.registro || {};
   S.uscite      = d.uscite || [];
@@ -1748,6 +1758,7 @@ function renderAltro(){
     { tab:"sync",    ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5A6.5 6.5 0 0 1 15.5 5.6L18 8"/><path d="M18 4v4h-4"/><path d="M20 14.5A6.5 6.5 0 0 1 8.5 18.4L6 16"/><path d="M6 20v-4h4"/></svg>`, tit:"Condivisione",       sub:(S.sync&&S.sync.url)?((S.sync.soloLettura?"sola lettura":"attiva")+((S.sync.info&&S.sync.info.utente)?" · ultimo: "+S.sync.info.utente:"")):"Collega il foglio Google della scuola" },
     { tab:"backup",  ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10.5" width="16" height="9.5" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/><circle cx="12" cy="15" r="1.1"/></svg>`, tit:"Backup e ripristino", sub:"Salva tutto in un file — o rimetti a posto dopo un guaio" },
     { tab:"config", ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6M4.22 4.22l4.24 4.24m5.08 5.08l4.24 4.24M1 12h6m6 0h6M4.22 19.78l4.24-4.24m5.08-5.08l4.24-4.24"/></svg>`, tit:"Configurazione criteri", sub:"Attiva/disattiva criteri e ordina la priorità" },
+    { tab:"linguasost", ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a13 13 0 0 1 0 18M12 3a13 13 0 0 0 0 18"/></svg>`, tit:"Gruppi di seconda lingua", sub:"Francese o spagnolo per le ore ambigue del sostegno" },
     { tab:"coperture", ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16M15 4v16"/></svg>`, tit:"Coperture", sub:"Dove c'è una seconda presenza in aula, e dove no" },
     { tab:"nuovoanno", ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>`, tit:"Nuovo anno scolastico", sub:"Azzera i dati dell'anno concluso e ricomincia" },
   ];
@@ -2190,7 +2201,7 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "26.09.2026";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const VERSIONE = "26.09.2026c";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -2206,7 +2217,8 @@ function datiBackup(){
     recuperi: S.recuperi || [],
     configCriteri: S.configCriteri || null,
     assistenti: S.assistenti || [],
-    potAuto: S.potAuto || []
+    potAuto: S.potAuto || [],
+    linguaSostegno: S.linguaSostegno || {}
   };
 }
 function riepilogoBackup(d){
@@ -2418,6 +2430,13 @@ function eliminaRecupero(id){
   if(r && r.origine && r.origine.indexOf("oggi:")===0){
     S.recScartati = S.recScartati || [];
     if(!S.recScartati.includes(r.origine)) S.recScartati.push(r.origine);
+  }
+  /* i debiti nati da un'assenza nota rinascevano alla sincronizzazione successiva,
+     perché l'assenza restava marcata "breve" e quindi da recuperare: eliminare qui
+     ora spegne la cosa alla radice, sulla nota stessa, non solo sul debito. */
+  if(r && r.origine && r.origine.indexOf("an:")===0){
+    const nota = (S.assenzeNote||[]).find(a=>"an:"+a.id===r.origine);
+    if(nota) nota.recuperabile=false;
   }
   S.recuperi = S.recuperi.filter(x=>x.id!==id); save(); render();
 }
@@ -2834,6 +2853,208 @@ function leggiAssistenti(wb){
   return {lista};
 }
 
+
+/* ================= GRUPPI DI SECONDA LINGUA PER IL SOSTEGNO =================
+   Quando un sostegno copre un'ora di articolata (francese/spagnolo) e la sua
+   cella nell'orario non porta il suffisso F/S, l'app non sa in quale gruppo sia:
+   la cella si legge come una classe qualsiasi (CLASSE), non come LINGUA.
+   Qui sta l'assegnazione fatta a mano o importata da un file dedicato, che il
+   motore consulta al posto della cella grezza quando serve decidere le sostituzioni.
+   Non tocca l'orario importato: è un livello sopra, disattivabile riga per riga. */
+
+/* stato "vero" di una cella per un docente, seconda lingua compresa.
+   Usata SOLO nei punti che decidono le sostituzioni (candidati, sostSuClasse):
+   altrove (coperture, classiDi) la cella grezza resta quella che è. */
+function statoLinguaEff(d,g,h,ore){
+  const st = statoCella(d,g,h,ore);
+  if(st.t==="CLASSE"){
+    const ov=(S.linguaSostegno||{})[d.nome+"|"+g+"|"+h];
+    if(ov) return {t:"LINGUA", classe:st.det, lingua:ov};
+  }
+  return st;
+}
+
+const GIORNI_ESTESI = {LUNEDI:"LUN",MARTEDI:"MAR",MERCOLEDI:"MER",GIOVEDI:"GIO",VENERDI:"VEN",SABATO:"SAB"};
+function normGiorno(s){
+  const t=String(s||"").trim().toUpperCase()
+    .replace(/[ÀÁÂÃÄ]/g,"A").replace(/[ÈÉÊË]/g,"E").replace(/[ÌÍÎÏ]/g,"I")
+    .replace(/[ÒÓÔÕÖ]/g,"O").replace(/[ÙÚÛÜ]/g,"U");
+  if(GIORNI_ESTESI[t]) return GIORNI_ESTESI[t];
+  const t3=t.slice(0,3);
+  if(["LUN","MAR","MER","GIO","VEN","SAB"].includes(t3)) return t3;
+  return null;
+}
+function normLingua(s){
+  const t=String(s||"").trim().toUpperCase();
+  if(t==="F"||t==="FR"||t.startsWith("FRANC")) return "FR";
+  if(t==="S"||t==="SP"||t.startsWith("SPAGN")) return "SP";
+  return null;
+}
+
+/* legge il file DOCENTE|GIORNO|ORA|CLASSE|LINGUA. Non salva nulla da solo:
+   restituisce righe valide + problemi, per mostrare un'anteprima prima di confermare. */
+function leggiLinguaSostegno(wb){
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  if(!ws) return {errore:"Il file non contiene fogli leggibili."};
+  const grid = XLSX.utils.sheet_to_json(ws, {header:1, raw:true, defval:null});
+  const up=x=>String(x==null?"":x).trim().toUpperCase();
+  let hdr=-1, col={};
+  for(let r=0;r<Math.min(grid.length,15);r++){
+    const row=(grid[r]||[]).map(up);
+    if(row.includes("DOCENTE") && row.includes("LINGUA")){
+      hdr=r;
+      ["DOCENTE","GIORNO","ORA","CLASSE","LINGUA"].forEach(k=>{ const i=row.indexOf(k); if(i>=0) col[k]=i; });
+      break;
+    }
+  }
+  if(hdr<0) return {errore:"Non trovo l'intestazione (servono le colonne DOCENTE, GIORNO, ORA, CLASSE, LINGUA)."};
+  if(!("DOCENTE" in col) || !("GIORNO" in col) || !("ORA" in col) || !("CLASSE" in col) || !("LINGUA" in col))
+    return {errore:"Mancano una o più colonne fra DOCENTE, GIORNO, ORA, CLASSE, LINGUA."};
+
+  const valide=[], problemi=[]; const visteInFile={};
+  for(let r=hdr+1;r<grid.length;r++){
+    const row=grid[r]||[];
+    const docRaw=String(row[col.DOCENTE]==null?"":row[col.DOCENTE]).trim();
+    if(!docRaw) continue;                                    /* riga vuota: la salto */
+    if(/^LEGENDA$/i.test(docRaw) || /^DA VERIFICARE/i.test(docRaw)) break;   /* fine dati */
+
+    const giorno=normGiorno(row[col.GIORNO]);
+    const oraM=String(row[col.ORA]==null?"":row[col.ORA]).match(/\d+/);
+    const ora=oraM?+oraM[0]:null;
+    const classe=String(row[col.CLASSE]==null?"":row[col.CLASSE]).trim().toUpperCase();
+    const lingua=normLingua(row[col.LINGUA]);
+    const rigaTx="riga "+(r+1)+" ("+docRaw+")";
+
+    if(!giorno){ problemi.push(rigaTx+": giorno non riconosciuto"); continue; }
+    if(!ora){ problemi.push(rigaTx+": ora non valida"); continue; }
+    if(!/^[1-9][A-D]$/.test(classe)){ problemi.push(rigaTx+": classe non valida"); continue; }
+    if(!lingua){ problemi.push(rigaTx+": lingua non riconosciuta (usare F o S)"); continue; }
+
+    const nome = agganciaDocente(docRaw);
+    if(!nome){ problemi.push(rigaTx+": docente non trovato nell'orario"); continue; }
+    const doc = S.orario.docenti.find(x=>x.nome===nome);
+    if(!isSost(doc)){ problemi.push(rigaTx+": "+nome+" risulta un docente, ma non di sostegno"); continue; }
+
+    const key=nome+"|"+giorno+"|"+ora;
+    if(visteInFile[key] && visteInFile[key]!==lingua){
+      problemi.push(rigaTx+": due righe diverse per la stessa ora ("+visteInFile[key]+" e "+lingua+")"); continue;
+    }
+    visteInFile[key]=lingua;
+    valide.push({nome, g:giorno, h:ora, classe, lingua});
+  }
+  return {valide, problemi};
+}
+
+function getLinguaSostegno(){ S.linguaSostegno = S.linguaSostegno || {}; return S.linguaSostegno; }
+
+function renderLinguaSostegno(){
+  if(!S.orario){
+    el("main").innerHTML=`<div class="backlink" onclick="S.tab='altro'; render()">‹ Altro</div>
+      <h2 class="sec">Gruppi di seconda lingua</h2>
+      <p class="hint">Serve prima l'orario. Importalo da Altro → Importa orario.</p>`;
+    return;
+  }
+  const lg=getLinguaSostegno();
+  const senzaFR = !S.lingue || !S.lingue.FR, senzaSP = !S.lingue || !S.lingue.SP;
+
+  const daFare = sostegniSenzaLingua(S.orario, S.lingue)
+    .filter(x=> !lg[x.nome+"|"+x.g+"|"+x.h]);
+  const assegnati = Object.keys(lg).map(k=>{
+    const [nome,g,h]=k.split("|");
+    const st=statoCella(S.orario.docenti.find(d=>d.nome===nome)||{cells:{}}, g, +h, S.orario.ore);
+    return {nome, g, h:+h, classe: st.det || "?", lingua: lg[k]};
+  }).sort((a,b)=> a.nome.localeCompare(b.nome) || a.g.localeCompare(b.g) || a.h-b.h);
+
+  el("main").innerHTML = `
+    <div class="backlink" onclick="S.tab='altro'; render()">‹ Altro</div>
+    <h2 class="sec">Gruppi di seconda lingua</h2>
+    <p class="hint" style="margin-top:0">Quando un sostegno copre un'ora di articolata e la sua cella nell'orario non dice se è nel gruppo francese o spagnolo, lo indichi qui: il motore delle sostituzioni ne tiene conto.</p>
+
+    ${(senzaFR||senzaSP) ? `<div class="promemo" style="background:#F7EEDD; border-left-color:var(--amber)">
+      Prima serve sapere chi sono i docenti di riferimento di ${senzaFR&&senzaSP?"francese e spagnolo":senzaFR?"francese":"spagnolo"}.
+      Si impostano in <span style="color:var(--teal); font-weight:600" onclick="S.tab='flag'; render()">Altro → Sostegni non derogabili</span>, in fondo alla pagina.</div>` : ``}
+
+    <input type="file" id="fileLinguaSost" accept=".xlsx,.xls" style="display:none" onchange="caricaLinguaSostegno(this)">
+    <button class="btn" style="width:100%" onclick="el('fileLinguaSost').click()">📄 Importa da file</button>
+    <div id="linguaSostEsito"></div>
+
+    <h2 class="sec">Da assegnare${daFare.length?" ("+daFare.length+")":""}</h2>
+    ${!daFare.length ? `<p class="hint" style="margin-top:0">${(senzaFR||senzaSP)?"—":"Nessuna ora ambigua al momento."}</p>` :
+      `<p class="hint" style="margin-top:0">Ore di articolata dove un sostegno è su una delle classi coinvolte, ma non si sa in quale gruppo.</p>
+      <div class="criteria-list">${daFare.map(x=>`
+        <div class="criterion-row">
+          <div class="criterion-label">
+            <div class="criterion-code">${esc(cognomeBreve(x.nome))}</div>
+            <div class="criterion-desc">${esc(x.g)} · ${x.h}ª · ${esc(fmtCl(x.classe))}</div>
+          </div>
+          <div style="display:flex; gap:6px">
+            <button class="btn ghost" style="padding:7px 12px; font-size:13px" onclick="assegnaLinguaSostegno('${esc(x.nome)}','${x.g}',${x.h},'FR')">🇫🇷 F</button>
+            <button class="btn ghost" style="padding:7px 12px; font-size:13px" onclick="assegnaLinguaSostegno('${esc(x.nome)}','${x.g}',${x.h},'SP')">🇪🇸 S</button>
+          </div>
+        </div>`).join("")}</div>`}
+
+    <h2 class="sec">Assegnati${assegnati.length?" ("+assegnati.length+")":""}</h2>
+    ${!assegnati.length ? `<p class="hint" style="margin-top:0">Nessuno ancora.</p>` :
+      `<div class="criteria-list">${assegnati.map(x=>`
+        <div class="criterion-row">
+          <div class="criterion-label">
+            <div class="criterion-code">${esc(cognomeBreve(x.nome))} <span style="color:${x.lingua==='FR'?'#1C6E6A':'#B07A1E'}">${x.lingua==='FR'?'francese':'spagnolo'}</span></div>
+            <div class="criterion-desc">${esc(x.g)} · ${x.h}ª · ${esc(fmtCl(x.classe))}</div>
+          </div>
+          <button class="btn ghost" style="padding:7px 12px; font-size:13px; color:var(--red); border-color:var(--red)"
+            onclick="rimuoviLinguaSostegno('${esc(x.nome)}','${x.g}',${x.h})">✕</button>
+        </div>`).join("")}</div>`}
+  `;
+}
+
+function assegnaLinguaSostegno(nome,g,h,lingua){
+  const lg=getLinguaSostegno();
+  lg[nome+"|"+g+"|"+h]=lingua;
+  S.prospetto=null; save(); render();
+}
+function rimuoviLinguaSostegno(nome,g,h){
+  const lg=getLinguaSostegno();
+  delete lg[nome+"|"+g+"|"+h];
+  S.prospetto=null; save(); render();
+}
+
+function caricaLinguaSostegno(inp){
+  const f=inp.files&&inp.files[0]; if(!f) return;
+  const rd=new FileReader();
+  rd.onload=e=>{
+    let res;
+    try{
+      const wb=XLSX.read(new Uint8Array(e.target.result), {type:"array"});
+      res=leggiLinguaSostegno(wb);
+    }catch(err){ res={errore:"Non riesco a leggere il file: "+String(err)}; }
+    const box=el("linguaSostEsito");
+    if(res.errore){
+      box.innerHTML=`<div class="promemo" style="background:#F4DAD7; border-left-color:var(--red)">${esc(res.errore)}</div>`;
+      inp.value=""; return;
+    }
+    let html=`<div class="promemo">${res.valide.length} righe valide su ${res.valide.length+res.problemi.length} lette.</div>`;
+    if(res.problemi.length){
+      html+=`<div class="promemo" style="background:#F7EEDD; border-left-color:var(--amber)">
+        <b>Da controllare (non importate):</b><br>${res.problemi.slice(0,10).map(esc).join("<br>")}
+        ${res.problemi.length>10?"<br>…e altre "+(res.problemi.length-10):""}</div>`;
+    }
+    if(res.valide.length){
+      html+=`<button class="btn" style="width:100%; margin-top:8px" onclick='confermaLinguaSostegno(${JSON.stringify(JSON.stringify(res.valide))})'>Importa le ${res.valide.length} righe valide</button>`;
+    }
+    box.innerHTML=html;
+    inp.value="";
+  };
+  rd.readAsArrayBuffer(f);
+}
+function confermaLinguaSostegno(jsonTxt){
+  const valide=JSON.parse(jsonTxt);
+  const lg=getLinguaSostegno();
+  valide.forEach(x=>{ lg[x.nome+"|"+x.g+"|"+x.h]=x.lingua; });
+  S.prospetto=null; save();
+  toast(valide.length+" assegnazioni importate");
+  render();
+}
+
 /* ================= IMPORT USCITE DAL FOGLIO VIAGGI =================
    Il foglio è compilato dalla FS viaggi e letto tramite uno script Google.
    L'app non scrive mai sul foglio: lo legge e basta.
@@ -3168,11 +3389,16 @@ function renderAssenze(){
           ? "permesso breve · "+((a.ore||[]).map(h=>h+"ª").join(", ")||"ore da indicare")
           : "intera giornata";
         const passata = (a.al||a.dal) < oggi;
+        const nonRec = a.tipo==="breve" && a.recuperabile===false;
         return `<div class="regcard" style="${passata?'opacity:.5':''}"><div class="reghead" style="cursor:default">
           <div style="flex:1">
             <b>${esc(a.docente)}</b>
             <div class="regsub">${esc(periodo)}</div>
             <div class="regsub">${a.tipo==="breve"?"⏱ ":"📅 "}${esc(tx)}${a.nota?" · "+esc(a.nota):""}</div>
+            ${a.tipo==="breve" ? `<div style="margin-top:6px">
+              <span class="achip" style="cursor:pointer; ${nonRec?'':'background:#E4F4EA; border-color:#A8D9BC; color:#1B6E4A'}"
+                onclick="toggleRecuperabile('${a.id}')">${nonRec?"✕ non da recuperare":"↩ da recuperare"}</span>
+            </div>` : ``}
           </div>
           <b class="chev" style="color:var(--red); cursor:pointer" onclick="eliminaAssenza('${a.id}')">✕</b>
         </div></div>`;
@@ -3207,6 +3433,15 @@ function renderAssenze(){
   if(f.tipo==='breve'){
     out += `<div class="field"><label>Ore di assenza</label>
       <div class="orebtns">${o.ore.map(h=>`<div class="oreb ${f.ore.includes(h)?'on':''}" onclick="toggleOraAssenza(${h})">${h}ª</div>`).join("")}</div></div>`;
+    out += `<div class="field"><label>Va recuperato?</label>
+      <div class="pickgrid">
+        <div class="pick ${f.recuperabile!==false?'on':''}" onclick="S.assenzaForm.recuperabile=true; render()">Sì, apre un debito</div>
+        <div class="pick ${f.recuperabile===false?'on':''}" onclick="S.assenzaForm.recuperabile=false; render()">No</div>
+      </div>
+      <p class="hint" style="margin:6px 0 0">${f.recuperabile===false
+        ? "Ore fuori dall'orario ma non da recuperare (es. permesso retribuito a ore, non art. 16)."
+        : "Permesso breve ex art. 16: da restituire entro due mesi con sostituzioni."}</p>
+    </div>`;
   } else if(piuGiorni){
     out += `<p class="hint">Assenza di più giorni: tutte le ore di ciascun giorno.</p>`;
   }
@@ -3222,7 +3457,7 @@ function renderAssenze(){
 }
 function nuovaAssenza(){
   const oggi = S.dataOggi || isoOggi();
-  S.assenzaForm = { id:"a"+Date.now(), docente:"", dal:oggi, al:oggi, tipo:"giornata", ore:[], nota:"" };
+  S.assenzaForm = { id:"a"+Date.now(), docente:"", dal:oggi, al:oggi, tipo:"giornata", ore:[], nota:"", recuperabile:true };
   render();
 }
 function toggleOraAssenza(h){
@@ -3244,6 +3479,14 @@ function eliminaAssenza(id){
   if(!confirm("Eliminare questa assenza annotata?")) return;
   S.assenzeNote=(S.assenzeNote||[]).filter(a=>a.id!==id);
   S.noteApplicate=null; save(); render();
+}
+/* corregge sul posto un permesso breve già inserito, senza doverlo ricreare:
+   serve per i casi già passati, come i debiti sbagliati che avevano già intaccato
+   il plafond prima di accorgersene */
+function toggleRecuperabile(id){
+  const a=(S.assenzeNote||[]).find(x=>x.id===id); if(!a) return;
+  a.recuperabile = (a.recuperabile===false) ? true : false;
+  S.prospetto=null; save(); render();
 }
 
 /* ---- USCITE DIDATTICHE ---- */
