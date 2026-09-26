@@ -2201,7 +2201,7 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "26.09.2026c";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const VERSIONE = "26.09.2026d";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -2399,12 +2399,29 @@ function renderRecuperi(){
       const perc = tetto ? Math.min(100, Math.round(100*usate/tetto)) : 0;
       const vicino = tetto && usate >= tetto*0.75;
       const sforato = tetto && usate >= tetto;
-      return `<div class="regcard" style="padding:11px 13px">
+      const aperto = S.plafAperto===n;
+      let dett = "";
+      if(aperto){
+        const voci = S.recuperi.filter(r=>r.docente===n && annoScolastico(r.data)===annoIso)
+          .sort((a,b)=>a.data.localeCompare(b.data));
+        dett = `<div style="margin-top:9px; display:flex; flex-direction:column; gap:6px">` +
+          voci.map(r=>{
+            const chiuso = debitoResiduo(r)<=0;
+            const fonte = r.origine && r.origine.indexOf("an:")===0 ? "assenza nota"
+                        : r.origine && r.origine.indexOf("oggi:")===0 ? "segnato in Sostituzioni" : "aggiunto a mano";
+            return `<div style="display:flex; align-items:center; gap:8px; font-size:12.5px; padding:6px 8px; background:var(--paper); border-radius:8px">
+              <span style="flex:1">${esc(dataLeggibile(r.data).replace(/ \d{4}$/,''))} · ${r.ore}h · ${chiuso?'chiuso':'aperto'} · ${fonte}</span>
+              <span style="color:var(--red); cursor:pointer; font-weight:700" onclick="event.stopPropagation(); if(confirm('Togliere questa voce dal plafond di ${esc(cognomeBreve(n))}?')) eliminaRecupero('${r.id}')">✕</span>
+            </div>`;
+          }).join("") + `</div>`;
+      }
+      return `<div class="regcard" style="padding:11px 13px; cursor:pointer" onclick="S.plafAperto = S.plafAperto==='${esc(n)}'?null:'${esc(n)}'; render()">
         <div style="display:flex; justify-content:space-between; align-items:baseline">
           <b>${esc(cognomeBreve(n))}</b>
           <span class="rec-plaf${sforato?' sfor':vicino?' vic':''}">${usate} / ${tetto||'?'} ore</span>
         </div>
         <div class="rec-bar"><div class="rec-bar-fill${sforato?' sfor':vicino?' vic':''}" style="width:${perc}%"></div></div>
+        ${dett || `<div class="hint" style="margin:5px 0 0">tocca per vedere il dettaglio</div>`}
       </div>`;
     }).join("");
   }
