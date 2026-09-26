@@ -1580,6 +1580,38 @@ function syncScarica(silenzioso){
       S.syncAttivo=false;
       if(!j.ok){ toast("Errore: "+(j.errore||"?")); render(); return; }
       if(!j.dati){ toast("Il foglio è ancora vuoto"); render(); return; }
+
+      /* guardia anti-svuotamento: se il foglio sembra avere molto meno di quello
+         che ho già, mi fermo e chiedo conferma invece di sovrascrivere alla cieca.
+         Un blob corrotto o un invio partito da dati vecchi hanno la stessa firma:
+         "molto meno di prima" — e qui non serve sapere quale dei due sia successo,
+         basta non applicarlo senza che l'utente lo veda. */
+      const rP=contaStato(prima), rD=contaStato(j.dati);
+      const tP=totaleStato(rP), tD=totaleStato(rD);
+      const svuota = (rP.docenti>0 && rD.docenti===0)
+                  || (rP.righe>=5 && rD.righe < rP.righe*0.5)
+                  || (tP>=5 && tD < tP*0.4);
+      if(svuota && !silenzioso){
+        const righe=[
+          "docenti nell'orario: "+rP.docenti+" → "+rD.docenti,
+          "giornate di registro: "+rP.giorni+" → "+rD.giorni,
+          "sostituzioni registrate: "+rP.righe+" → "+rD.righe,
+          "uscite: "+rP.uscite+" → "+rD.uscite,
+          "assenze note: "+rP.assenze+" → "+rD.assenze,
+          "recuperi: "+rP.recuperi+" → "+rD.recuperi
+        ].filter((_,i)=>[rP.docenti-rD.docenti, rP.giorni-rD.giorni, rP.righe-rD.righe,
+                          rP.uscite-rD.uscite, rP.assenze-rD.assenze, rP.recuperi-rD.recuperi][i]>0);
+        const msg = "Quello che arriva dal foglio ha molto meno contenuto di quello che hai già su questo dispositivo:\n\n"
+          + righe.map(x=>"• "+x).join("\n")
+          + "\n\nPotrebbe essere un invio partito da dati vecchi, o il foglio danneggiato. "
+          + "Se continui, quello che hai qui viene sostituito.\n\nScaricare comunque?";
+        if(!confirm(msg)){
+          toast("Scaricamento annullato — niente è stato cambiato");
+          render(); return;
+        }
+      }
+
+      salvaPreSync(prima);   /* rete di sicurezza, sempre — a prescindere dalla guardia sopra */
       applicaStato(j.dati);
       c.info = j.info || null;
       c.ultimoPull = (j.info && j.info.quando) || new Date().toISOString();
@@ -2158,7 +2190,7 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "20.09.2026n";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const VERSIONE = "26.09.2026";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -2187,6 +2219,44 @@ function riepilogoBackup(d){
     `${(d.recuperi||[]).length} recuperi`,
     `${(d.flagOggi||[]).length} flag`
   ];
+}
+/* numeri grezzi di uno stato, per accorgersi se uno scaricamento è sospettosamente
+   più povero di quello che si aveva — indipendentemente dal motivo */
+function contaStato(d){
+  d=d||{};
+  const righeReg = Object.values(d.registro||{}).reduce((s,g)=>s+((g&&g.righe)||[]).length,0);
+  return {
+    docenti: d.orario ? (d.orario.docenti||[]).length : 0,
+    giorni: Object.keys(d.registro||{}).length,
+    righe: righeReg,
+    uscite: (d.uscite||[]).length,
+    assenze: (d.assenzeNote||[]).length,
+    recuperi: (d.recuperi||[]).length,
+    assistenti: (d.assistenti||[]).length,
+    totale: 0   // riempito sotto
+  };
+}
+function totaleStato(c){ return c.docenti+c.giorni+c.righe+c.uscite+c.assenze+c.recuperi+c.assistenti; }
+
+/* ultime istantanee salvate in automatico subito prima di ogni Scarica —
+   indipendenti dal backup manuale, che può non essere aggiornato */
+function salvaPreSync(dati){
+  try{
+    let arr = JSON.parse(localStorage.getItem("sostituto_presync")||"[]");
+    arr.unshift({quando:new Date().toISOString(), dati});
+    localStorage.setItem("sostituto_presync", JSON.stringify(arr.slice(0,3)));
+  }catch(e){ /* se anche questo fallisce, pazienza: non deve bloccare la sincronizzazione */ }
+}
+function leggiPreSync(){ try{ return JSON.parse(localStorage.getItem("sostituto_presync")||"[]"); }catch(e){ return []; } }
+function ripristinaPreSync(i){
+  const arr=leggiPreSync(); const voce=arr[i]; if(!voce) return;
+  const rig=riepilogoBackup(voce.dati);
+  const msg="Ripristinare l'istantanea di "+new Date(voce.quando).toLocaleString("it-IT")+"?\n\n"
+    +rig.map(x=>"• "+x).join("\n")+"\n\nATTENZIONE: i dati attuali verranno sostituiti.";
+  if(!confirm(msg)) return;
+  applicaStato(voce.dati);
+  toast("Istantanea ripristinata");
+  S.tab="altro"; render();
 }
 function esportaBackup(){
   const d = datiBackup();
@@ -2220,21 +2290,10 @@ function onFileBackup(ev){
     const msg = "Ripristinare questo backup?\n\nCreato: "+quando+"\n\n"+rig.map(x=>"• "+x).join("\n")
               + "\n\nATTENZIONE: i dati attualmente nell'app verranno sostituiti.";
     if(!confirm(msg)){ ev.target.value=""; return; }
-    S.orario      = d.orario || null;
-    S.lingue      = d.lingue || {};
-    S.flagOggi    = d.flagOggi || [];
-    S.registro    = d.registro || {};
-    S.uscite      = d.uscite || [];
-    S.assenzeNote = d.assenzeNote || [];
-    S.pnoOn       = d.pnoOn || [];
-    S.potAssign   = d.potAssign || {};
-    S.recuperi    = d.recuperi || [];
-    if(d.configCriteri) S.configCriteri = d.configCriteri;
-    if(d.assistenti) S.assistenti = d.assistenti;
-    if(d.potAuto) S.potAuto = d.potAuto;
-    S.prospetto=null; S.assentiOggi={}; S.breveOggi={}; S.noteApplicate=null; S.alunnoAssenteOggi=[];
-    if(S.orario) S.day = giornoDaData(S.dataOggi||isoOggi());
-    save(); saveRegistro();
+    /* un solo punto che assegna i campi (applicaStato), qui e nella condivisione e
+       nelle istantanee automatiche: così un campo nuovo si aggiunge una volta sola
+       e non può restare fuori da uno dei tre punti come già successo una volta */
+    applicaStato(d);
     toast("Backup ripristinato");
     S.tab = "altro"; render();
   };
@@ -3065,6 +3124,23 @@ function renderBackup(){
 
     <button class="btn" style="width:100%; margin-top:6px" onclick="esportaBackup()">⬇️ Salva un backup</button>
     <p class="hint">Scarica un file unico con tutto. Conservalo dove preferisci (mail, cloud, chat con te stesso).</p>
+
+    ${(()=>{
+      const arr=leggiPreSync();
+      if(!arr.length) return "";
+      const righe = arr.map((v,i)=>{
+        const c = contaStato(v.dati);
+        return `<div class="regcard" style="margin-top:8px"><div class="reghead" style="cursor:default"><div style="flex:1">
+          <b>${esc(new Date(v.quando).toLocaleString("it-IT"))}</b>
+          <div class="regsub">${c.docenti} docenti · ${c.giorni} giornate di registro · ${c.righe} sostituzioni</div>
+        </div></div>
+        <button class="btn ghost" style="width:100%; margin-top:6px" onclick="ripristinaPreSync(${i})">Ripristina questa istantanea</button>
+        </div>`;
+      }).join("");
+      return `<h2 class="sec">Istantanee automatiche</h2>
+        <p class="hint" style="margin-top:0">L'app ne salva una da sola subito prima di ogni Scarica dal foglio condiviso, così hai sempre una via indietro anche se il backup manuale non è aggiornato.</p>
+        ${righe}`;
+    })()}
 
     <button class="btn ghost" style="width:100%; margin-top:14px" onclick="el('fileBk').click()">⬆️ Ripristina da backup</button>
     <input type="file" id="fileBk" accept=".json,application/json" style="display:none">
