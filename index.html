@@ -761,11 +761,32 @@ function sostSuClasse(o, classe, g, h){          /* sostegni presenti in una cla
   }
   return out;
 }
+/* Ore in cui ciascun assente è davvero assente: {nome: Set(ore) | null (= tutto il giorno)}.
+   Un permesso breve o una gita di poche ore non rende il docente assente tutta la giornata:
+   alle altre ore è a scuola e può fare sostituzioni. Le due fonti si sommano. */
+function costruisciAssentiOre(assenti, uscite){
+  const ao = {};
+  const unisci = (nome, ore)=>{
+    if(nome in ao && ao[nome]===null) return;                 /* già assente tutto il giorno */
+    if(!ore || !ore.length){ ao[nome]=null; return; }
+    if(!(nome in ao)) ao[nome]=new Set();
+    ore.forEach(h=>ao[nome].add(h));
+  };
+  (assenti||[]).forEach(a=>unisci(a.nome, Array.isArray(a.ore)&&a.ore.length ? a.ore : null));
+  (uscite||[]).forEach(u=>(u.accomp||[]).forEach(n=>unisci(n, (u.ore&&u.ore.length) ? u.ore : null)));
+  return ao;
+}
+/* il docente è assente a quest'ora? (senza dettaglio orario: assente tutto il giorno) */
+function assenteAllOra(ctx, nome, h){
+  if(!ctx.assenti.has(nome)) return false;
+  const m = ctx.assentiOre && ctx.assentiOre[nome];
+  return !m || m.has(h);
+}
 /* c'è un curricolare (non sostegno) ASSENTE che insegna in questa classe a quest'ora? */
 function curricolareAssenteInClasse(o, classe, g, h, ctx, escludi){
   for(const d of o.docenti){
     if(isSost(d)) continue;
-    if(!ctx.assenti.has(d.nome)) continue;
+    if(!assenteAllOra(ctx, d.nome, h)) continue;
     if(d.nome===escludi) continue;
     const c=statoCella(d,g,h,o.ore);
     const cl = c.det || c.a || c.classe;
@@ -797,7 +818,7 @@ function candidati(o, classe, g, h, assenteObj, ctx, lingua){
   const PR_EMERG = (PR.g!=null ? PR.g : 9) - 0.5;
   const pool=[];
   for(const d of o.docenti){
-    if(ctx.assenti.has(d.nome)) continue;
+    if(assenteAllOra(ctx, d.nome, h)) continue;
     if(ctx.occupati[g+"|"+h] && ctx.occupati[g+"|"+h].has(d.nome)) continue;  /* già impegnato */
     const st = statoLinguaEff(d,g,h,o.ore);
     const aff = (affApplicabile && d.materia===materia) ? 0 : 1;
@@ -857,6 +878,21 @@ function candidati(o, classe, g, h, assenteObj, ctx, lingua){
 
 /* genera il prospetto completo di una giornata.
    assenti = [{nome, ore:null|[h...]}]  (null = giornata intera) */
+/* Potenziamento assegnato alla classe in quest'ora (a mano o in automatico): se il
+   curricolare è assente, la classe non resta scoperta perché il potenziatore è già lì,
+   e per quell'ora non serve una sostituzione. Vale solo se il potenziatore è davvero
+   disponibile (a scuola, non sospeso, non Pno, non spostato altrove, non in gita) e non
+   è stato scelto a mano per un'altra classe alla stessa ora. */
+function copertoDaPotenziamento(o, giorno, h, classe, ctx, forzati){
+  for(const nome of potIn(classe, giorno, h)){
+    if(assenteAllOra(ctx, nome, h)) continue;
+    if(forzati && forzati.has(nome)) continue;
+    if(ctx.occupati[giorno+"|"+h] && ctx.occupati[giorno+"|"+h].has(nome)) continue;
+    return nome;
+  }
+  return null;
+}
+
 function generaProspetto(o, giorno, assenti, opts){
   opts = opts||{};
   const ctx = {
@@ -875,6 +911,7 @@ function generaProspetto(o, giorno, assenti, opts){
 
   /* ---- USCITE DIDATTICHE attive in questa data ---- */
   const uscite = opts.uscite || [];
+  ctx.assentiOre = costruisciAssentiOre(assenti, uscite);
   const oraInUscita = (u,h) => !u.ore || !u.ore.length || u.ore.includes(h);
   const classeInGita = (cl,h) => !!cl && uscite.some(u => (u.classi||[]).includes(cl) && oraInUscita(u,h));
   const accompagna  = (nome,h) => uscite.some(u => (u.accomp||[]).includes(nome) && oraInUscita(u,h));
@@ -899,6 +936,10 @@ function generaProspetto(o, giorno, assenti, opts){
   // costruisco gli slot da coprire
   const slot=[];
   const note=[];
+  const coperte=[];       /* ore in cui il curricolare è assente ma la classe è già coperta dal potenziamento */
+  const ovr = opts.override || {};
+  const forzatiOra = {};  /* docenti scelti a mano, per ora: non vanno tolti per coprire una classe */
+  for(const k in ovr){ if(!ovr[k]) continue; const hh=+k.slice(k.lastIndexOf("|")+1); (forzatiOra[hh]=forzatiOra[hh]||new Set()).add(ovr[k]); }
   for(const a of assentiEff){
     const doc=o.docenti.find(d=>d.nome===a.nome); if(!doc) continue;
     const ore = a.ore || o.ore;
@@ -924,6 +965,13 @@ function generaProspetto(o, giorno, assenti, opts){
         } else if(st.t==="AR"){
           slot.push({h, a:doc, classe:st.det, tipo:"AIRC", lingua:null});
         } else {
+          /* una scelta manuale già fatta per questa cella vince sempre */
+          const daPot = (a.nome+"|"+h) in ovr ? null : copertoDaPotenziamento(o, giorno, h, st.det, ctx, forzatiOra[h]);
+          if(daPot){
+            coperte.push({h, a:doc, classe:st.det, da:daPot});
+            (ctx.occupati[giorno+"|"+h] = ctx.occupati[giorno+"|"+h]||new Set()).add(daPot);
+            continue;
+          }
           slot.push({h, a:doc, classe:st.det, tipo:"sostituzione", lingua:null});
         }
       }
@@ -965,7 +1013,7 @@ function generaProspetto(o, giorno, assenti, opts){
     esitiMap[key] = {...s, scelto:nome, motivo, rice:isRice(nome,s.h)};
   }
   const esiti = slot.map(s=> esitiMap[s.a.nome+"|"+s.h]);
-  return { giorno, esiti, note, pagamento: ctx.pagamento };
+  return { giorno, esiti, note, coperte, pagamento: ctx.pagamento };
 }
 
 /* tutte le classi presenti nell'orario, ordinate */
@@ -1140,12 +1188,17 @@ function ricostruisciCtx(o, prosp, cellaEsclusa){
   ctx.classeInGita = (cl,h) => !!cl && _us.some(u => (u.classi||[]).includes(cl) && _oraIn(u,h));
   ctx.accompagna  = (nome,h) => _us.some(u => (u.accomp||[]).includes(nome) && _oraIn(u,h));
   _us.forEach(u => (u.accomp||[]).forEach(n => assenti.add(n)));   /* accompagnatori: fuori */
+  Object.keys(S.assentiOggi||{}).forEach(n => assenti.add(n));      /* come in generazione: anche chi non ha celle da coprire */
+  ctx.assentiOre = costruisciAssentiOre(Object.keys(S.assentiOggi||{}).map(n=>({nome:n, ore:S.assentiOggi[n]})), _us);
   for(const e of prosp.esiti){
     if(e.a.nome===cellaEsclusa.a.nome && e.h===cellaEsclusa.h) continue;  /* escludo questa cella */
     if(e.scelto){
       ctx.fatte[e.scelto]=(ctx.fatte[e.scelto]||0)+1;
       (ctx.occupati[prosp.giorno+"|"+e.h] = ctx.occupati[prosp.giorno+"|"+e.h]||new Set()).add(e.scelto);
     }
+  }
+  for(const c of (prosp.coperte||[])){
+    (ctx.occupati[prosp.giorno+"|"+c.h] = ctx.occupati[prosp.giorno+"|"+c.h]||new Set()).add(c.da);
   }
   return ctx;
 }
@@ -1365,6 +1418,9 @@ function stampaProspetto(){
   const nonSost = (p.note||[]).length
     ? `<div class="pr-note">Sostegni assenti non sostituiti (la classe ha il docente curricolare): ${
         p.note.map(n=>esc(n.nome)+" — "+n.h+"ª ora ("+esc(fmtCl(n.classe))+")").join("; ")}</div>` : "";
+  const copPr = (p.coperte||[]).length
+    ? `<div class="pr-note">Ore senza sostituzione perché la classe è già coperta dal potenziamento assegnato: ${
+        p.coperte.slice().sort((a,b)=>a.h-b.h).map(c=>c.h+"ª ora "+esc(fmtCl(c.classe))+" ("+esc(c.a.nome)+") — "+esc(c.da)).join("; ")}</div>` : "";
   const usc = usciteAttive(iso).map(u=>
     `<div class="pr-note">Uscita didattica: ${esc(u.nota||"—")} — classi ${(u.classi||[]).map(esc).join(", ")} fuori sede.</div>`).join("");
 
@@ -1383,7 +1439,7 @@ function stampaProspetto(){
       </tr></thead>
       <tbody>${corpo}</tbody>
     </table>
-    ${usc}${nonSost}
+    ${usc}${nonSost}${copPr}
     <div class="pr-foot">
       <div>Ore a pagamento: <b>${p.pagamento||0}</b> — Sostituzioni disposte: <b>${righe.filter(e=>e.scelto).length}</b></div>
       <div>Da allegare al registro delle presenze.</div>
@@ -2179,6 +2235,7 @@ function archiviaRegistro(){
       motivo:e.motivo, tipo:e.tipo||"", rice:!!e.rice, svuotata:!!e.svuotata, manuale:!!e.manuale,
       gruppo:e.gruppo||"", lingua:e.lingua||"" })),
     note: (p.note||[]).map(n=>({nome:n.nome, h:n.h, classe:n.classe})),
+    coperte: (p.coperte||[]).map(c=>({h:c.h, assente:c.a.nome, classe:c.classe, da:c.da})),
     salvato: new Date().toISOString()
   };
   ricalcolaRestituzioni();
@@ -2490,7 +2547,7 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "28.09.2026";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const VERSIONE = "28.09.2026c";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -3937,6 +3994,9 @@ function renderRegistro(){
       if(rec.note && rec.note.length){
         out += `<div class="pnote" style="margin:8px 12px">Sostegni non sostituiti: ${rec.note.map(n=>esc(n.nome)+" "+n.h+"ª").join(", ")}</div>`;
       }
+      if(rec.coperte && rec.coperte.length){
+        out += `<div class="pnote" style="margin:8px 12px">Senza sostituzione, coperte dal potenziamento assegnato: ${rec.coperte.map(c=>c.h+"ª "+esc(fmtCl(c.classe))+" ("+esc(cognomeBreve(c.assente))+" → "+esc(cognomeBreve(c.da))+")").join(", ")}</div>`;
+      }
       out += `<div style="padding:10px 12px; display:flex; gap:8px">
         <button class="btn ghost" style="flex:1; font-size:13px; padding:8px" onclick="condividiWhatsAppRegistro('${iso}')">📋 WhatsApp</button>
         <button class="btn ghost" style="flex:1; font-size:13px; padding:8px" onclick="stampaRegistro('${iso}')">🖨 PDF</button>
@@ -3956,7 +4016,8 @@ function condividiWhatsAppRegistro(iso){
   // ricostruisco un pseudo-prospetto dal record per riusare testoWhatsApp
   const rec=S.registro[iso];
   const p={ giorno:rec.giorno, pagamento:rec.pagamento,
-    esiti: rec.righe.map(r=>({h:r.h, a:{nome:r.assente}, classe:r.classe, scelto:r.scelto, motivo:r.motivo, tipo:r.tipo, rice:r.rice})) };
+    esiti: rec.righe.map(r=>({h:r.h, a:{nome:r.assente}, classe:r.classe, scelto:r.scelto, motivo:r.motivo, tipo:r.tipo, rice:r.rice})),
+    coperte: (rec.coperte||[]).map(c=>({h:c.h, a:{nome:c.assente}, classe:c.classe, da:c.da})) };
   const t = testoWhatsAppData(p, iso);
   if(navigator.share){ navigator.share({text:t}).catch(()=>copiaTesto(t)); } else copiaTesto(t);
 }
@@ -3965,22 +4026,28 @@ function renderProspettoHTML(p){
   const o=S.orario;
   const perAss={};
   p.esiti.forEach(e=>{ (perAss[e.a.nome]=perAss[e.a.nome]||[]).push(e); });
+  (p.coperte||[]).forEach(c=>{ perAss[c.a.nome]=perAss[c.a.nome]||[]; });   /* anche chi ha solo ore coperte dal potenziamento */
   const nOverride = Object.keys(S.override||{}).filter(k=>S.override[k]!==undefined).length;
   let html = `<h2 class="sec" style="margin-top:22px">Prospetto · ${NOMEGIORNO[p.giorno]}</h2>`;
   if(nOverride){ html += `<button class="btn ghost" style="width:100%; margin-bottom:10px; font-size:13.5px; padding:8px" onclick="S.override={}; lanciaProspetto()">↺ Ripristina proposta automatica</button>`; }
   for(const nome in perAss){
     const doc=o.docenti.find(d=>d.nome===nome);
-    const assObj = perAss[nome][0].a;
+    const assObj = (perAss[nome][0]||{}).a;
     html += `<div class="pcard"><div class="pass">${esc(nome)} <span>${esc(doc.materia||"")}</span></div>`;
     // mappa ora→esito per questo assente
     const perOra={}; perAss[nome].forEach(e=>perOra[e.h]=e);
-    const oreCoperte = perAss[nome].map(e=>e.h);
+    const copOra={}; (p.coperte||[]).filter(c=>c.a.nome===nome).forEach(c=>copOra[c.h]=c);
+    const oreCoperte = perAss[nome].map(e=>e.h).concat(Object.keys(copOra).map(Number));
     const minH=Math.min(...oreCoperte), maxH=Math.max(...oreCoperte);
     for(const h of o.ore){
       const e = perOra[h];
       if(!e){
         // riga "nessuna sostituzione" solo tra la prima e l'ultima ora coperta (continuità di lettura)
-        if(h>minH && h<maxH){
+        if(copOra[h]){
+          /* il curricolare è assente ma un potenziamento è assegnato a questa classe: non serve sostituzione */
+          const c=copOra[h];
+          html += `<div class="prow vuotarow"><span class="ph">${h}ª</span><span class="pcl">${esc(fmtCl(c.classe))}</span><span class="pto nsub">nessuna sostituzione</span><span class="pmot">coperta da ${esc(cognomeBreve(c.da))} (potenz.)</span></div>`;
+        } else if(h>minH && h<maxH){
           html += `<div class="prow vuotarow"><span class="ph">${h}ª</span><span class="pcl">—</span><span class="pto nsub">nessuna sostituzione</span></div>`;
         }
         continue;
@@ -4080,6 +4147,12 @@ function testoWhatsAppData(p, iso){
     const extra = bits.length ? "  ("+bits.join(", ")+")" : "";
     t += `${e.h}ª  ${cl}  ${ass} → *${sost}*${extra}\n`;
   });
+  if(p.coperte && p.coperte.length){
+    t = t.trimEnd() + `\n\n_Nessuna sostituzione, classe già coperta dal potenziamento:_\n`;
+    p.coperte.slice().sort((a,b)=>a.h-b.h).forEach(c=>{
+      t += `${c.h}ª  ${c.classe}  ${cognomeBreve(c.a.nome)} → ${cognomeBreve(c.da)} (potenz.)\n`;
+    });
+  }
   return t.trimEnd();
 }
 
