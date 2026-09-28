@@ -1140,9 +1140,35 @@ function ricalcolaRestituzioni(){
 }
 
 /* record: {id, docente, dal, al, tipo:"giornata"|"breve", ore:[], nota} */
+/* giorni della settimana in cui il docente ha davvero qualcosa in orario in questa
+   scuola: ogni presenza conta, non solo le ore di classe (anche potenziamento o
+   ricevimento contano come "qui, quel giorno"). Un'assenza plurigiornaliera non
+   deve farsi sentire nei giorni in cui, in questa scuola, comunque non ci sarebbe. */
+function giorniServizio(doc){
+  const gg=new Set();
+  for(const k in doc.cells){ const c=doc.cells[k]; if(c && c.t!=="VUOTA") gg.add(k.split("|")[0]); }
+  return gg;
+}
+/* i giorni della settimana toccati da un periodo dal→al (limitato: oltre i 6 giorni
+   il periodo tocca comunque tutti i giorni scolastici, non serve iterare mesi) */
+function giorniNelPeriodo(dal, al){
+  const gg=new Set();
+  const d0=new Date(dal+"T12:00:00"), d1=new Date((al||dal)+"T12:00:00");
+  const differenza=Math.round((d1-d0)/86400000);
+  if(differenza>=6){ (S.orario?S.orario.giorni:["LUN","MAR","MER","GIO","VEN","SAB"]).forEach(g=>gg.add(g)); return gg; }
+  for(let d=new Date(d0); d<=d1; d.setDate(d.getDate()+1)){ const g=SETT[d.getDay()]; if(g!=="DOM") gg.add(g); }
+  return gg;
+}
 function assenzeNoteAttive(iso){
   if(!iso) return [];
-  return (S.assenzeNote||[]).filter(a => iso >= a.dal && iso <= (a.al||a.dal));
+  const o=S.orario, g=giornoDaData(iso);
+  return (S.assenzeNote||[]).filter(a=>{
+    if(iso < a.dal || iso > (a.al||a.dal)) return false;
+    if(!o) return true;                                   /* nessun orario caricato: non posso escludere nulla */
+    const doc=o.docenti.find(d=>d.nome===a.docente);
+    if(!doc) return true;                                 /* nome non nell'orario: meglio un falso positivo che perdere un'assenza vera */
+    return giorniServizio(doc).has(g);
+  });
 }
 /* carica automaticamente le assenze note della data scelta — una volta sola per data,
    così se le togli con la ✕ (collega rientrato) non tornano da sole */
@@ -2547,7 +2573,7 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "28.09.2026c";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const VERSIONE = "28.09.2026d";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -3756,11 +3782,24 @@ function renderAssenze(){
           : "intera giornata";
         const passata = (a.al||a.dal) < oggi;
         const nonRec = a.tipo==="breve" && a.recuperabile===false;
+        const docObj = o.docenti.find(d=>d.nome===a.docente);
+        let servizioHint="";
+        if(docObj){
+          const tocca = giorniNelPeriodo(a.dal, a.al);
+          const attivi = [...tocca].filter(g=>giorniServizio(docObj).has(g));
+          if(attivi.length===0){
+            servizioHint = `<div class="regsub" style="color:var(--red)">⚠ in questo periodo non risulta mai in servizio qui: non genera sostituzioni</div>`;
+          } else if(attivi.length < tocca.size){
+            const ord=["LUN","MAR","MER","GIO","VEN","SAB"];
+            servizioHint = `<div class="regsub">qui in servizio solo ${attivi.sort((x,y)=>ord.indexOf(x)-ord.indexOf(y)).join(", ")} — negli altri giorni del periodo non serve sostituzione</div>`;
+          }
+        }
         return `<div class="regcard" style="${passata?'opacity:.5':''}"><div class="reghead" style="cursor:default">
           <div style="flex:1">
             <b>${esc(a.docente)}</b>
             <div class="regsub">${esc(periodo)}</div>
             <div class="regsub">${a.tipo==="breve"?"⏱ ":"📅 "}${esc(tx)}${a.nota?" · "+esc(a.nota):""}</div>
+            ${servizioHint}
             ${a.tipo==="breve" ? `<div style="margin-top:6px">
               <span class="achip" style="cursor:pointer; ${nonRec?'':'background:#E4F4EA; border-color:#A8D9BC; color:#1B6E4A'}"
                 onclick="toggleRecuperabile('${a.id}')">${nonRec?"✕ non da recuperare":"↩ da recuperare"}</span>
