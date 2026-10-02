@@ -1121,7 +1121,7 @@ function ricalcolaRestituzioni(){
   const fatti = {};
   for(const iso in (S.registro||{})){
     for(const rg of (S.registro[iso].righe||[])){
-      if(rg.scelto && rg.motivo === "recupero") fatti[rg.scelto] = (fatti[rg.scelto]||0) + 1;
+      if(rg.scelto && rg.motivo === "recupero" && !rg.annullata) fatti[rg.scelto] = (fatti[rg.scelto]||0) + 1;
     }
   }
   // azzero e re-imputo per docente, debiti ordinati per scadenza
@@ -1484,7 +1484,7 @@ function stampaRegistro(soloGiorno){
   const perDoc = {};      /* nome → {fatte, pag} */
   for(const iso of date){
     const rec = S.registro[iso]; if(!rec) continue;
-    const righe = (rec.righe||[]).filter(r=>r.scelto).sort((a,b)=>a.h-b.h);
+    const righe = (rec.righe||[]).filter(r=>r.scelto && !r.annullata).sort((a,b)=>a.h-b.h);
     righe.forEach(r=>{
       totSost++;
       const k=r.scelto; perDoc[k]=perDoc[k]||{fatte:0,pag:0};
@@ -2573,7 +2573,7 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "28.09.2026d";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const VERSIONE = "28.09.2026e";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -4009,7 +4009,7 @@ function renderRegistro(){
   for(const iso of date){
     const rec=S.registro[iso];
     const aperto = S.regApertoGiorno===iso;
-    const nSost = rec.righe.filter(r=>r.scelto).length;
+    const nSost = rec.righe.filter(r=>r.scelto && !r.annullata).length;
     const nScop = rec.righe.filter(r=>r.motivo==="scoperta").length;
     out += `<div class="regcard">
       <div class="reghead" onclick="S.regApertoGiorno='${aperto?'':iso}'; render()">
@@ -4023,8 +4023,12 @@ function renderRegistro(){
       for(const ass in perAss){
         out += `<div class="regass">${esc(ass)}</div>`;
         perAss[ass].sort((a,b)=>a.h-b.h).forEach(r=>{
-          if(r.scelto){
-            out += `<div class="regrow"><span class="ph">${r.h}ª</span><span class="pcl">${esc(fmtCl(r.classe))}</span><span class="pto">${esc(r.scelto)}</span><span class="pmot">${esc(r.motivo)}</span></div>`;
+          if(r.scelto && r.annullata){
+            out += `<div class="regrow" style="opacity:.55"><span class="ph">${r.h}ª</span><span class="pcl">${esc(fmtCl(r.classe))}</span><span class="pto" style="text-decoration:line-through">${esc(r.scelto)}</span><span class="pmot">✕ non avvenuta</span></div>
+              <div style="padding:0 12px 8px; text-align:right"><span class="achip" style="cursor:pointer" onclick="ripristinaRigaRegistro('${iso}',${r.h},'${esc(ass).replace(/'/g,"\\'")}')">↺ ripristina</span></div>`;
+          } else if(r.scelto){
+            out += `<div class="regrow"><span class="ph">${r.h}ª</span><span class="pcl">${esc(fmtCl(r.classe))}</span><span class="pto">${esc(r.scelto)}</span><span class="pmot">${esc(r.motivo)}</span></div>
+              <div style="padding:0 12px 8px; text-align:right"><span class="achip" style="cursor:pointer; color:var(--red); border-color:var(--red)" onclick="annullaRigaRegistro('${iso}',${r.h},'${esc(ass).replace(/'/g,"\\'")}')">✕ segna come non avvenuta</span></div>`;
           } else if(r.motivo==="scoperta"){
             out += `<div class="regrow scoperta"><span class="ph">${r.h}ª</span><span class="pcl">${esc(fmtCl(r.classe))}</span><span class="pto" style="color:var(--red)">scoperta</span></div>`;
           }
@@ -4051,11 +4055,29 @@ function eliminaGiorno(iso){
   if(!confirm("Eliminare la giornata "+dataLeggibile(iso)+" dal registro?")) return;
   delete S.registro[iso]; S.regApertoGiorno=""; saveRegistro(); render();
 }
+/* corregge la storia: una sostituzione registrata ma mai avvenuta davvero. Non
+   cancella la riga (resta la traccia di cosa era previsto) ma la esclude dai
+   conteggi, dai documenti stampati/condivisi e dal calcolo dei recuperi — un
+   debito pagato con quella sostituzione torna aperto. */
+function annullaRigaRegistro(iso, h, assente){
+  const rec = S.registro && S.registro[iso]; if(!rec) return;
+  const r = rec.righe.find(x=>x.h===h && x.assente===assente); if(!r || !r.scelto) return;
+  if(!confirm("Segnare come non avvenuta la sostituzione di "+r.scelto+" ("+h+"ª, "+fmtCl(r.classe)+") del "+dataLeggibile(iso)+"?\n\nSe contava come recupero di un permesso breve, il debito corrispondente torna aperto.")) return;
+  r.annullata = true;
+  ricalcolaRestituzioni(); saveRegistro(); render();
+  toast("Segnata come non avvenuta");
+}
+function ripristinaRigaRegistro(iso, h, assente){
+  const rec = S.registro && S.registro[iso]; if(!rec) return;
+  const r = rec.righe.find(x=>x.h===h && x.assente===assente); if(!r) return;
+  r.annullata = false;
+  ricalcolaRestituzioni(); saveRegistro(); render();
+}
 function condividiWhatsAppRegistro(iso){
   // ricostruisco un pseudo-prospetto dal record per riusare testoWhatsApp
   const rec=S.registro[iso];
   const p={ giorno:rec.giorno, pagamento:rec.pagamento,
-    esiti: rec.righe.map(r=>({h:r.h, a:{nome:r.assente}, classe:r.classe, scelto:r.scelto, motivo:r.motivo, tipo:r.tipo, rice:r.rice})),
+    esiti: rec.righe.filter(r=>!r.annullata).map(r=>({h:r.h, a:{nome:r.assente}, classe:r.classe, scelto:r.scelto, motivo:r.motivo, tipo:r.tipo, rice:r.rice})),
     coperte: (rec.coperte||[]).map(c=>({h:c.h, a:{nome:c.assente}, classe:c.classe, da:c.da})) };
   const t = testoWhatsAppData(p, iso);
   if(navigator.share){ navigator.share({text:t}).catch(()=>copiaTesto(t)); } else copiaTesto(t);
