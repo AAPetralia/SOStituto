@@ -492,6 +492,13 @@ function load(){ try{
   const aa=localStorage.getItem("sostituto_alunno"); if(aa){ const o=JSON.parse(aa); if(o && o.data===S.dataOggi) S.alunnoAssenteOggi=o.lista||[]; }
   const us=localStorage.getItem("sostituto_uscite"); if(us) S.uscite=JSON.parse(us);
   const an=localStorage.getItem("sostituto_assenze"); if(an) S.assenzeNote=JSON.parse(an);
+  const og=localStorage.getItem("sostituto_oggi");
+  if(og){ try{
+    const o=JSON.parse(og);
+    if(o.dataOggi) S.dataOggi=o.dataOggi;
+    S.prospetto=o.prospetto||null; S.assentiOggi=o.assentiOggi||{}; S.breveOggi=o.breveOggi||{};
+    S.override=o.override||{}; S.alunnoAssenteOggi=o.alunnoAssenteOggi||[];
+  }catch(e){} }
   const pn=localStorage.getItem("sostituto_pno"); if(pn) S.pnoOn=JSON.parse(pn);
   const pmd=localStorage.getItem("sostituto_potmod"); if(pmd) S.potMod=JSON.parse(pmd);
   const pa=localStorage.getItem("sostituto_potass"); if(pa) S.potAssign=JSON.parse(pa);
@@ -1299,6 +1306,7 @@ const OPERATIVO_TAB = ["dove","sync"];
 const SENZA_ORARIO = ["importa","altro","sync","backup"];   /* pagine raggiunte dal menu Altro */
 
 function render(){
+  if(S.orario) salvaStatoOggi();
   // in modalità operativa le schede di configurazione non sono raggiungibili
   if(S.ruolo==="operativo" && SOTTO_ALTRO.includes(S.tab) && !OPERATIVO_TAB.includes(S.tab)) S.tab="altro";
   const attivo = SOTTO_ALTRO.includes(S.tab) ? "altro" : S.tab;
@@ -2152,11 +2160,17 @@ function renderOggi(){
     out += `<p class="hint" style="margin-top:8px">🛡️ Flag attivi: ${S.flagOggi.map(f=>{const[n,c]=f.split("|");return esc(n)+" ("+esc(fmtCl(c))+")";}).join(", ")} — non verranno spostati.</p>`;
   }
 
-  // prospetto generato
+  // prospetto generato — resta qui finché non cambi data o lo elimini tu
   if(S.prospetto){
     out += renderProspettoHTML(S.prospetto);
+    out += `<button class="btn ghost" style="width:100%; margin-top:14px; color:var(--red); border-color:var(--red)" onclick="eliminaProspettoOggi()">🗑 Elimina questo prospetto</button>`;
   }
   el("main").innerHTML = out;
+}
+function eliminaProspettoOggi(){
+  if(!confirm("Svuotare il prospetto di oggi? Le assenze segnate e le scelte fatte vengono cancellate da questa schermata. Se era già nel Registro, resta lì finché non lo elimini anche da lì.")) return;
+  S.prospetto=null; S.assentiOggi={}; S.breveOggi={}; S.override={}; S.alunnoAssenteOggi=[]; S.chipAperto=""; S.apertoRiga="";
+  save(); render();
 }
 
 function addAssente(nome){
@@ -2300,7 +2314,12 @@ function scegliManuale(assente, h, nome){
   // conflitto REALE solo se il docente è già usato ALLA STESSA ORA (non può stare in due classi insieme).
   // In ore diverse può fare più sostituzioni: nessun conflitto.
   const prima = S.prospetto.esiti.find(e=> e.scelto===nome && e.h===h && !(e.a.nome===assente && e.h===h));
-  if(prima){ S.override[prima.a.nome+"|"+prima.h] = "";  /* svuota: da riempire a mano */ }
+  if(prima){
+    /* chi "cedo" per fare spazio qui non resta vuoto: ricade sul secondo migliore
+       disponibile, come una cella mai toccata. Se avevo una scelta manuale precedente
+       su quella cella, decade anche quella — non ha più senso, la persona non c'è più. */
+    delete S.override[prima.a.nome+"|"+prima.h];
+  }
   S.override[key] = nome;
   S.apertoRiga = "";
   lanciaProspetto();
@@ -2586,7 +2605,7 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "02.10.2026";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const VERSIONE = "04.10.2026";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -4134,9 +4153,33 @@ function renderRegistro(){
   }
   el("main").innerHTML = out;
 }
+/* il lavoro in corso su "oggi" — chi è assente, cosa ho scelto, il prospetto —
+   non viveva da nessuna parte: chiudere la pagina lo perdeva, anche se il risultato
+   finale restava nel registro. Lo salvo qui, agganciato a render() così parte da
+   sé a ogni cambiamento, senza dover ricordarsi di chiamarlo in ogni punto. */
+function salvaStatoOggi(){
+  try{
+    localStorage.setItem("sostituto_oggi", JSON.stringify({
+      dataOggi: S.dataOggi, prospetto: S.prospetto, assentiOggi: S.assentiOggi,
+      breveOggi: S.breveOggi, override: S.override, alunnoAssenteOggi: S.alunnoAssenteOggi
+    }));
+  }catch(e){}
+}
 function eliminaGiorno(iso){
-  if(!confirm("Eliminare la giornata "+dataLeggibile(iso)+" dal registro?")) return;
-  delete S.registro[iso]; S.regApertoGiorno=""; saveRegistro(); render();
+  /* quel giorno può contenere l'unica prova che un recupero è stato fatto: */
+  const avvisi=[];
+  const rec=S.registro && S.registro[iso];
+  if(rec){
+    const perDoc={};
+    (rec.righe||[]).forEach(r=>{ if(r.scelto && r.motivo==="recupero" && !r.annullata) perDoc[r.scelto]=(perDoc[r.scelto]||0)+1; });
+    for(const nome in perDoc) avvisi.push(cognomeBreve(nome)+": "+perDoc[nome]+"h di recupero tornano da fare");
+  }
+  const msg="Eliminare la giornata "+dataLeggibile(iso)+" dal registro?"
+    + (avvisi.length ? "\\n\\nATTENZIONE — "+avvisi.join("; ")+", perché questo giorno era la prova che erano state fatte." : "");
+  if(!confirm(msg)) return;
+  delete S.registro[iso]; S.regApertoGiorno="";
+  ricalcolaRestituzioni();   /* subito, non solo quando si riapre la scheda Recuperi */
+  saveRegistro(); render();
 }
 /* corregge la storia: una sostituzione registrata ma mai avvenuta davvero. Non
    cancella la riga (resta la traccia di cosa era previsto) ma la esclude dai
