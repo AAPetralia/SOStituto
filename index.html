@@ -2168,9 +2168,19 @@ function renderOggi(){
   el("main").innerHTML = out;
 }
 function eliminaProspettoOggi(){
-  if(!confirm("Svuotare il prospetto di oggi? Le assenze segnate e le scelte fatte vengono cancellate da questa schermata. Se era già nel Registro, resta lì finché non lo elimini anche da lì.")) return;
+  /* un'eliminazione sola, non due: lasciare la riga nel registro mentre si svuota
+     la vista dava un risultato incoerente, perché il registro è anche l'unica prova
+     dei recuperi — rigenerando dopo, l'app vedeva il recupero già fatto e sceglieva
+     qualcun altro al posto giusto. Elimino insieme prospetto e sua riga d'archivio. */
+  const msg="Svuotare il prospetto di oggi? Le scelte fatte a mano vengono cancellate, e se era già nel Registro viene tolto anche da lì."
+    + avvisoPerditaRecuperi(S.dataOggi)
+    + "\n\nLe assenze note (quelle comunicate in anticipo) restano e si ricaricano subito da sole.";
+  if(!confirm(msg)) return;
   S.prospetto=null; S.assentiOggi={}; S.breveOggi={}; S.override={}; S.alunnoAssenteOggi=[]; S.chipAperto=""; S.apertoRiga="";
-  save(); render();
+  S.noteApplicate=null;   /* altrimenti applicaAssenzeNote() le crede già caricate e non le ripropone: sembravano sparite */
+  if(S.registro) delete S.registro[S.dataOggi];
+  ricalcolaRestituzioni();
+  save(); saveRegistro(); render();
 }
 
 function addAssente(nome){
@@ -2605,7 +2615,7 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "04.10.2026";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const VERSIONE = "04.10.2026c";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -4165,17 +4175,19 @@ function salvaStatoOggi(){
     }));
   }catch(e){}
 }
-function eliminaGiorno(iso){
-  /* quel giorno può contenere l'unica prova che un recupero è stato fatto: */
-  const avvisi=[];
+/* quanto un giorno archiviato "vale" in recuperi: se lo tolgo, quali debiti tornano
+   aperti. Condivisa fra Registro → Elimina e Sostituzioni → Elimina questo prospetto,
+   perché sono la stessa domanda: "sto per far sparire una prova di recupero?" */
+function avvisoPerditaRecuperi(iso){
   const rec=S.registro && S.registro[iso];
-  if(rec){
-    const perDoc={};
-    (rec.righe||[]).forEach(r=>{ if(r.scelto && r.motivo==="recupero" && !r.annullata) perDoc[r.scelto]=(perDoc[r.scelto]||0)+1; });
-    for(const nome in perDoc) avvisi.push(cognomeBreve(nome)+": "+perDoc[nome]+"h di recupero tornano da fare");
-  }
-  const msg="Eliminare la giornata "+dataLeggibile(iso)+" dal registro?"
-    + (avvisi.length ? "\\n\\nATTENZIONE — "+avvisi.join("; ")+", perché questo giorno era la prova che erano state fatte." : "");
+  if(!rec) return "";
+  const perDoc={};
+  (rec.righe||[]).forEach(r=>{ if(r.scelto && r.motivo==="recupero" && !r.annullata) perDoc[r.scelto]=(perDoc[r.scelto]||0)+1; });
+  const avvisi=Object.keys(perDoc).map(nome=>cognomeBreve(nome)+": "+perDoc[nome]+"h di recupero tornano da fare");
+  return avvisi.length ? "\n\nATTENZIONE — "+avvisi.join("; ")+", perché questo giorno era la prova che erano state fatte." : "";
+}
+function eliminaGiorno(iso){
+  const msg="Eliminare la giornata "+dataLeggibile(iso)+" dal registro?"+avvisoPerditaRecuperi(iso);
   if(!confirm(msg)) return;
   delete S.registro[iso]; S.regApertoGiorno="";
   ricalcolaRestituzioni();   /* subito, non solo quando si riapre la scheda Recuperi */
