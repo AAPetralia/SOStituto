@@ -460,7 +460,7 @@ let S = { orario:null, tab:"oggi", day:"LUN",
           recuperi:[], recuperoForm:null,   /* debiti da permesso breve: {id, docente, ore, data, scadenza, restituite:0, chiuseManuale:0, origine} */
           configCriteri:null,   /* configurazione priorità e abilitamento criteri (legge da default se null) */
           uscFoglio:{url:"",token:"",ultimo:null}, uscAnteprima:null, uscAttivo:false, uscErr:"",
-          linguaSostegno:{},
+          linguaSostegno:{}, incompatibili:[], incompForm:null,
           ruolo:"completo" };   /* completo | operativo */   /* assentiOggi: {nome: null|[ore]} */
 
 /* ---------- persistenza ---------- */
@@ -480,6 +480,7 @@ function save(){ try{
   localStorage.setItem("sostituto_recscartati", JSON.stringify(S.recScartati||[]));
   localStorage.setItem("sostituto_assistenti", JSON.stringify(S.assistenti||[]));
   localStorage.setItem("sostituto_linguasost", JSON.stringify(S.linguaSostegno||{}));
+  localStorage.setItem("sostituto_incompat", JSON.stringify(S.incompatibili||[]));
   localStorage.setItem("sostituto_potauto", JSON.stringify(S.potAuto||[]));
   localStorage.setItem("sostituto_ruolo", S.ruolo||"completo");
 }catch(e){} }
@@ -502,6 +503,7 @@ function load(){ try{
   const rs=localStorage.getItem("sostituto_recscartati"); if(rs) S.recScartati=JSON.parse(rs);
   const as=localStorage.getItem("sostituto_assistenti"); if(as) S.assistenti=JSON.parse(as);
   const lgs=localStorage.getItem("sostituto_linguasost"); if(lgs) S.linguaSostegno=JSON.parse(lgs);
+  const inc=localStorage.getItem("sostituto_incompat"); if(inc) S.incompatibili=JSON.parse(inc);
   const pau=localStorage.getItem("sostituto_potauto"); if(pau) S.potAuto=JSON.parse(pau);
   const ru=localStorage.getItem("sostituto_ruolo"); if(ru) S.ruolo=ru;
 }catch(e){} }
@@ -587,6 +589,14 @@ function importaWorkbook(wb){
   return { giorni, ore, docenti, ignote, quando:new Date().toISOString() };
 }
 
+/* incompatibilità normative: un docente che non può MAI fare supplenza in una
+   data classe (es. un parente dell'alunno). Esclusione assoluta, prima di ogni
+   criterio: vale per le sostituzioni dirette e per il potenziamento, automatico
+   o assegnato a mano. Non è un'intoccabilità sul proprio sostegno (quella è il
+   flag): qui è l'opposto, non deve proprio entrarci. */
+function incompatibile(nome, classe){
+  return (S.incompatibili||[]).includes(nome+"|"+classe);
+}
 function isSost(d){ return /sosteg/i.test(d.materia||""); }
 
 /* ---- controllo suffisso lingua sui sostegni nelle ore di articolata ---- */
@@ -818,6 +828,7 @@ function candidati(o, classe, g, h, assenteObj, ctx, lingua){
   const PR_EMERG = (PR.g!=null ? PR.g : 9) - 0.5;
   const pool=[];
   for(const d of o.docenti){
+    if(incompatibile(d.nome, classe)) continue;
     if(assenteAllOra(ctx, d.nome, h)) continue;
     if(ctx.occupati[g+"|"+h] && ctx.occupati[g+"|"+h].has(d.nome)) continue;  /* già impegnato */
     const st = statoLinguaEff(d,g,h,o.ore);
@@ -1281,7 +1292,7 @@ function fmtCl(c){ return c ? c[0]+"ª "+c.slice(1) : c; }
    ============================================================ */
 const el = id => document.getElementById(id);
 
-const SOTTO_ALTRO = ["dove","importa","uscita","assenze","backup","potenz","sync","flag","recuperi","config","nuovoanno","uscfoglio","coperture","assist","linguasost"];
+const SOTTO_ALTRO = ["dove","importa","uscita","assenze","backup","potenz","sync","flag","recuperi","config","nuovoanno","uscfoglio","coperture","assist","linguasost","incompat"];
 /* in modalità operativa restano solo queste voci del menu Altro */
 const OPERATIVO_TAB = ["dove","sync"];
 /* schede utilizzabili anche prima di avere un orario: sono le vie da cui l'orario arriva */
@@ -1294,7 +1305,7 @@ function render(){
   document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on", b.dataset.tab===attivo));
   if(!S.orario && !SENZA_ORARIO.includes(S.tab)){ renderVuoto(); return; }
   ({oggi:renderOggi, registro:renderRegistro, orario:renderOrario, altro:renderAltro,
-    dove:renderDove, importa:renderImporta, uscita:renderUscita, assenze:renderAssenze, backup:renderBackup, potenz:renderPotenziamento, sync:renderSync, flag:renderFlag, recuperi:renderRecuperi, config:renderConfigCriteri, nuovoanno:renderNuovoAnno, uscfoglio:renderUscFoglio, coperture:renderCoperture, assist:renderAssist, linguasost:renderLinguaSostegno})[S.tab]();
+    dove:renderDove, importa:renderImporta, uscita:renderUscita, assenze:renderAssenze, backup:renderBackup, potenz:renderPotenziamento, sync:renderSync, flag:renderFlag, recuperi:renderRecuperi, config:renderConfigCriteri, nuovoanno:renderNuovoAnno, uscfoglio:renderUscFoglio, coperture:renderCoperture, assist:renderAssist, linguasost:renderLinguaSostegno, incompat:renderIncompatibili})[S.tab]();
 }
 
 /* ================= STAMPA / PDF ================= */
@@ -1591,7 +1602,7 @@ function syncCfg(){ S.sync = S.sync || {url:"",token:"",utente:"",soloLettura:fa
 function saveSync(){ try{ localStorage.setItem("sostituto_sync", JSON.stringify(S.sync||{})); }catch(e){} }
 
 function statoDaCondividere(){
-  return { orario:S.orario||null, lingue:S.lingue||{}, flagOggi:S.flagOggi||[], linguaSostegno:S.linguaSostegno||{},
+  return { orario:S.orario||null, lingue:S.lingue||{}, flagOggi:S.flagOggi||[], linguaSostegno:S.linguaSostegno||{}, incompatibili:S.incompatibili||[],
     registro:S.registro||{}, uscite:S.uscite||[], assenzeNote:S.assenzeNote||[],
     pnoOn:S.pnoOn||[], potAssign:S.potAssign||{}, potMod:S.potMod||[], recuperi:S.recuperi||[],
     /* da tenere allineati con datiBackup(): tutto ciò che un altro dispositivo
@@ -1603,6 +1614,7 @@ function applicaStato(d){
   S.orario      = d.orario || null;
   S.lingue      = d.lingue || {};
   S.linguaSostegno = d.linguaSostegno || {};
+  S.incompatibili = d.incompatibili || [];
   S.flagOggi    = d.flagOggi || [];
   S.registro    = d.registro || {};
   S.uscite      = d.uscite || [];
@@ -1962,6 +1974,7 @@ function renderAltro(){
     { tab:"backup",  ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10.5" width="16" height="9.5" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/><circle cx="12" cy="15" r="1.1"/></svg>`, tit:"Backup e ripristino", sub:"Salva tutto in un file — o rimetti a posto dopo un guaio" },
     { tab:"config", ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6M4.22 4.22l4.24 4.24m5.08 5.08l4.24 4.24M1 12h6m6 0h6M4.22 19.78l4.24-4.24m5.08-5.08l4.24-4.24"/></svg>`, tit:"Configurazione criteri", sub:"Attiva/disattiva criteri e ordina la priorità" },
     { tab:"linguasost", ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a13 13 0 0 1 0 18M12 3a13 13 0 0 0 0 18"/></svg>`, tit:"Gruppi di seconda lingua", sub:"Francese o spagnolo per le ore ambigue del sostegno" },
+    { tab:"incompat", ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`, tit:"Incompatibilità", sub:"Docenti che non possono mai fare supplenza in una data classe" },
     { tab:"coperture", ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16M15 4v16"/></svg>`, tit:"Coperture", sub:"Dove c'è una seconda presenza in aula, e dove no" },
     { tab:"nuovoanno", ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>`, tit:"Nuovo anno scolastico", sub:"Azzera i dati dell'anno concluso e ricomincia" },
   ];
@@ -2455,7 +2468,7 @@ function renderPotenziamento(){
           <div class="poted-lbl">${sel.g} ${sel.h}ª — assegna a una classe</div>
           <div class="pickgrid">
             <div class="pick${!cls?' on':''}" onclick="assegnaPot('${esc(key)}','')">nessuna</div>
-            ${classi.map(c=>`<div class="pick${cls===c?' on':''}" onclick="assegnaPot('${esc(key)}','${esc(c)}')">${esc(c)}</div>`).join("")}
+            ${classi.filter(c=>!incompatibile(doc.nome,c)).map(c=>`<div class="pick${cls===c?' on':''}" onclick="assegnaPot('${esc(key)}','${esc(c)}')">${esc(c)}</div>`).join("")}
           </div>
           <div class="poted-sep"></div>
           <div class="poted-lbl">Modifiche temporanee</div>
@@ -2573,7 +2586,7 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "28.09.2026e";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const VERSIONE = "02.10.2026";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -2591,7 +2604,8 @@ function datiBackup(){
     configCriteri: S.configCriteri || null,
     assistenti: S.assistenti || [],
     potAuto: S.potAuto || [],
-    linguaSostegno: S.linguaSostegno || {}
+    linguaSostegno: S.linguaSostegno || {},
+    incompatibili: S.incompatibili || []
   };
 }
 function riepilogoBackup(d){
@@ -2951,6 +2965,7 @@ function assistentiIn(classe, g, h){
 function potIn(classe, g, h){
   const o=S.orario, out=[]; if(!o) return out;
   for(const d of o.docenti){
+    if(incompatibile(d.nome, classe)) continue;
     if(statoCella(d,g,h,o.ore).t!=="DISP") continue;
     if(potAssEff(d,g,h)===classe) out.push(d.nome);
   }
@@ -3006,8 +3021,10 @@ function proponiPotenziamento(){
                         .sort((a,b)=> scoperte[b]-scoperte[a] || a.localeCompare(b));
     for(const c of rosse){
       if(!liberi.length) break;
-      const conosce = liberi.filter(d=>classiDi(d).has(c));
-      const rosa = conosce.length ? conosce : liberi;
+      const possibili = liberi.filter(d=>!incompatibile(d.nome,c));
+      if(!possibili.length) continue;
+      const conosce = possibili.filter(d=>classiDi(d).has(c));
+      const rosa = conosce.length ? conosce : possibili;
       rosa.sort((x,y)=> (carico[x.nome]||0)-(carico[y.nome]||0) || x.nome.localeCompare(y.nome));
       const scelto = rosa[0];
       const key = scelto.nome+"|"+g+"|"+h;
@@ -3337,6 +3354,72 @@ function leggiLinguaSostegno(wb){
 }
 
 function getLinguaSostegno(){ S.linguaSostegno = S.linguaSostegno || {}; return S.linguaSostegno; }
+
+function renderIncompatibili(){
+  if(!S.orario){
+    el("main").innerHTML=`<div class="backlink" onclick="S.tab='altro'; render()">‹ Altro</div>
+      <h2 class="sec">Incompatibilità</h2>
+      <p class="hint">Serve prima l'orario. Importalo da Altro → Importa orario.</p>`;
+    return;
+  }
+  const o=S.orario, classi=tutteLeClassi(o);
+  const lista=(S.incompatibili||[]).map(s=>{ const i=s.lastIndexOf("|"); return {nome:s.slice(0,i), classe:s.slice(i+1)}; })
+    .sort((a,b)=>a.nome.localeCompare(b.nome)||a.classe.localeCompare(b.classe));
+
+  S.incompForm = S.incompForm || null;
+  const f = S.incompForm;
+
+  el("main").innerHTML = `
+    <div class="backlink" onclick="S.tab='altro'; render()">‹ Altro</div>
+    <h2 class="sec">Incompatibilità</h2>
+    <p class="hint" style="margin-top:0">Un docente qui non viene mai proposto come sostituto nella classe indicata — né per una sostituzione diretta né per il potenziamento, a mano o in automatico. Tipicamente un parente stretto di un alunno di quella classe.</p>
+
+    ${lista.length ? `<div class="criteria-list">${lista.map(x=>`
+      <div class="criterion-row">
+        <div class="criterion-label">
+          <div class="criterion-code">${esc(cognomeBreve(x.nome))}</div>
+          <div class="criterion-desc">mai in ${esc(fmtCl(x.classe))}</div>
+        </div>
+        <button class="btn ghost" style="padding:7px 12px; font-size:13px; color:var(--red); border-color:var(--red)"
+          onclick="rimuoviIncompatibile('${esc(x.nome)}','${esc(x.classe)}')">✕</button>
+      </div>`).join("")}</div>` : `<p class="hint">Nessuna registrata.</p>`}
+
+    ${f ? `<div class="poted" style="margin-top:12px">
+        <div class="poted-lbl">Docente</div>
+        <select onchange="S.incompForm.nome=this.value; render()">
+          <option value="">— scegli —</option>
+          ${o.docenti.map(d=>d.nome).sort().map(n=>`<option value="${esc(n)}" ${f.nome===n?'selected':''}>${esc(n)}</option>`).join("")}
+        </select>
+        <div class="poted-lbl" style="margin-top:10px">Classe</div>
+        <div class="pickgrid">${classi.map(c=>`<div class="pick${f.classe===c?' on':''}" onclick="S.incompForm.classe='${esc(c)}'; render()">${esc(c)}</div>`).join("")}</div>
+        <div class="field" style="margin-top:10px"><label>Motivo (facoltativo)</label>
+          <input type="text" value="${esc(f.nota||'')}" placeholder="es. genitore di un'alunna della classe" oninput="S.incompForm.nota=this.value"></div>
+        <div style="display:flex; gap:8px; margin-top:10px">
+          <button class="btn ghost" style="flex:1" onclick="S.incompForm=null; render()">Annulla</button>
+          <button class="btn" style="flex:1" onclick="confermaIncompatibile()">Salva</button>
+        </div>
+      </div>`
+    : `<button class="btn" style="width:100%; margin-top:14px" onclick="S.incompForm={nome:'',classe:'',nota:''}; render()">+ Aggiungi incompatibilità</button>`}
+  `;
+}
+function confermaIncompatibile(){
+  const f=S.incompForm;
+  if(!f.nome || !f.classe){ toast("Scegli docente e classe"); return; }
+  const key=f.nome+"|"+f.classe;
+  S.incompatibili = S.incompatibili || [];
+  if(!S.incompatibili.includes(key)) S.incompatibili.push(key);
+  /* un'assegnazione di potenziamento già esistente su questa coppia non deve restare:
+     diventerebbe invisibile al motore ma resterebbe scritta nei dati */
+  const pa=S.potAssign||{};
+  for(const k in pa){ if(k.startsWith(f.nome+"|") && pa[k]===f.classe) delete pa[k]; }
+  S.incompForm=null; S.prospetto=null; save(); render();
+  toast("Incompatibilità salvata");
+}
+function rimuoviIncompatibile(nome, classe){
+  if(!confirm("Togliere l'incompatibilità fra "+cognomeBreve(nome)+" e "+fmtCl(classe)+"?")) return;
+  S.incompatibili = (S.incompatibili||[]).filter(s=>s!==nome+"|"+classe);
+  S.prospetto=null; save(); render();
+}
 
 function renderLinguaSostegno(){
   if(!S.orario){
