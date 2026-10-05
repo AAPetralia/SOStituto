@@ -1112,10 +1112,32 @@ function semaforoRecupero(r, oggiIso){
 /* mappa docente → ore da recuperare, per alimentare il motore (opts.recuperi) */
 function recuperiPerMotore(){
   sincronizzaRecuperi();
+  /* il residuo usato per PROPORRE i recuperi di oggi non deve contare la bozza di
+     oggi stessa: ogni rigenerazione archivia subito la giornata, e se quel conteggio
+     si guardasse allo specchio il giorno pagherebbe il proprio debito da solo — la
+     prima proposta lo chiuderebbe, e la seconda bozza (dopo una correzione a mano)
+     non lo riproporrebbe più, cambiando scelta senza un vero motivo. Qui conta solo
+     quello che risulta DA ALTRI giorni, già passati: oggi resta sempre riproponibile
+     finché non si cambia giorno davvero. */
+  const fattiAltrove = {};
+  for(const iso in (S.registro||{})){
+    if(iso === S.dataOggi) continue;
+    for(const rg of (S.registro[iso].righe||[])){
+      if(rg.scelto && rg.motivo==="recupero" && !rg.annullata) fattiAltrove[rg.scelto]=(fattiAltrove[rg.scelto]||0)+1;
+    }
+  }
+  const perDoc={}; for(const r of S.recuperi) (perDoc[r.docente]=perDoc[r.docente]||[]).push(r);
   const m = {};
-  for(const r of S.recuperi){
-    const res = debitoResiduo(r);
-    if(res > 0) m[r.docente] = (m[r.docente]||0) + res;
+  for(const doc in perDoc){
+    let fatti = fattiAltrove[doc]||0, residuo = 0;
+    const deb = perDoc[doc].slice().sort((a,b)=> a.scadenza < b.scadenza ? -1 : 1);
+    for(const r of deb){
+      const capienza = Math.max(0, r.ore - (r.chiuseManuale||0));
+      const imputa = Math.min(fatti, capienza);
+      fatti -= imputa;
+      residuo += capienza - imputa;
+    }
+    if(residuo > 0) m[doc] = residuo;
   }
   return m;
 }
@@ -2659,7 +2681,7 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "05.10.2026b";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const VERSIONE = "05.10.2026c";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
