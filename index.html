@@ -1615,7 +1615,12 @@ function statoDaCondividere(){
     pnoOn:S.pnoOn||[], potAssign:S.potAssign||{}, potMod:S.potMod||[], recuperi:S.recuperi||[],
     /* da tenere allineati con datiBackup(): tutto ciò che un altro dispositivo
        deve ritrovare, non solo l'orario e il registro */
-    assistenti:S.assistenti||[], configCriteri:S.configCriteri||null, potAuto:S.potAuto||[] };
+    assistenti:S.assistenti||[], configCriteri:S.configCriteri||null, potAuto:S.potAuto||[],
+    /* il prospetto generato ma non ancora eliminato: senza questo, ogni Scarica
+       lo cancellava sul dispositivo che riceveva, anche se era ancora lì su chi
+       l'aveva fatto */
+    prospettoOggi:{ dataOggi:S.dataOggi||null, prospetto:S.prospetto||null, assentiOggi:S.assentiOggi||{},
+      breveOggi:S.breveOggi||{}, override:S.override||{}, alunnoAssenteOggi:S.alunnoAssenteOggi||[] } };
 }
 function applicaStato(d){
   if(!d) return;
@@ -1634,7 +1639,18 @@ function applicaStato(d){
   if(d.configCriteri) S.configCriteri = d.configCriteri;
   if(d.assistenti) S.assistenti = d.assistenti;
   if(d.potAuto) S.potAuto = d.potAuto;
-  S.prospetto=null; S.assentiOggi={}; S.breveOggi={}; S.noteApplicate=null; S.alunnoAssenteOggi=[];
+  if(d.prospettoOggi){
+    /* uno stato arrivato da un altro dispositivo (o da un backup): il prospetto
+       generato lì vale anche qui, come se l'avessi fatto io */
+    const po=d.prospettoOggi;
+    S.dataOggi=po.dataOggi||S.dataOggi; S.prospetto=po.prospetto||null;
+    S.assentiOggi=po.assentiOggi||{}; S.breveOggi=po.breveOggi||{};
+    S.override=po.override||{}; S.alunnoAssenteOggi=po.alunnoAssenteOggi||[];
+  } else {
+    /* uno stato più vecchio, senza questo campo: nessun prospetto da riportare */
+    S.prospetto=null; S.assentiOggi={}; S.breveOggi={}; S.override={}; S.alunnoAssenteOggi=[];
+  }
+  S.noteApplicate=null;   /* ricontrolla le assenze note sul dispositivo che riceve */
   if(S.orario) S.day = giornoDaData(S.dataOggi||isoOggi());
   save(); saveRegistro();
 }
@@ -2615,7 +2631,7 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "04.10.2026c";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const VERSIONE = "05.10.2026";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -2634,7 +2650,9 @@ function datiBackup(){
     assistenti: S.assistenti || [],
     potAuto: S.potAuto || [],
     linguaSostegno: S.linguaSostegno || {},
-    incompatibili: S.incompatibili || []
+    incompatibili: S.incompatibili || [],
+    prospettoOggi: { dataOggi:S.dataOggi||null, prospetto:S.prospetto||null, assentiOggi:S.assentiOggi||{},
+      breveOggi:S.breveOggi||{}, override:S.override||{}, alunnoAssenteOggi:S.alunnoAssenteOggi||[] }
   };
 }
 function riepilogoBackup(d){
