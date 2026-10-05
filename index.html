@@ -2322,6 +2322,34 @@ function archiviaRegistro(){
 }
 function saveRegistro(){ try{ localStorage.setItem("sostituto_registro", JSON.stringify(S.registro)); }catch(e){} }
 
+/* riporta un giorno già archiviato nella home Sostituzioni, come se lo si stesse
+   ancora lavorando: utile quando si generano più giorni di fila e quelli precedenti
+   "spariscono" dalla home (restano nel registro, ma la home mostra un giorno alla
+   volta). La ricostruzione è fedele: stessi assenti con le stesse ore, stesse scelte
+   manuali, stesse coperture — non è una copia approssimata. */
+function riapriInSostituzioni(iso){
+  const rec = S.registro && S.registro[iso]; if(!rec) return;
+  S.dataOggi = iso; S.day = rec.giorno || giornoDaData(iso);
+  S.prospetto = {
+    giorno: S.day,
+    esiti: (rec.righe||[]).map(r=>({ h:r.h, a:{nome:r.assente}, classe:r.classe, scelto:r.scelto,
+      motivo:r.motivo, tipo:r.tipo||"", rice:!!r.rice, svuotata:!!r.svuotata, manuale:!!r.manuale,
+      gruppo:r.gruppo||"", lingua:r.lingua||"", annullata:!!r.annullata })),
+    note: (rec.note||[]).map(n=>({nome:n.nome, h:n.h, classe:n.classe})),
+    coperte: (rec.coperte||[]).map(c=>({h:c.h, a:{nome:c.assente}, classe:c.classe, da:c.da})),
+    pagamento: rec.pagamento||0
+  };
+  S.assentiOggi = {}; (rec.assenti||[]).forEach(a=>{ S.assentiOggi[a.nome]=a.ore; });
+  S.override = {}; (rec.righe||[]).forEach(r=>{ if(r.manuale) S.override[r.assente+"|"+r.h]=r.scelto; });
+  S.breveOggi = {};
+  const brevi = new Set((S.assenzeNote||[]).filter(a=>a.tipo==="breve" && iso>=a.dal && iso<=(a.al||a.dal)).map(a=>a.docente));
+  for(const nome in S.assentiOggi){ if(brevi.has(nome)) S.breveOggi[nome]=true; }
+  S.alunnoAssenteOggi=[]; S.chipAperto=""; S.apertoRiga=""; S.regApertoGiorno="";
+  S.noteApplicate = iso;   /* non voglio che applicaAssenzeNote() rimescoli quello che ho appena ricostruito */
+  S.tab="oggi"; save(); render();
+  toast("Giorno riaperto in Sostituzioni");
+}
+
 /* candidati per una cella già presente nel prospetto (per mostrare le alternative) */
 function alternativeCella(e){
   const o=S.orario;
@@ -2631,7 +2659,7 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "05.10.2026";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const VERSIONE = "05.10.2026b";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -4170,7 +4198,10 @@ function renderRegistro(){
       if(rec.coperte && rec.coperte.length){
         out += `<div class="pnote" style="margin:8px 12px">Senza sostituzione, coperte dal potenziamento assegnato: ${rec.coperte.map(c=>c.h+"ª "+esc(fmtCl(c.classe))+" ("+esc(cognomeBreve(c.assente))+" → "+esc(cognomeBreve(c.da))+")").join(", ")}</div>`;
       }
-      out += `<div style="padding:10px 12px; display:flex; gap:8px">
+      out += `<div style="padding:0 12px 10px">
+        ${S.ruolo==="operativo" ? "" : `<button class="btn ghost" style="width:100%; font-size:13px; padding:8px; margin-bottom:8px" onclick="riapriInSostituzioni('${iso}')">↩ Apri nella home Sostituzioni</button>`}
+      </div>`;
+      out += `<div style="padding:0 12px 10px; display:flex; gap:8px">
         <button class="btn ghost" style="flex:1; font-size:13px; padding:8px" onclick="condividiWhatsAppRegistro('${iso}')">📋 WhatsApp</button>
         <button class="btn ghost" style="flex:1; font-size:13px; padding:8px" onclick="stampaRegistro('${iso}')">🖨 PDF</button>
         ${S.ruolo==="operativo" ? "" : `<button class="btn ghost" style="flex:1; font-size:13px; padding:8px; color:var(--red); border-color:var(--red)" onclick="eliminaGiorno('${iso}')">🗑 Elimina</button>`}
