@@ -183,11 +183,22 @@
   .alt-piu:active{background:var(--paper)}
   .altbox{background:#EFEBDD; border-top:1px solid var(--rule); padding:8px 12px 10px}
   .alt-lbl{font-size:12px; color:var(--ink-soft); margin-bottom:6px; padding-left:2px}
-  .altrow{display:flex; align-items:center; justify-content:space-between; gap:8px;
+  .altrow{display:flex; align-items:flex-start; justify-content:space-between; gap:8px;
     background:var(--paper2); border:1.5px solid var(--rule); border-radius:9px; padding:9px 12px;
     margin-bottom:5px; cursor:pointer; font-weight:600; font-size:14.5px}
   .altrow:active{background:#DCEBE7}
   .altmot{font-size:11.5px; color:var(--ink-soft); font-weight:500; text-align:right; max-width:45%}
+  .altcol{flex:1; min-width:0}
+  .altlascia{display:flex; align-items:flex-start; gap:6px; margin-top:4px; font-size:12px; font-weight:500; line-height:1.4; color:var(--ink-soft)}
+  .altlascia .sq{flex-shrink:0; width:13px; height:13px; border-radius:4px; border:1.5px solid var(--rule); margin-top:2px}
+  .altlascia .sq.v2{background:#BCE6CC; border-color:#6FBF92}
+  .altlascia .sq.v{background:#DCF2E4; border-color:#8FCFAA}
+  .altlascia .sq.a{background:#FAEBD2; border-color:#E0BE77}
+  .altlascia .sq.p{background:#DCEBF7; border-color:#8DB8DB}
+  .altlascia .sq.r{background:#F7DEDC; border-color:#E2A29D}
+  .altlascia .sq.x{background:#E9A9A3; border-color:#C4554B}
+  .altlascia.zero{color:var(--red); font-weight:700}
+  .altlascia.nulla{opacity:.75}
   .prow.vuotarow{opacity:.55; cursor:default}
   .prow.vuotarow .pto.nsub{color:var(--ink-soft); font-weight:500; font-style:italic; font-size:13.5px}
   .ricewarn{background:#EAF3F1; border-left:3px solid var(--teal); color:var(--teal); font-size:12.5px;
@@ -971,6 +982,10 @@ function generaProspetto(o, giorno, assenti, opts){
         if(sost && st.t!=="AR"){
           const cl = st.det || st.a;
           if(opts.flag && new Set(opts.flag).has(a.nome+"|"+cl)){
+            slot.push({h, a:doc, classe:cl, tipo:"AFFIANCAMENTO", lingua:null});
+          } else if((a.nome+"|"+h) in ovr){
+            /* sostituzione chiesta a mano, anche se per regola non sarebbe dovuta:
+               vale solo per questa ora, di questo giorno — non è un flag permanente */
             slot.push({h, a:doc, classe:cl, tipo:"AFFIANCAMENTO", lingua:null});
           } else {
             note.push({h, nome:a.nome, classe:cl});
@@ -2373,15 +2388,93 @@ function riapriInSostituzioni(iso){
 }
 
 /* candidati per una cella già presente nel prospetto (per mostrare le alternative) */
+/* Cosa resta in una classe se ne tolgo `nome` in quest'ora, considerando la GIORNATA di oggi
+   (non solo l'orario): curricolare assente → chi lo sostituisce nel prospetto; sostegni e
+   potenziatori già mandati altrove (ctx.occupati) o assenti non contano. Stessa famiglia di colori
+   della scheda Coperture, così le due viste si leggono allo stesso modo. */
+function restaInClasse(o, classe, g, h, nome, ctx, prosp, cella){
+  const fuori = n => n===nome || assenteAllOra(ctx,n,h) || (ctx.occupati[g+"|"+h] && ctx.occupati[g+"|"+h].has(n));
+  const altraCella = e => !(cella && e.a.nome===cella.a.nome && e.h===cella.h);
+  const sullaClasse = e => e.classe===classe || (e.gruppo||"").split("·").includes(classe);
+  const {cur, sos} = presenzeIn(classe,g,h);
+  const gente=[]; let scopertoCurr=false;
+  cur.forEach(n=>{
+    if(!assenteAllOra(ctx,n,h)){ gente.push({n, r:"curr."}); return; }
+    /* curricolare assente oggi: chi c'è al suo posto? */
+    const es = (prosp.esiti||[]).find(e=>e.a.nome===n && e.h===h && altraCella(e) && e.scelto);
+    const co = (prosp.coperte||[]).find(c=>c.a.nome===n && c.h===h);
+    const sost = es ? es.scelto : (co ? co.da : null);
+    if(sost && sost!==nome) gente.push({n:sost, r:"sostituisce "+cognomeBreve(n)});
+    else scopertoCurr=true;
+  });
+  const sosRim = sos.filter(n=>!fuori(n));
+  sosRim.forEach(n=> gente.push({n, r:"sost."}));
+  const potRim = potIn(classe,g,h).filter(n=>!fuori(n));
+  potRim.forEach(n=> gente.push({n, r:"pot."}));
+  const asis = assistentiIn(classe,g,h);
+  /* stato nei colori di Coperture */
+  const liberi = sosRim.filter(n=>!(S.flagOggi||[]).includes(n+"|"+classe));
+  let t;
+  if(!sosRim.length)      t = potRim.length ? "p" : "r";
+  else if(!liberi.length) t = "a";
+  else if(liberi.length>1 || sosRim.length>1) t = "v2";
+  else                    t = "v";
+  const docenti = gente.length;
+  const nessuno = docenti===0;
+  if(nessuno) t = "x";
+  return {classe, gente, asis, t, nessuno, scopertoCurr};
+}
+/* la classe che `d` lascerebbe se fosse spostato in quest'ora (null = non ne lascia nessuna) */
+function classeLasciata(o, d, g, h){
+  const st = statoLinguaEff(d,g,h,o.ore);
+  if(st.t==="CLASSE") return st.det;
+  if(st.t==="LINGUA") return st.classe;
+  if(st.t==="DISP")   return potAssEff(d,g,h) || null;   /* potenziatore già assegnato a una classe */
+  return null;
+}
+function lasciaClasse(o, d, g, h, classeCella, ctx, prosp, cella){
+  const cl = classeLasciata(o, d, g, h);
+  if(!cl || cl===classeCella) return null;                 /* ora libera, o è già nella classe da coprire */
+  if(ctx.classeInGita && ctx.classeInGita(cl,h)) return null;   /* la sua classe è fuori: nessuno da lasciare */
+  return restaInClasse(o, cl, g, h, d.nome, ctx, prosp, cella);
+}
+function lascia_html(L){
+  if(!L) return `<div class="altlascia nulla"><span class="sq n" style="border-style:dashed"></span><span>non lascia scoperta nessuna classe</span></div>`;
+  const nomi = L.gente.map(x=>`${esc(cognomeBreve(x.n))} <span style="opacity:.8">(${esc(x.r)})</span>`).join(" · ");
+  const ass = L.asis.length ? ` · 🤝 ${L.asis.map(n=>esc(cognomeBreve(n))).join(", ")}` : "";
+  if(L.nessuno){
+    return `<div class="altlascia zero"><span class="sq x"></span><span>Lascia ${esc(fmtCl(L.classe))} senza nessun docente${
+      L.scopertoCurr?" (curricolare assente, non sostituito)":""}${ass}</span></div>`;
+  }
+  const solo = (L.t==="r") ? "solo " : "";
+  const avviso = L.scopertoCurr ? ` <b style="color:var(--red)">· curricolare assente, non sostituito</b>` : "";
+  return `<div class="altlascia"><span class="sq ${L.t}"></span><span>Lascia ${esc(fmtCl(L.classe))}: resta ${solo}${nomi}${ass}${avviso}</span></div>`;
+}
+
 function alternativeCella(e){
   const o=S.orario;
   const assenti=Object.keys(S.assentiOggi).map(n=>({nome:n, ore:S.assentiOggi[n]}));
   // ricostruisco il contesto ESCLUDENDO l'assegnazione di questa cella, così vedo chi è libero
   const ctxSnapshot = ricostruisciCtx(o, p_corrente(), e);
   const pool = candidati(o, e.classe, p_corrente().giorno, e.h, e.a, ctxSnapshot, e.lingua||null);
-  return pool.map(x=>({nome:x[x.length-1], motivo:x[x.length-2]}));
+  const g = p_corrente().giorno;
+  return pool.map(x=>{
+    const nome=x[x.length-1], d=o.docenti.find(z=>z.nome===nome);
+    let lascia=null;
+    try{ lascia = d ? lasciaClasse(o, d, g, e.h, e.classe, ctxSnapshot, p_corrente(), e) : null; }catch(_){ lascia=null; }
+    return {nome, motivo:x[x.length-2], lascia};
+  });
 }
 function p_corrente(){ return S.prospetto; }
+/* candidati per un'ora di sostegno assente che per regola non verrebbe sostituita */
+function alternativeNota(n){
+  const o=S.orario; const doc=o.docenti.find(d=>d.nome===n.nome); if(!doc) return [];
+  return alternativeCella({h:n.h, a:doc, classe:n.classe, lingua:null});
+}
+/* torna a "non sostituito": toglie la scelta fatta a mano su quella cella */
+function nonSostituireSostegno(nome,h){
+  delete S.override[nome+"|"+h]; S.apertoRiga=""; lanciaProspetto();
+}
 
 /* applica una scelta manuale su una cella */
 function scegliManuale(assente, h, nome){
@@ -2681,7 +2774,7 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "05.10.2026c";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const VERSIONE = "07.10.2026";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -4350,10 +4443,12 @@ function renderProspettoHTML(p){
         const espanso = S.altTutte === chiave;
         const alt = espanso ? tutte : tutte.slice(0,3);
         html += `<div class="altbox">`;
+        const sostForzato = isSost(e.a) && e.tipo && /AFFIAN/i.test(e.tipo) && e.manuale && !(S.flagOggi||[]).includes(e.a.nome+"|"+e.classe);
+        if(sostForzato) html += `<div class="alt-piu" style="text-align:left; padding:0 0 8px" onclick="event.stopPropagation(); nonSostituireSostegno('${esc(e.a.nome)}',${e.h})">↩ Non sostituire più questo sostegno</div>`;
         if(alt.length){
           html += `<div class="alt-lbl">Al posto ${e.scelto?'di '+esc(e.scelto):'(vuoto)'}, scegli:</div>`;
           html += alt.map(a=>`<div class="altrow" onclick="event.stopPropagation(); scegliManuale('${esc(e.a.nome)}',${e.h},'${esc(a.nome)}')">
-            <span>${esc(a.nome)}</span><span class="altmot">${esc(a.motivo)}</span></div>`).join("");
+            <div class="altcol"><span>${esc(a.nome)}</span>${lascia_html(a.lascia)}</div><span class="altmot">${esc(a.motivo)}</span></div>`).join("");
           if(tutte.length>3){
             html += `<div class="alt-piu" onclick="event.stopPropagation(); S.altTutte='${espanso?"":esc(chiave)}'; render()">
               ${espanso ? "▲ mostra solo le prime 3" : "▼ mostra tutte ("+tutte.length+")"}</div>`;
@@ -4367,8 +4462,29 @@ function renderProspettoHTML(p){
     html += `</div>`;
   }
   if(p.note && p.note.length){
-    html += `<div class="pnote"><b>Sostegni assenti non sostituiti</b> (la classe ha il curricolare):<br>`;
-    html += p.note.map(n=>`${esc(n.nome)} · ${n.h}ª (${esc(fmtCl(n.classe))})`).join("<br>");
+    html += `<div class="pnote"><b>Sostegni assenti non sostituiti</b> (la classe ha il curricolare). Tocca una voce per sostituirla comunque:</div>`;
+    html += `<div class="pcard" style="margin-top:6px">`;
+    p.note.forEach(n=>{
+      const key=n.nome+"|"+n.h, aperto=S.apertoRiga===key;
+      html += `<div class="prow" onclick="apriAlternative('${esc(n.nome)}',${n.h})">
+        <span class="ph">${n.h}ª</span><span class="pcl">${esc(fmtCl(n.classe))}</span>
+        <span class="pto">${esc(n.nome)} <b class="chev">${aperto?'▲':'▾'}</b></span><span class="pmot">non sostituito</span></div>`;
+      if(aperto){
+        const tutte=alternativeNota(n), espanso=S.altTutte===key, alt=espanso?tutte:tutte.slice(0,3);
+        html += `<div class="altbox">`;
+        if(alt.length){
+          html += `<div class="alt-lbl">Chi mandare al posto di ${esc(n.nome)}?</div>`;
+          html += alt.map(a=>`<div class="altrow" onclick="event.stopPropagation(); scegliManuale('${esc(n.nome)}',${n.h},'${esc(a.nome)}')">
+            <div class="altcol"><span>${esc(a.nome)}</span>${lascia_html(a.lascia)}</div><span class="altmot">${esc(a.motivo)}</span></div>`).join("");
+          if(tutte.length>3){
+            html += `<div class="alt-piu" onclick="event.stopPropagation(); S.altTutte='${espanso?"":esc(key)}'; render()">${espanso?"▲ mostra solo le prime 3":"▼ mostra tutte ("+tutte.length+")"}</div>`;
+          }
+        } else {
+          html += `<div class="alt-lbl">Nessun docente disponibile per quest'ora.</div>`;
+        }
+        html += `</div>`;
+      }
+    });
     html += `</div>`;
   }
   html += `<div class="stat" style="border-top:2px solid var(--rule); margin-top:10px"><span>Ore a pagamento</span><b style="color:${p.pagamento?'var(--red)':'var(--teal)'}">${p.pagamento}</b></div>`;
@@ -4381,7 +4497,20 @@ function renderProspettoHTML(p){
 }
 
 /* ---- genera il testo del prospetto per WhatsApp ---- */
-function cognomeBreve(n){ const c=String(n).split(/\s+/)[0]; return c.length>10 ? c.slice(0,9)+"." : c; }
+/* Forma breve del nome: il COGNOME completo (anche composto: "DEL MASTRO", "DE LUCA"), non la prima parola.
+   Se un altro docente ha lo stesso cognome aggiungo l'iniziale del nome, così non si confondono.
+   `max` = lunghezza massima prima di abbreviare con il punto (10 sulle schede; 14 nel testo WhatsApp,
+   dove le righe non sono allineate e un cognome intero evita ambiguità). */
+function cognomeBreve(n, max){
+  max = max || 10;
+  const full = String(n==null?"":n).trim();
+  if(!full) return "";
+  let c = cogn(full);
+  const usate = c.split(" ").length, resto = full.split(/\s+/).slice(usate);
+  const omonimo = ((S.orario&&S.orario.docenti)||[]).some(d => d.nome!==full && cogn(d.nome).toLowerCase()===c.toLowerCase());
+  if(omonimo && resto.length) c += " "+resto[0].charAt(0).toUpperCase()+".";
+  return c.length>max ? c.slice(0,max-1)+"." : c;
+}
 function notaWA(e){
   const ass = S.orario.docenti.find(d=>d.nome===e.a.nome);
   if(e.tipo==="AIRC") return "AIRC";
@@ -4401,11 +4530,11 @@ function testoWhatsAppData(p, iso){
   righe.forEach(e=>{
     const artic = !!(e.gruppo && e.lingua);
     const cl = artic ? e.gruppo.replace("·","-") : e.classe;   /* articolata: 2A-2C */
-    const ass = cognomeBreve(e.a.nome);
+    const ass = cognomeBreve(e.a.nome, 14);
     if(e.motivo==="scoperta"){
       t += `${e.h}ª  ${cl}  ${ass} → ⚠ SCOPERTA\n`; return;
     }
-    const sost = cognomeBreve(e.scelto);
+    const sost = cognomeBreve(e.scelto, 14);
     // nota solo se diversa dalla sostituzione normale
     const bits=[];
     if(artic) bits.push(e.lingua);                 /* FR / SP */
@@ -4420,7 +4549,7 @@ function testoWhatsAppData(p, iso){
   if(p.coperte && p.coperte.length){
     t = t.trimEnd() + `\n\n_Nessuna sostituzione, classe già coperta dal potenziamento:_\n`;
     p.coperte.slice().sort((a,b)=>a.h-b.h).forEach(c=>{
-      t += `${c.h}ª  ${c.classe}  ${cognomeBreve(c.a.nome)} → ${cognomeBreve(c.da)} (potenz.)\n`;
+      t += `${c.h}ª  ${c.classe}  ${cognomeBreve(c.a.nome,14)} → ${cognomeBreve(c.da,14)} (potenz.)\n`;
     });
   }
   return t.trimEnd();
