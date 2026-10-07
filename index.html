@@ -258,6 +258,14 @@
     margin-bottom:5px; cursor:pointer; font-weight:600; font-size:14.5px}
   .altrow:active{background:var(--tint-teal)}
   .altmot{font-size:11.5px; color:var(--ink-soft); font-weight:500; text-align:right; max-width:45%}
+  .inclasse{background:var(--paper2); border:1px solid var(--rule); border-radius:9px; padding:8px 11px 9px; margin-bottom:9px}
+  .inclasse .ic-tit{font-size:12px; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.04em; margin-bottom:4px}
+  .inclasse .ic-cl{font-size:12px; font-weight:700; color:var(--teal); margin:5px 0 1px}
+  .inclasse .ic-r{font-size:14px; font-weight:600; line-height:1.55}
+  .inclasse .ic-r .q{font-weight:500; color:var(--ink-soft)}
+  .inclasse .ic-r .intoc{font-weight:700; color:var(--tx-amber-dark)}
+  .inclasse .ic-r.warn{color:var(--red); font-weight:700}
+  .inclasse .ic-muted{font-size:12.5px; font-weight:500; color:var(--ink-soft); line-height:1.5; margin-top:3px}
   .altcol{flex:1; min-width:0}
   .altlascia{display:flex; align-items:flex-start; gap:6px; margin-top:4px; font-size:12px; font-weight:500; line-height:1.4; color:var(--ink-soft)}
   .altlascia .sq{flex-shrink:0; width:13px; height:13px; border-radius:4px; border:1.5px solid var(--rule); margin-top:2px}
@@ -2580,6 +2588,62 @@ function restaInClasse(o, classe, g, h, nome, ctx, prosp, cella){
   if(nessuno) t = "x";
   return {classe, gente, asis, t, nessuno, scopertoCurr};
 }
+/* Chi c'è in classe, adesso, nella cella che sto coprendo — come il dettaglio di Coperture
+   ma con la giornata di oggi: assenti, sostituti già scelti, chi è stato mandato altrove. */
+function inClasseCella(e){
+  const o=S.orario, prosp=p_corrente(), g=prosp.giorno, h=e.h;
+  const ctx=ricostruisciCtx(o, prosp, e);
+  const altraCella = x => !(x.a.nome===e.a.nome && x.h===e.h);
+  const classi = (e.gruppo && e.lingua) ? String(e.gruppo).split("·") : [e.classe];
+  const fuoriAltrove = n => !!(ctx.occupati[g+"|"+h] && ctx.occupati[g+"|"+h].has(n));
+  return classi.map(cl=>{
+    const righe=[], via=[];
+    if(ctx.classeInGita && ctx.classeInGita(cl,h)) return {classe:cl, righe, via, gita:true};
+    const {cur, sos} = presenzeIn(cl,g,h);
+    cur.forEach(n=>{
+      if(!assenteAllOra(ctx,n,h)){ righe.push({ico:"📘", nome:n, ruolo:"curricolare"}); return; }
+      const es=(prosp.esiti||[]).find(x=>x.a.nome===n && x.h===h && altraCella(x) && x.scelto);
+      const co=(prosp.coperte||[]).find(c=>c.a.nome===n && c.h===h);
+      const sost = es ? es.scelto : (co ? co.da : null);
+      if(sost) righe.push({ico:"📘", nome:sost, ruolo:"sostituisce "+n});
+      via.push(n+" · curricolare · assente oggi"+(n===e.a.nome?" (è la cella da coprire)":(sost?"":" · non sostituito")));
+    });
+    sos.forEach(n=>{
+      if(assenteAllOra(ctx,n,h)){ via.push(n+" · sostegno · assente oggi"+(n===e.a.nome?" (è la cella da coprire)":"")); return; }
+      if(fuoriAltrove(n)){ via.push(n+" · sostegno · già mandato in un'altra classe"); return; }
+      const intoc=(S.flagOggi||[]).includes(n+"|"+cl);
+      const libero=(S.alunnoAssenteOggi||[]).includes(n);
+      righe.push({ico:"🧑‍🏫", nome:n, ruolo:"sostegno", intoc, nota: libero?"alunno assente oggi":""});
+    });
+    potIn(cl,g,h).forEach(n=>{
+      if(assenteAllOra(ctx,n,h)){ via.push(n+" · potenziamento assegnato · assente oggi"); return; }
+      if(fuoriAltrove(n)){ via.push(n+" · potenziamento assegnato · già mandato altrove"); return; }
+      righe.push({ico:"⚡", nome:n, ruolo:"potenziamento assegnato"});
+    });
+    assistentiIn(cl,g,h).forEach(n=> righe.push({ico:"🤝", nome:n, ruolo:"assistente comunale"}));
+    return {classe:cl, righe, via, gita:false};
+  });
+}
+function inClasse_html(e){
+  let blocchi;
+  try{ blocchi=inClasseCella(e); }catch(_){ return ""; }
+  const multi=blocchi.length>1;
+  let out=`<div class="inclasse"><div class="ic-tit">In classe${multi?"":" "+esc(fmtCl(blocchi[0].classe))} · ${e.h}ª ora</div>`;
+  blocchi.forEach(b=>{
+    if(multi) out+=`<div class="ic-cl">${esc(fmtCl(b.classe))}</div>`;
+    if(b.gita){ out+=`<div class="ic-r"><span class="q">🚌 la classe è in uscita didattica</span></div>`; return; }
+    if(!b.righe.length) out+=`<div class="ic-r warn">⚠ nessun docente in classe</div>`;
+    b.righe.forEach(r=>{
+      out+=`<div class="ic-r">${r.ico} ${esc(r.nome)}<span class="q"> · ${esc(r.ruolo)}</span>${r.intoc?` <span class="intoc">· intoccabile</span>`:""}${r.nota?`<span class="q"> · ${esc(r.nota)}</span>`:""}</div>`;
+    });
+    if(b.via.length) out+=`<div class="ic-muted">Non in classe: ${b.via.map(esc).join(" — ")}</div>`;
+  });
+  return out+`</div>`;
+}
+function cellaNota(n){
+  const doc=S.orario.docenti.find(d=>d.nome===n.nome);
+  return doc ? {h:n.h, a:doc, classe:n.classe, lingua:null} : null;
+}
 /* la classe che `d` lascerebbe se fosse spostato in quest'ora (null = non ne lascia nessuna) */
 function classeLasciata(o, d, g, h){
   const st = statoLinguaEff(d,g,h,o.ore);
@@ -2930,7 +2994,7 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "07.10.2026c";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const VERSIONE = "07.10.2026d";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -4600,6 +4664,7 @@ function renderProspettoHTML(p){
         const alt = espanso ? tutte : tutte.slice(0,3);
         html += `<div class="altbox">`;
         const sostForzato = isSost(e.a) && e.tipo && /AFFIAN/i.test(e.tipo) && e.manuale && !(S.flagOggi||[]).includes(e.a.nome+"|"+e.classe);
+        html += inClasse_html(e);
         if(sostForzato) html += `<div class="alt-piu" style="text-align:left; padding:0 0 8px" onclick="event.stopPropagation(); nonSostituireSostegno('${esc(e.a.nome)}',${e.h})">↩ Non sostituire più questo sostegno</div>`;
         if(alt.length){
           html += `<div class="alt-lbl">Al posto ${e.scelto?'di '+esc(e.scelto):'(vuoto)'}, scegli:</div>`;
@@ -4628,6 +4693,7 @@ function renderProspettoHTML(p){
       if(aperto){
         const tutte=alternativeNota(n), espanso=S.altTutte===key, alt=espanso?tutte:tutte.slice(0,3);
         html += `<div class="altbox">`;
+        { const cn=cellaNota(n); if(cn) html += inClasse_html(cn); }
         if(alt.length){
           html += `<div class="alt-lbl">Chi mandare al posto di ${esc(n.nome)}?</div>`;
           html += alt.map(a=>`<div class="altrow" onclick="event.stopPropagation(); scegliManuale('${esc(n.nome)}',${n.h},'${esc(a.nome)}')">
