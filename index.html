@@ -1417,7 +1417,7 @@ function fmtCl(c){ return c ? c[0]+"ª "+c.slice(1) : c; }
    ============================================================ */
 const el = id => document.getElementById(id);
 
-const SOTTO_ALTRO = ["dove","importa","uscita","assenze","backup","potenz","sync","flag","recuperi","config","nuovoanno","uscfoglio","coperture","assist","linguasost","incompat"];
+const SOTTO_ALTRO = ["dove","importa","cambiodoc","uscita","assenze","backup","potenz","sync","flag","recuperi","config","nuovoanno","uscfoglio","coperture","assist","linguasost","incompat"];
 /* in modalità operativa restano solo queste voci del menu Altro */
 const OPERATIVO_TAB = ["dove","sync"];
 /* schede utilizzabili anche prima di avere un orario: sono le vie da cui l'orario arriva */
@@ -1431,7 +1431,7 @@ function render(){
   document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on", b.dataset.tab===attivo));
   if(!S.orario && !SENZA_ORARIO.includes(S.tab)){ renderVuoto(); return; }
   ({oggi:renderOggi, registro:renderRegistro, orario:renderOrario, altro:renderAltro,
-    dove:renderDove, importa:renderImporta, uscita:renderUscita, assenze:renderAssenze, backup:renderBackup, potenz:renderPotenziamento, sync:renderSync, flag:renderFlag, recuperi:renderRecuperi, config:renderConfigCriteri, nuovoanno:renderNuovoAnno, uscfoglio:renderUscFoglio, coperture:renderCoperture, assist:renderAssist, linguasost:renderLinguaSostegno, incompat:renderIncompatibili})[S.tab]();
+    dove:renderDove, importa:renderImporta, cambiodoc:renderCambioDocente, uscita:renderUscita, assenze:renderAssenze, backup:renderBackup, potenz:renderPotenziamento, sync:renderSync, flag:renderFlag, recuperi:renderRecuperi, config:renderConfigCriteri, nuovoanno:renderNuovoAnno, uscfoglio:renderUscFoglio, coperture:renderCoperture, assist:renderAssist, linguasost:renderLinguaSostegno, incompat:renderIncompatibili})[S.tab]();
   aggiornaBarraSync();
 }
 
@@ -2195,6 +2195,7 @@ function renderAltro(){
     { tab:"potenz",  ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.6"/><circle cx="12" cy="12" r=".6" fill="currentColor"/></svg>`, tit:"Potenziamento",      sub:nPno?`${nPno} ore marcate Pno`:"Marca le ore non disponibili senza toccare l'Excel" },
     { tab:"dove",    ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="M20.5 20.5l-4.7-4.7"/></svg>`, tit:"Dov'è",              sub:"Trova un docente o una classe in un momento preciso" },
     { tab:"importa", ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4"/><path d="M8 8l4-4 4 4"/><path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/></svg>`, tit:"Importa l'orario",   sub:"Carica il file Excel — poche volte l'anno" },
+    { tab:"cambiodoc", ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.4-3.2 2.6-5 5.5-5s5.1 1.8 5.5 5"/><path d="M16 5.5h5m0 0-1.8-1.8M21 5.5l-1.8 1.8"/><path d="M21 12h-5m0 0 1.8-1.8M16 12l1.8 1.8" transform="translate(0 2)"/></svg>`, tit:"Cambio docente", sub:"Un supplente subentra, o correggi un nome — senza reimportare" },
     { tab:"sync",    ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5A6.5 6.5 0 0 1 15.5 5.6L18 8"/><path d="M18 4v4h-4"/><path d="M20 14.5A6.5 6.5 0 0 1 8.5 18.4L6 16"/><path d="M6 20v-4h4"/></svg>`, tit:"Condivisione",       sub:(S.sync&&S.sync.url)?((S.sync.soloLettura?"sola lettura":"attiva")+((S.sync.info&&S.sync.info.utente)?" · ultimo: "+S.sync.info.utente:"")):"Collega il foglio Google della scuola" },
     { tab:"backup",  ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10.5" width="16" height="9.5" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/><circle cx="12" cy="15" r="1.1"/></svg>`, tit:"Backup e ripristino", sub:"Salva tutto in un file — o rimetti a posto dopo un guaio" },
     { tab:"config", ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6M4.22 4.22l4.24 4.24m5.08 5.08l4.24 4.24M1 12h6m6 0h6M4.22 19.78l4.24-4.24m5.08-5.08l4.24-4.24"/></svg>`, tit:"Configurazione criteri", sub:"Attiva/disattiva criteri e ordina la priorità" },
@@ -2994,7 +2995,7 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "07.10.2026d";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const VERSIONE = "07.10.2026e";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -4930,6 +4931,179 @@ function chiInClasse(o, classe, g, h){
 }
 
 /* ---- IMPORTA ---- */
+/* ================= CAMBIO DOCENTE =================
+   Un supplente subentra a chi se ne va, oppure si corregge un nome scritto male,
+   senza reimportare l'orario. Il nome è la chiave di quasi tutto, quindi qui si decide
+   cosa SEGUE LA CATTEDRA (orario, sostegni intoccabili, gruppi lingua, ore di
+   potenziamento, registro dal giorno del cambio in poi) e cosa RESTA ALLA PERSONA
+   (storico, recuperi, incompatibilità, assenze note, uscite). Con "correzione" cambia
+   tutto, anche il passato: è la stessa persona. */
+function nomeInChiave(k, v, n){ const p=String(k).split("|"); if(p[0]!==v) return k; p[0]=n; return p.join("|"); }
+function trasformaCambioDocente(dati, v, n, opz){
+  const tutto=!!opz.tutto, dal=opz.dal||"0000-00-00";
+  const rep={ore:0, flag:[], lingua:0, pot:0, pno:0, potMod:0, lingue:[], regGiorni:0, regRighe:0,
+             storicoGiorni:0, storicoRighe:0, recVoci:0, recOre:0, incomp:[], assenze:0, uscite:0, oggi:false, materia:""};
+  const doc=((dati.orario||{}).docenti||[]).find(d=>d.nome===v);
+  if(!doc) return {errore:"Il docente non è nell'orario."};
+  doc.nome=n;
+  if(opz.materia!=null && opz.materia!=="" && opz.materia!==doc.materia){ rep.materia=(doc.materia||"—")+" → "+opz.materia; doc.materia=opz.materia; }
+  for(const k in (doc.cells||{})){ const t=(doc.cells[k]||{}).t; if(t==="CLASSE"||t==="LINGUA"||t==="ARTIC"||t==="AR") rep.ore++; }
+
+  /* ---- segue la cattedra ---- */
+  if(dati.lingue) Object.keys(dati.lingue).forEach(L=>{ if(dati.lingue[L]===v){ dati.lingue[L]=n; rep.lingue.push(L==="FR"?"francese":"spagnolo"); } });
+  dati.flagOggi=(dati.flagOggi||[]).map(k=>{ const r=nomeInChiave(k,v,n); if(r!==k) rep.flag.push(String(k).split("|")[1]); return r; });
+  const mapObj=(o,cnt)=>{ const out={}; for(const k in (o||{})){ const r=nomeInChiave(k,v,n); if(r!==k && cnt) rep[cnt]++; out[r]=o[k]; } return out; };
+  dati.linguaSostegno=mapObj(dati.linguaSostegno,"lingua");
+  dati.potAssign=mapObj(dati.potAssign,"pot");
+  dati.potAuto=(dati.potAuto||[]).map(k=>nomeInChiave(k,v,n));
+  dati.pnoOn=(dati.pnoOn||[]).map(k=>{ const r=nomeInChiave(k,v,n); if(r!==k) rep.pno++; return r; });
+  (dati.potMod||[]).forEach(m=>{ if(m.docente===v && (tutto || !m.al || m.al>=dal)){ m.docente=n; rep.potMod++; } });
+
+  /* ---- registro: dal giorno del cambio in poi (o tutto, se è una correzione) ---- */
+  Object.keys(dati.registro||{}).forEach(iso=>{
+    const g=dati.registro[iso], applica = tutto || iso>=dal; let nr=0;
+    (g.righe||[]).forEach(r=>{
+      if(r.assente===v || r.scelto===v){ nr++; if(applica){ if(r.assente===v) r.assente=n; if(r.scelto===v) r.scelto=n; } }
+    });
+    if(applica){
+      (g.assenti||[]).forEach(a=>{ if(a.nome===v) a.nome=n; });
+      (g.note||[]).forEach(a=>{ if(a.nome===v) a.nome=n; });
+      (g.coperte||[]).forEach(c=>{ if(c.assente===v) c.assente=n; if(c.da===v) c.da=n; });
+    }
+    if(nr){ if(applica){ rep.regGiorni++; rep.regRighe+=nr; } else { rep.storicoGiorni++; rep.storicoRighe+=nr; } }
+  });
+
+  /* ---- resta alla persona (con "correzione" cambia anche questo) ---- */
+  (dati.incompatibili||[]).forEach((k,i)=>{ const r=nomeInChiave(k,v,n); if(r!==k){ if(tutto) dati.incompatibili[i]=r; else rep.incomp.push(String(k).split("|")[1]); } });
+  (dati.recuperi||[]).forEach(r=>{ if(r.docente!==v) return;
+    if(tutto) r.docente=n;
+    else { const aperte=Math.max(0,(r.ore||0)-(r.restituite||0)-(r.chiuseManuale||0)); if(aperte>0){ rep.recVoci++; rep.recOre+=aperte; } } });
+  (dati.assenzeNote||[]).forEach(a=>{ if(a.docente!==v) return;
+    if(tutto) a.docente=n; else if((a.al||a.dal||"")>=dal) rep.assenze++; });
+  (dati.uscite||[]).forEach(u=>{ const i=(u.accomp||[]).indexOf(v); if(i<0) return;
+    if(tutto) u.accomp[i]=n; else if((u.al||u.dal||"")>=dal) rep.uscite++; });
+
+  /* ---- il giorno su cui sto lavorando ---- */
+  const po=dati.prospettoOggi;
+  if(po && (tutto || (po.dataOggi||"")>=dal)){
+    let toccato = !!(po.prospetto && JSON.stringify(po.prospetto).indexOf('"'+v+'"')>=0);
+    const re=(o)=>{ const out={}; for(const k in (o||{})){ const r=nomeInChiave(k,v,n); if(r!==k) toccato=true; out[r]=o[k]; } return out; };
+    po.assentiOggi=re(po.assentiOggi); po.breveOggi=re(po.breveOggi);
+    const ov={}; for(const k in (po.override||{})){ const r=nomeInChiave(k,v,n); let val=po.override[k]; if(r!==k) toccato=true; if(val===v){ val=n; toccato=true; } ov[r]=val; }
+    po.override=ov;
+    po.alunnoAssenteOggi=(po.alunnoAssenteOggi||[]).map(x=>{ if(x===v){ toccato=true; return n; } return x; });
+    if(toccato){ po.prospetto=null; rep.oggi=true; }
+  }
+  return {dati, rep};
+}
+function cambioDocentePiano(){
+  const c=S.cd||{}, v=c.vecchio||"", n=String(c.nuovo||"").trim().replace(/\s+/g," ");
+  if(!v || !n) return {vuoto:true};
+  if(n.indexOf("|")>=0) return {errore:"Il nome non può contenere il carattere «|»."};
+  if(n===v) return {errore:"Il nuovo nome è uguale a quello attuale."};
+  if((S.orario.docenti||[]).some(d=>d.nome!==v && d.nome.trim().toLowerCase()===n.toLowerCase()))
+    return {errore:"Nell'orario c'è già un docente con questo nome."};
+  const tutto = c.modo==="correzione", dal = c.dal || isoOggi();
+  const copia=JSON.parse(JSON.stringify(statoDaCondividere()));
+  const r=trasformaCambioDocente(copia, v, n, {tutto, dal, materia:String(c.materia||"").trim()});
+  if(r.errore) return r;
+  return {v, n, dati:r.dati, rep:r.rep, tutto, dal};
+}
+function cambioDocenteAnteprima_html(p){
+  if(p.vuoto) return `<p class="hint">Scegli il docente e scrivi il nuovo nome: qui compare cosa cambierà, prima di toccare qualcosa.</p>`;
+  if(p.errore) return `<div class="promemo" style="background:var(--tint-red); border-left-color:var(--red)">${esc(p.errore)}</div>`;
+  const r=p.rep, q=iso=>iso.split("-").reverse().join("/");
+  const si=[], resta=[], ctl=[];
+  si.push(`<b>Orario</b>: ${r.ore} ore settimanali in classe passano a <b>${esc(p.n)}</b>${r.materia?` · materia ${esc(r.materia)}`:""}`);
+  if(r.flag.length) si.push(`sostegno <b>intoccabile</b> su ${r.flag.map(esc).join(", ")}`);
+  if(r.lingua) si.push(`${r.lingua} ${r.lingua===1?"ora":"ore"} di gruppo lingua assegnat${r.lingua===1?"a":"e"} al sostegno`);
+  if(r.lingue.length) si.push(`docente di <b>${r.lingue.join(" e ")}</b> nei gruppi seconda lingua`);
+  if(r.pot) si.push(`${r.pot} ${r.pot===1?"ora":"ore"} di potenziamento già assegnat${r.pot===1?"a":"e"} a una classe`);
+  if(r.pno) si.push(`${r.pno} ${r.pno===1?"ora":"ore"} segnat${r.pno===1?"a":"e"} Pno`);
+  if(r.potMod) si.push(`${r.potMod} sospension${r.potMod===1?"e/spostamento":"i/spostamenti"} di potenziamento`);
+  if(r.regRighe) si.push(`<b>Registro</b>: ${r.regRighe} ${r.regRighe===1?"riga":"righe"} in ${r.regGiorni} ${r.regGiorni===1?"giornata":"giornate"}${p.tutto?" (anche passate)":" dal "+q(p.dal)+" in poi"}`);
+  if(r.oggi) si.push(`il prospetto di oggi viene <b>rigenerato</b> con il nuovo nome`);
+  if(p.tutto){
+    si.push(`incompatibilità, recuperi, assenze note e uscite a nome di ${esc(p.v)} passano anch'essi al nuovo nome`);
+  } else {
+    if(r.storicoRighe) resta.push(`<b>Registro prima del ${q(p.dal)}</b>: ${r.storicoRighe} ${r.storicoRighe===1?"riga":"righe"} in ${r.storicoGiorni} ${r.storicoGiorni===1?"giornata":"giornate"} restano a ${esc(p.v)} (è lei/lui che le ha fatte)`);
+    if(r.recVoci) resta.push(`<b>Recuperi</b>: ${r.recOre} ${r.recOre===1?"ora":"ore"} ancora da restituire restano a ${esc(p.v)}`);
+    if(r.incomp.length) resta.push(`<b>Incompatibilità</b> (${r.incomp.map(esc).join(", ")}): riguardano la persona, non si trasferiscono — rivedile`);
+    if(r.assenze) ctl.push(`${r.assenze} ${r.assenze===1?"assenza nota":"assenze note"} a nome di ${esc(p.v)} da oggi in poi (Altro → Assenze note)`);
+    if(r.uscite) ctl.push(`${r.uscite} ${r.uscite===1?"uscita":"uscite"} con ${esc(p.v)} fra gli accompagnatori (Altro → Uscite didattiche)`);
+  }
+  const lista=a=>`<ul style="margin:4px 0 0; padding-left:20px; font-size:13.5px; line-height:1.5">${a.map(x=>`<li>${x}</li>`).join("")}</ul>`;
+  let out=`<div class="promemo"><b>${esc(p.v)} → ${esc(p.n)}</b>${p.tutto?" · correzione del nome ovunque":" · subentra dal "+q(p.dal)}<br>Passa al nuovo docente:${lista(si)}</div>`;
+  if(resta.length) out+=`<div class="promemo" style="background:var(--tint-warm2); border-left-color:var(--amber)">Resta a ${esc(p.v)}:${lista(resta)}</div>`;
+  if(ctl.length) out+=`<div class="promemo" style="background:var(--tint-red); border-left-color:var(--red)">Da controllare a mano:${lista(ctl)}</div>`;
+  out+=`<button class="btn" style="width:100%; margin-top:4px" onclick="applicaCambioDocente()">Applica il cambio</button>`;
+  return out;
+}
+function aggiornaAnteprimaCD(){ const b=el("cdprev"); if(b) b.innerHTML=cambioDocenteAnteprima_html(cambioDocentePiano()); }
+function applicaCambioDocente(){
+  const p=cambioDocentePiano(); if(p.vuoto||p.errore){ aggiornaAnteprimaCD(); return; }
+  if(!confirm("Cambio «"+p.v+"» in «"+p.n+"»"+(p.tutto?" (correzione del nome ovunque)":" dal "+p.dal.split("-").reverse().join("/"))+".\n\nPrima dell'applicazione l'app salva un'istantanea: la ritrovi in Altro → Backup.\n\nProcedere?")) return;
+  salvaPreSync(statoDaCondividere());
+  applicaStato(p.dati);
+  try{ ricalcolaRestituzioni(); saveRegistro(); }catch(_){}
+  S.cd.ris={v:p.v, n:p.n, tutto:p.tutto, dal:p.dal, quando:new Date().toISOString()};
+  S.cd.vecchio=""; S.cd.nuovo=""; S.cd.materia="";
+  if(!S.prospetto && Object.keys(S.assentiOggi||{}).length) lanciaProspetto(); else render();
+}
+function annullaCambioDocente(){
+  const arr=leggiPreSync(); const voce=arr[0];
+  if(!voce || !S.cd || !S.cd.ris){ toast("Niente da annullare"); return; }
+  if(!confirm("Annullo il cambio e ripristino i dati com'erano prima?")) return;
+  applicaStato(voce.dati);
+  try{ ricalcolaRestituzioni(); saveRegistro(); }catch(_){}
+  S.cd.ris=null; toast("Cambio annullato");
+  if(!S.prospetto && Object.keys(S.assentiOggi||{}).length) lanciaProspetto(); else render();
+}
+function renderCambioDocente(){
+  const o=S.orario;
+  S.cd = S.cd || {vecchio:"", nuovo:"", materia:"", modo:"subentra", dal:isoOggi(), ris:null};
+  const c=S.cd;
+  const docs=(o.docenti||[]).slice().sort((a,b)=>a.nome.localeCompare(b.nome,"it"));
+  let out=`<div class="backlink" onclick="S.tab='altro'; render()">‹ Altro</div>
+    <h2 class="sec">Cambio docente</h2>
+    <p class="hint" style="margin-top:0">Un supplente subentra a chi se ne va, oppure c'è un nome da correggere: lo cambi qui, senza reimportare l'orario. Ore, classi e regole legate alla cattedra restano com'erano.</p>`;
+  if(c.ris){
+    const q=c.ris.dal.split("-").reverse().join("/");
+    out+=`<div class="promemo" style="background:var(--ok-bg); border-left-color:var(--ok-tx)"><b>Fatto:</b> ${esc(c.ris.v)} → <b>${esc(c.ris.n)}</b>${c.ris.tutto?" (ovunque)":" dal "+q}.<br>
+      <span style="color:var(--ink-soft)">Per far vedere il cambio agli altri dispositivi vai in Altro → Condivisione e premi <b>⬆ Invia</b>. Chi ha ancora il vecchio orario, prima di inviare, deve premere Scarica.</span><br>
+      <span class="chip-ann" style="display:inline-block; margin-top:6px; color:var(--teal); font-weight:700; cursor:pointer" onclick="annullaCambioDocente()">↩ Annulla questo cambio</span></div>`;
+  }
+  out+=`<div class="field"><label>Docente che lascia / nome da correggere</label>
+      <select onchange="S.cd.vecchio=this.value; const d=S.orario.docenti.find(x=>x.nome===this.value); S.cd.materia=d?(d.materia||''):''; S.cd.ris=null; render()">
+        <option value="">— scegli docente —</option>
+        ${docs.map(d=>`<option value="${esc(d.nome)}"${d.nome===c.vecchio?" selected":""}>${esc(d.nome)} · ${esc(d.materia||"")}</option>`).join("")}
+      </select></div>`;
+  if(c.vecchio){
+    out+=`<div class="field"><label>Nuovo nome</label>
+        <input type="text" id="cdnuovo" value="${esc(c.nuovo||"")}" placeholder="es. ROSSI Maria" autocomplete="off"
+          oninput="S.cd.nuovo=this.value; aggiornaAnteprimaCD()">
+        <p class="hint" style="margin:5px 0 0">Scrivilo come gli altri nell'orario: cognome in MAIUSCOLO e poi il nome. Il cognome in maiuscolo serve all'app per riconoscere i cognomi doppi (DEL MASTRO, DE LUCA).</p></div>
+      <div class="field"><label>Materia</label>
+        <input type="text" value="${esc(c.materia||"")}" oninput="S.cd.materia=this.value; aggiornaAnteprimaCD()">
+        <p class="hint" style="margin:5px 0 0">Lasciala così se il supplente ha la stessa cattedra.</p></div>
+      <div class="field"><label>Di che cambio si tratta</label>
+        <div class="pickgrid">
+          <div class="pick${c.modo!=="correzione"?' on':''}" onclick="S.cd.modo='subentra'; render()">Subentra un altro docente</div>
+          <div class="pick${c.modo==="correzione"?' on':''}" onclick="S.cd.modo='correzione'; render()">Correggo un nome sbagliato</div>
+        </div>
+        <p class="hint" style="margin:6px 0 0">${c.modo==="correzione"
+          ? "È la stessa persona: il nome cambia <b>ovunque</b>, anche nel registro passato, nei recuperi e nelle incompatibilità."
+          : "Il passato resta a chi c'era: il registro fino al giorno prima, i recuperi e le incompatibilità non si trasferiscono."}</p></div>`;
+    if(c.modo!=="correzione"){
+      out+=`<div class="field"><label>Subentra dal giorno</label>
+          <input type="date" class="databig" value="${esc(c.dal||isoOggi())}" onchange="S.cd.dal=this.value||isoOggi(); aggiornaAnteprimaCD()"></div>`;
+    }
+    out+=`<div id="cdprev"></div>`;
+  }
+  el("main").innerHTML=out;
+  if(c.vecchio) aggiornaAnteprimaCD();
+}
+
 function renderImporta(){
   const has=S.orario;
   el("main").innerHTML = `
