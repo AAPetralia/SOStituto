@@ -3073,7 +3073,7 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "09.10.2026d";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const VERSIONE = "09.10.2026e";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -4261,6 +4261,11 @@ function uscPushPrevisioni(j){
 }
 /* riga di stato per Sostituzioni e Uscite */
 function uscStatoHtml(){
+  const h=_uscStatoHtml();
+  if(!h) return "";
+  return `<div onclick="S.tab='uscfoglio'; render(); window.scrollTo(0,0)" style="cursor:pointer" title="Apri le impostazioni del foglio viaggi">${h}</div>`;
+}
+function _uscStatoHtml(){
   const c=uscFoglioCfg(); if(!c.url) return "";
   const st=c.autoStato; if(!st) return "";
   const ora=iso=>iso?new Date(iso).toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit"}):"";
@@ -4786,7 +4791,8 @@ function renderUscita(){
 
   // ---- form ----
   const f = S.uscitaForm;
-  out += `<div class="field"><label>Descrizione (facoltativa)</label>
+  out += `<p class="hint" style="margin:0 0 10px">Stai modificando un'uscita. <a href="#" style="color:var(--teal); font-weight:600" onclick="S.tab='uscfoglio'; render(); window.scrollTo(0,0); return false">⬇ Importa dal foglio viaggi · impostazioni</a> (la bozza resta qui).</p>
+    <div class="field"><label>Descrizione (facoltativa)</label>
       <input type="text" value="${esc(f.nota||"")}" placeholder="es. Teatro, Settimana bianca" oninput="S.uscitaForm.nota=this.value"></div>
     <div class="field"><label>Dal giorno</label>
       <input type="date" value="${f.dal}" onchange="S.uscitaForm.dal=this.value; if(S.uscitaForm.al<this.value) S.uscitaForm.al=this.value; render()"></div>
