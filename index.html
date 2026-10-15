@@ -2208,7 +2208,7 @@ function renderAltro(){
     { tab:"potenz",  ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.6"/><circle cx="12" cy="12" r=".6" fill="currentColor"/></svg>`, tit:"Potenziamento",      sub:nPno?`${nPno} ore marcate Pno`:"Marca le ore non disponibili senza toccare l'Excel" },
     { tab:"dove",    ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="M20.5 20.5l-4.7-4.7"/></svg>`, tit:"Dov'è",              sub:"Trova un docente o una classe in un momento preciso" },
     { tab:"importa", ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4"/><path d="M8 8l4-4 4 4"/><path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/></svg>`, tit:"Importa l'orario",   sub:"Carica il file Excel — poche volte l'anno" },
-    { tab:"cambiodoc", ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.4-3.2 2.6-5 5.5-5s5.1 1.8 5.5 5"/><path d="M16 5.5h5m0 0-1.8-1.8M21 5.5l-1.8 1.8"/><path d="M21 12h-5m0 0 1.8-1.8M16 12l1.8 1.8" transform="translate(0 2)"/></svg>`, tit:"Cambio docente", sub:"Un supplente subentra, o correggi un nome — senza reimportare" },
+    { tab:"cambiodoc", ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.4-3.2 2.6-5 5.5-5s5.1 1.8 5.5 5"/><path d="M16 5.5h5m0 0-1.8-1.8M21 5.5l-1.8 1.8"/><path d="M21 12h-5m0 0 1.8-1.8M16 12l1.8 1.8" transform="translate(0 2)"/></svg>`, tit:"Cambio e aggiunta docente", sub:"Subentra un supplente, correggi un nome, aggiungi un docente del pomeriggio" },
     { tab:"sync",    ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5A6.5 6.5 0 0 1 15.5 5.6L18 8"/><path d="M18 4v4h-4"/><path d="M20 14.5A6.5 6.5 0 0 1 8.5 18.4L6 16"/><path d="M6 20v-4h4"/></svg>`, tit:"Condivisione",       sub:(S.sync&&S.sync.url)?((S.sync.soloLettura?"sola lettura":"attiva")+((S.sync.info&&S.sync.info.utente)?" · ultimo: "+S.sync.info.utente:"")):"Collega il foglio Google della scuola" },
     { tab:"backup",  ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10.5" width="16" height="9.5" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/><circle cx="12" cy="15" r="1.1"/></svg>`, tit:"Backup e ripristino", sub:"Salva tutto in un file — o rimetti a posto dopo un guaio" },
     { tab:"config", ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6M4.22 4.22l4.24 4.24m5.08 5.08l4.24 4.24M1 12h6m6 0h6M4.22 19.78l4.24-4.24m5.08-5.08l4.24-4.24"/></svg>`, tit:"Configurazione criteri", sub:"Attiva/disattiva criteri e ordina la priorità" },
@@ -3073,7 +3073,7 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "09.10.2026e";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const VERSIONE = "15.10.2026a";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -4029,13 +4029,18 @@ function uscFoglioCfg(){ S.uscFoglio = S.uscFoglio || {url:"",token:"",ultimo:nu
 function saveUscFoglio(){ try{ localStorage.setItem("sostituto_uscfoglio", JSON.stringify(S.uscFoglio)); }catch(e){} }
 
 /* confronta un nome del foglio con quelli dell'orario: esatto, poi per cognome */
+/* docenti senza orario del mattino (es. indirizzo musicale: servizio al pomeriggio). Stanno dentro S.orario, quindi
+   viaggiano con salvataggio, condivisione e backup; non hanno ore in classe, perciò il motore non li sostituisce e non
+   li usa come sostituti, ma possono essere accompagnatori o riserve delle uscite. */
+function docentiExtra(){ return (S.orario && S.orario.docentiExtra) || []; }
+function nomiDocenti(){ return (S.orario ? S.orario.docenti.map(d=>d.nome) : []).concat(docentiExtra().map(d=>d.nome)); }
 function agganciaDocente(nome){
   if(!nome || !S.orario) return null;
   const pulisci = x => String(x||"").toUpperCase()
       .replace(/PROF\.?SSA|PROF\.?|DOCENTE/g,"").replace(/[^A-ZÀ-Ù ]/g," ").replace(/\s+/g," ").trim();
   const t = pulisci(nome);
   if(!t) return null;
-  const elenco = S.orario.docenti.map(d=>d.nome);
+  const elenco = nomiDocenti();
   const esatto = elenco.find(n=>pulisci(n)===t);
   if(esatto) return esatto;
   /* stesso cognome e nessun omonimo: aggancio sicuro */
@@ -4166,7 +4171,7 @@ function copiaModuloUrl(){ const u=uscModuloUrl(); if(u) copiaTesto(u); }
 /* l'elenco dei docenti dell'orario viene mandato allo script, che lo scrive nella scheda "Docenti" */
 function uscPushAnagrafica(){
   const c=uscFoglioCfg(); if(!c.url || !S.orario || !uscPubblica()) return;
-  const nomi=(S.orario.docenti||[]).map(d=>d.nome).sort(); const sig=nomi.join("|");
+  const nomi=nomiDocenti().sort(); const sig=nomi.join("|");
   if(sig===c.anagSig || (c.anagTent && Date.now()-c.anagTent<5*60*1000 && c.anagErr)) return;
   c.anagTent=Date.now();
   fetch(c.url,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({token:c.token||"",azione:"anagrafica",docenti:nomi})})
@@ -4757,7 +4762,7 @@ function toggleRecuperabile(id){
 function renderUscita(){
   const o=S.orario;
   const classi = tutteLeClassi(o);
-  const docs = [...o.docenti].sort((a,b)=>a.nome.localeCompare(b.nome));
+  const docs = [...o.docenti, ...docentiExtra().map(d=>({nome:d.nome, materia:d.nota}))].sort((a,b)=>a.nome.localeCompare(b.nome));
   let out = `<div class="backlink" onclick="S.tab='altro'; render()">‹ Altro</div>
     <h2 class="sec">Uscite didattiche</h2>`;
 
@@ -5444,7 +5449,7 @@ function renderCambioDocente(){
   const c=S.cd;
   const docs=(o.docenti||[]).slice().sort((a,b)=>a.nome.localeCompare(b.nome,"it"));
   let out=`<div class="backlink" onclick="S.tab='altro'; render()">‹ Altro</div>
-    <h2 class="sec">Cambio docente</h2>
+    <h2 class="sec">Cambio e aggiunta docente</h2>
     <p class="hint" style="margin-top:0">Un supplente subentra a chi se ne va, oppure c'è un nome da correggere: lo cambi qui, senza reimportare l'orario. Ore, classi e regole legate alla cattedra restano com'erano.</p>`;
   if(c.ris){
     const q=c.ris.dal.split("-").reverse().join("/");
@@ -5479,8 +5484,54 @@ function renderCambioDocente(){
     }
     out+=`<div id="cdprev"></div>`;
   }
+  out+=renderDocentiExtra();
   el("main").innerHTML=out;
   if(c.vecchio) aggiornaAnteprimaCD();
+}
+/* ---- docenti senza orario del mattino ---- */
+const NOTA_EXTRA="Strumento musicale · pomeriggio";
+function renderDocentiExtra(){
+  S.extraForm = S.extraForm || {nome:"", nota:NOTA_EXTRA};
+  const f=S.extraForm, ex=docentiExtra().slice().sort((a,b)=>a.nome.localeCompare(b.nome,"it"));
+  const usati=n=>(S.uscite||[]).filter(u=>(u.accomp||[]).includes(n)||(u.riserve||[]).includes(n)).length;
+  let out=`<h2 class="sec" style="margin-top:26px">Docente senza orario del mattino</h2>
+    <p class="hint" style="margin-top:0">Per chi non compare nell'orario perché lavora al pomeriggio (indirizzo musicale, altri servizi): lo aggiungi qui e può essere <b>accompagnatore o riserva</b> delle uscite, nel modulo della FS e in SOStituto. Non ha ore in classe al mattino, quindi non genera sostituzioni e non viene mai scelto come sostituto.</p>
+    <div class="field"><label>Nome</label>
+      <input type="text" value="${esc(f.nome)}" placeholder="es. ROSSI Maria" autocomplete="off" oninput="S.extraForm.nome=this.value">
+      <p class="hint" style="margin:5px 0 0">Come gli altri nell'orario: cognome in MAIUSCOLO e poi il nome.</p></div>
+    <div class="field"><label>Servizio</label>
+      <input type="text" value="${esc(f.nota)}" oninput="S.extraForm.nota=this.value"></div>
+    <button class="btn" style="width:100%" onclick="aggiungiDocenteExtra()">+ Aggiungi docente</button>`;
+  if(ex.length){
+    out+=`<div style="margin-top:14px">`+ex.map(d=>{ const n=usati(d.nome);
+      return `<div class="regcard"><div class="reghead" style="cursor:default"><div style="flex:1"><b>${esc(d.nome)}</b>
+        <div class="regsub">${esc(d.nota||NOTA_EXTRA)}${n?` · in ${n} ${n===1?"uscita":"uscite"}`:""}</div></div>
+        <b class="chev" style="color:var(--red); cursor:pointer" onclick="togliDocenteExtra(decodeURIComponent('${encodeURIComponent(d.nome)}'))" aria-label="Rimuovi">✕</b></div></div>`; }).join("")+`</div>`;
+  }
+  return out;
+}
+function aggiungiDocenteExtra(){
+  const f=S.extraForm||{}, nome=String(f.nome||"").replace(/\s+/g," ").trim();
+  if(!nome){ toast("Scrivi il nome del docente"); return; }
+  if(!S.orario){ toast("Prima carica l'orario"); return; }
+  const norm=x=>String(x).toUpperCase().replace(/[^A-ZÀ-Ù ]/g," ").replace(/\s+/g," ").trim();
+  const gia=nomiDocenti().find(n=>norm(n)===norm(nome));
+  if(gia){ toast(gia+" è già in elenco"); return; }
+  const cog=norm(nome).split(" ")[0];
+  const stesso=nomiDocenti().filter(n=>norm(n).split(" ")[0]===cog);
+  if(stesso.length && !confirm("Esiste già un docente con lo stesso cognome: "+stesso.join(", ")+".\nAggiungo comunque «"+nome+"»?")) return;
+  S.orario.docentiExtra=docentiExtra().concat([{nome, nota:String(f.nota||"").trim()||NOTA_EXTRA}]);
+  S.extraForm={nome:"", nota:NOTA_EXTRA};
+  const c=uscFoglioCfg(); c.anagSig=""; saveUscFoglio();      /* l'elenco per la FS si aggiorna alla prossima lettura */
+  save(); toast("Aggiunto: "+nome+" — fra poco compare anche nel modulo della FS"); render();
+  try{ uscPushAnagrafica(); }catch(_){}
+}
+function togliDocenteExtra(nome){
+  const n=(S.uscite||[]).filter(u=>(u.accomp||[]).includes(nome)||(u.riserve||[]).includes(nome)).length;
+  if(!confirm("Rimuovere "+nome+" dall'elenco?"+(n?"\nRisulta in "+n+" "+(n===1?"uscita":"uscite")+": resterà scritto là, ma non sarà più proposto.":""))) return;
+  S.orario.docentiExtra=docentiExtra().filter(d=>d.nome!==nome);
+  const c=uscFoglioCfg(); c.anagSig=""; saveUscFoglio();
+  save(); render();
 }
 
 function renderImporta(){
@@ -5600,7 +5651,7 @@ function onFile(ev){
       }
       html += `<button class="btn" style="margin-top:12px" id="confirm">Salva questo orario</button>`;
       el("report").innerHTML=html;
-      el("confirm").addEventListener("click", ()=>{ S.orario=parsed; save(); S.tab="orario"; S.day=parsed.giorni[0]; S.selDoc=""; S.selClasse=""; render(); });
+      el("confirm").addEventListener("click", ()=>{ const ex=docentiExtra().filter(e=>!parsed.docenti.some(d=>d.nome===e.nome)); if(ex.length) parsed.docentiExtra=ex; S.orario=parsed; save(); S.tab="orario"; S.day=parsed.giorni[0]; S.selDoc=""; S.selClasse=""; render(); });
     }catch(err){
       el("report").innerHTML=`<div class="flag" style="white-space:pre-wrap; line-height:1.5">Non riesco a leggere il file: ${esc(err.message)}</div>`;
     }
