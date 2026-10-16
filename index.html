@@ -3099,7 +3099,8 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "16.10.2026c";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const VERSIONE = "16.10.2026d";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const NUMERO_VERSIONE = 90;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -5694,7 +5695,7 @@ document.querySelectorAll("nav button").forEach(b=> b.addEventListener("click", 
 load();
 S.dataOggi = S.dataOggi || isoOggi();
 if(S.orario){ S.day = giornoDaData(S.dataOggi); }
-{ const _v = el("ver"); if(_v) _v.textContent = "v " + VERSIONE; }
+{ const _v = el("ver"); if(_v) _v.textContent = "v " + VERSIONE + " · n. " + NUMERO_VERSIONE; }
 /* icona per la schermata iniziale di iPhone: la genero da canvas (PNG),
    così resta tutto dentro il file senza immagini esterne */
 (function(){
