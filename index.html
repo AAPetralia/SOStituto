@@ -965,7 +965,11 @@ function candidati(o, classe, g, h, assenteObj, ctx, lingua){
     if(PR.e!=null && st.t==="DISP"){ pool.push([rango(PR.e),...tie,"potenziamento",d.nome]); continue; }
     // h) sostegno spostato da altra classe (tre gradi di gravità nel sottordine)
     if(isSost(d)){
-      if(flagged) continue;                                   /* flag = mai */
+      /* il flag dice che NON PUÒ LASCIARE la classe (il suo alunno), non che non possa
+         andarci: è escluso solo se in quest'ora è già in quella classe; se è altrove, la
+         può raggiungere (la tutela di dove si trova è il controllo su st.det più sotto) */
+      const qui = (st.t==="CLASSE" && st.det===classe) || (st.t==="LINGUA" && st.classe===classe);
+      if(flagged && qui) continue;
       if(st.t==="CLASSE"){
         if(PR.h==null) continue;                              /* criterio disattivato: salta */
         if(ctx.flag.has(d.nome+"|"+st.det)) continue;         /* non toccare il suo caso grave */
@@ -3073,7 +3077,7 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "15.10.2026a";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const VERSIONE = "16.10.2026a";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
