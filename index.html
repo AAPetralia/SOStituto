@@ -849,6 +849,15 @@ function statoCella(doc,g,h,ore){
   return {t:"FUORI"};
 }
 
+/* ora libera ATTACCATA al servizio: l'ora subito prima del primo turno della giornata o
+   subito dopo l'ultimo. Il docente può entrare prima / uscire dopo per restituire un
+   permesso breve; le ore più lontane (con altre ore libere in mezzo) non contano. */
+function oraAttaccataServizio(doc,g,h,ore){
+  const [a,b]=oreServizio(doc,g,ore);
+  if(a==null) return false;
+  return h===a-1 || h===b+1;
+}
+
 /* ============================================================
    MOTORE DELLE SOSTITUZIONI  (logica collaudata nelle simulazioni)
    Gerarchia: 0 recupero · 1 sostegno DELLA classe · 2 potenziamento
@@ -955,6 +964,11 @@ function candidati(o, classe, g, h, assenteObj, ctx, lingua){
     // b) recupero piazzabile (permesso breve da restituire)
     if(PR.b!=null && (ctx.recuperi[d.nome]||0)>0 && (st.t==="DISP"||st.t==="BUCA"||st.t==="EMERG")){
       pool.push([rango(PR.b),...tie,"recupero",d.nome]); continue;
+    }
+    /* b-bis) recupero in un'ora attaccata al servizio (entra prima / esce dopo): dopo chi è
+       già a scuola in quell'ora, a parità di criterio */
+    if(PR.b!=null && (ctx.recuperi[d.nome]||0)>0 && st.t==="FUORI" && !st.vacante && oraAttaccataServizio(d,g,h,o.ore)){
+      pool.push([rango(PR.b,0.5),...tie,"recupero",d.nome]); continue;
     }
     // c) sostegno DELLA classe che copre il proprio curricolare (o gruppo lingua compatibile)
     if(PR.c!=null && isSost(d) && !flagged){
@@ -1106,6 +1120,7 @@ function generaProspetto(o, giorno, assenti, opts){
   // PRIMA passata: applico gli override "forzati" (docente scelto a mano), così occupano il posto
   //                 e i loro nomi risultano impegnati per il resto del calcolo.
   const esitiMap = {};
+  const isFuori = (nome,h,motivo)=>{ if(motivo!=="recupero") return false; const d=o.docenti.find(x=>x.nome===nome); return !!(d && statoLinguaEff(d,giorno,h,o.ore).t==="FUORI"); };
   const isRice = (nome,h)=>{ const d=o.docenti.find(x=>x.nome===nome); return !!(d && (d.cells[giorno+"|"+h]||{}).t==="RICE"); };
   for(const s of slot){
     const key = s.a.nome+"|"+s.h;
@@ -1131,7 +1146,7 @@ function generaProspetto(o, giorno, assenti, opts){
     (ctx.occupati[giorno+"|"+s.h] = ctx.occupati[giorno+"|"+s.h]||new Set()).add(nome);
     if(/pagamento/.test(motivo)) ctx.pagamento++;
     if(motivo==="recupero") ctx.recuperi[nome]--;
-    esitiMap[key] = {...s, scelto:nome, motivo, rice:isRice(nome,s.h)};
+    esitiMap[key] = {...s, scelto:nome, motivo, rice:isRice(nome,s.h), fuori:isFuori(nome,s.h,motivo)};
   }
   const esiti = slot.map(s=> esitiMap[s.a.nome+"|"+s.h]);
   return { giorno, esiti, note, coperte, pagamento: ctx.pagamento };
@@ -1199,6 +1214,11 @@ function sincronizzaRecuperi(){
     const nota = noteById[r.origine];
     return !!nota && nota.recuperabile!==false;
   });
+  /* lo stesso permesso breve non deve pesare due volte: se per quel docente e quel giorno
+     esiste il debito nato dalle Assenze note, quello creato dalla scheda Sostituzioni
+     (origine "oggi:") è un doppione e va tolto. Resta il debito delle note. */
+  const daNoteChiavi = new Set(S.recuperi.filter(r=>r.origine && r.origine.startsWith("an:")).map(r=>r.docente+"|"+r.data));
+  S.recuperi = S.recuperi.filter(r=> !(r.origine && r.origine.startsWith("oggi:") && daNoteChiavi.has(r.docente+"|"+r.data)));
 }
 /* ore ancora da restituire per un debito */
 function debitoResiduo(r){ return Math.max(0, r.ore - (r.restituite||0) - (r.chiuseManuale||0)); }
@@ -1581,7 +1601,7 @@ function stampaProspetto(){
       <td class="nome">${esc(e.a.nome)}</td>
       <td class="c nw">${esc(classePr(e))}</td>
       <td class="nome"><b>${scoperta ? "— DA COPRIRE —" : esc(e.scelto)}</b></td>
-      <td>${esc(tipoEsteso(e))}${e.rice?" · in ora di ricevimento":""}</td>
+      <td>${esc(tipoEsteso(e))}${e.rice?" · in ora di ricevimento":""}${e.fuori?" · entra prima / esce dopo":""}</td>
       <td class="c">${esc(oneriEsteso(e))}</td>
       <td></td>
     </tr>`;
@@ -2474,6 +2494,8 @@ function sincronizzaRecuperiOggi(){
     const chiave = "oggi:" + S.dataOggi + ":" + nome;
     if(esistenti.has(chiave)) continue;
     if(scartati.has(chiave)) continue;                  // cancellato a mano: non deve rinascere
+    /* già presente il debito dello stesso permesso arrivato dalle Assenze note: niente doppione */
+    if(S.recuperi.some(r=> r.docente===nome && r.data===S.dataOggi && r.origine && r.origine.startsWith("an:"))) continue;
     const nOre = Array.isArray(ore) && ore.length ? ore.length : oreInClasse(nome, S.day).length;
     if(!nOre) continue;
     S.recuperi.push({
@@ -2595,7 +2617,7 @@ function archiviaRegistro(){
     data: S.dataOggi, giorno: p.giorno, pagamento: p.pagamento,
     assenti: Object.keys(S.assentiOggi).map(n=>({nome:n, ore:S.assentiOggi[n]})),
     righe: p.esiti.map(e=>({ h:e.h, assente:e.a.nome, classe:e.classe, scelto:e.scelto,
-      motivo:e.motivo, tipo:e.tipo||"", rice:!!e.rice, svuotata:!!e.svuotata, manuale:!!e.manuale,
+      motivo:e.motivo, tipo:e.tipo||"", rice:!!e.rice, fuori:!!e.fuori, svuotata:!!e.svuotata, manuale:!!e.manuale,
       gruppo:e.gruppo||"", lingua:e.lingua||"" })),
     note: (p.note||[]).map(n=>({nome:n.nome, h:n.h, classe:n.classe})),
     coperte: (p.coperte||[]).map(c=>({h:c.h, assente:c.a.nome, classe:c.classe, da:c.da})),
@@ -2617,7 +2639,7 @@ function riapriInSostituzioni(iso){
   S.prospetto = {
     giorno: S.day,
     esiti: (rec.righe||[]).map(r=>({ h:r.h, a:{nome:r.assente}, classe:r.classe, scelto:r.scelto,
-      motivo:r.motivo, tipo:r.tipo||"", rice:!!r.rice, svuotata:!!r.svuotata, manuale:!!r.manuale,
+      motivo:r.motivo, tipo:r.tipo||"", rice:!!r.rice, fuori:!!r.fuori, svuotata:!!r.svuotata, manuale:!!r.manuale,
       gruppo:r.gruppo||"", lingua:r.lingua||"", annullata:!!r.annullata })),
     note: (rec.note||[]).map(n=>({nome:n.nome, h:n.h, classe:n.classe})),
     coperte: (rec.coperte||[]).map(c=>({h:c.h, a:{nome:c.assente}, classe:c.classe, da:c.da})),
@@ -3077,7 +3099,7 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "16.10.2026a";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const VERSIONE = "16.10.2026c";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -5025,7 +5047,8 @@ function renderProspettoHTML(p){
       const key=e.a.nome+"|"+e.h;
       const aperto = S.apertoRiga===key;
       const chevron = `<b class="chev">${aperto?'▲':'▾'}</b>`;
-      const riceWarn = e.rice ? `<div class="ricewarn ${/pagamento/.test(e.motivo)?'pay':''}">⚠ è la sua ora di ricevimento${/pagamento/.test(e.motivo)?' — e sarebbe a pagamento':''}</div>` : "";
+      const fuoriWarn = e.fuori ? `<div class="ricewarn">⏱ recupero fuori orario: ${esc(e.scelto)} entra prima o esce dopo (ora attaccata al suo servizio)</div>` : "";
+      const riceWarn = fuoriWarn + (e.rice ? `<div class="ricewarn ${/pagamento/.test(e.motivo)?'pay':''}">⚠ è la sua ora di ricevimento${/pagamento/.test(e.motivo)?' — e sarebbe a pagamento':''}</div>` : "");
       const clLab = clLabel(e);
       const artic = !!(e.gruppo && e.lingua);
       if(e.svuotata){
@@ -5152,6 +5175,7 @@ function testoWhatsAppData(p, iso){
     if(/pagamento/.test(e.motivo)) bits.push("PAG");
     else if(e.motivo==="recupero") bits.push("REC");
     if(e.rice) bits.push("⚠ricev.");
+    if(e.fuori) bits.push("entra prima/esce dopo");
     const extra = bits.length ? "  ("+bits.join(", ")+")" : "";
     t += `${e.h}ª  ${cl}  ${ass} → *${sost}*${extra}\n`;
   });
