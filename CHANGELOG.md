@@ -5,6 +5,11 @@ Si legge in alto nell'app, sotto il titolo. Da qui in avanti si aggiorna a ogni 
 
 ## Da qui in avanti (dettaglio certo)
 
+### 26.10.2026a — n. 91
+- **Uscita con sola delegazione.** Un'uscita può essere segnata «solo una delegazione»: dalla classe esce solo una parte degli alunni, gli altri restano a scuola. In questo caso la classe **non è fuori sede**: l'accompagnatore si sostituisce anche nelle ore che avrebbe avuto in quella classe, e i docenti della classe (sostegno e potenziamento assegnato compresi) **non diventano una risorsa** per le altre classi, perché restano con gli alunni che non escono.
+- Spunta nel form delle uscite a mano e, per le uscite del foglio viaggi, nuova colonna «Delegazione» (x) e casella nel modulo della FS: serve la nuova versione dello script del foglio (v5, «Nuova versione» del deployment). Senza aggiornare lo script tutto funziona come prima.
+- Nelle uscite, nei prospetti (schermo, stampa) e nel diario delle modifiche la delegazione è indicata a parte.
+
 ### 16.10.2026d — n. 90
 - Accanto alla versione compare il numero progressivo delle consegne («v 16.10.2026d · n. 90»).
 

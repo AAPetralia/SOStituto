@@ -943,6 +943,12 @@ function candidati(o, classe, g, h, assenteObj, ctx, lingua){
     if(assenteAllOra(ctx, d.nome, h)) continue;
     if(ctx.occupati[g+"|"+h] && ctx.occupati[g+"|"+h].has(d.nome)) continue;  /* già impegnato */
     const st = statoLinguaEff(d,g,h,o.ore);
+    /* delegazione: i docenti della classe da cui parte una delegazione (sostegno e potenziamento
+       assegnato compresi) restano con gli alunni che non escono: non sono una risorsa per le altre classi */
+    if(ctx.classeDelegata){
+      const sua = st.t==="ARTIC" ? [st.a,st.b] : st.t==="DISP" ? [potAssEff(d,g,h)] : [st.det||st.classe];
+      if(sua.some(c=>c && c!==classe && ctx.classeDelegata(c,h))) continue;
+    }
     const aff = (affApplicabile && d.materia===materia) ? 0 : 1;
     const cdc = classiDi(d).has(classe) ? 0 : 1;
     const tie = [aff, cdc, ctx.fatte[d.nome]||0, d.nome];
@@ -1044,9 +1050,14 @@ function generaProspetto(o, giorno, assenti, opts){
   const uscite = opts.uscite || [];
   ctx.assentiOre = costruisciAssentiOre(assenti, uscite);
   const oraInUscita = (u,h) => !u.ore || !u.ore.length || u.ore.includes(h);
-  const classeInGita = (cl,h) => !!cl && uscite.some(u => (u.classi||[]).includes(cl) && oraInUscita(u,h));
+  /* «solo delegazione»: dalla classe esce solo una parte degli alunni. La classe NON è fuori sede:
+     resta con gli altri alunni, quindi nessuno è «privo di alunni» e l'accompagnatore va sostituito
+     anche nelle ore che avrebbe avuto in quella classe */
+  const classeInGita = (cl,h) => !!cl && uscite.some(u => !u.delegazione && (u.classi||[]).includes(cl) && oraInUscita(u,h));
+  const classeDelegata = (cl,h) => !!cl && uscite.some(u => u.delegazione && (u.classi||[]).includes(cl) && oraInUscita(u,h));
   const accompagna  = (nome,h) => uscite.some(u => (u.accomp||[]).includes(nome) && oraInUscita(u,h));
   ctx.classeInGita = classeInGita;
+  ctx.classeDelegata = classeDelegata;
   ctx.accompagna = accompagna;
   /* tutte le classi coinvolte dalla cella (per le articolate sono due) */
   const classiCella = st => (st.t==="ARTIC" ? [st.a, st.b] : [st.det || st.classe]).filter(Boolean);
@@ -1374,7 +1385,8 @@ function ricostruisciCtx(o, prosp, cellaEsclusa){
   const ctx = { assenti, perMateria: contaMaterie(o), fatte:{}, recuperi:{}, flag:new Set(S.flagOggi||[]), alunnoAssente:new Set(S.alunnoAssenteOggi||[]), occupati:{}, pagamento:0 };
   const _us = usciteAttive(S.dataOggi);
   const _oraIn = (u,h) => !u.ore || !u.ore.length || u.ore.includes(h);
-  ctx.classeInGita = (cl,h) => !!cl && _us.some(u => (u.classi||[]).includes(cl) && _oraIn(u,h));
+  ctx.classeInGita = (cl,h) => !!cl && _us.some(u => !u.delegazione && (u.classi||[]).includes(cl) && _oraIn(u,h));
+  ctx.classeDelegata = (cl,h) => !!cl && _us.some(u => u.delegazione && (u.classi||[]).includes(cl) && _oraIn(u,h));
   ctx.accompagna  = (nome,h) => _us.some(u => (u.accomp||[]).includes(nome) && _oraIn(u,h));
   _us.forEach(u => (u.accomp||[]).forEach(n => assenti.add(n)));   /* accompagnatori: fuori */
   Object.keys(S.assentiOggi||{}).forEach(n => assenti.add(n));      /* come in generazione: anche chi non ha celle da coprire */
@@ -1614,8 +1626,9 @@ function stampaProspetto(){
   const copPr = (p.coperte||[]).length
     ? `<div class="pr-note">Ore senza sostituzione perché la classe è già coperta dal potenziamento assegnato: ${
         p.coperte.slice().sort((a,b)=>a.h-b.h).map(c=>c.h+"ª ora "+esc(fmtCl(c.classe))+" ("+esc(c.a.nome)+") — "+esc(c.da)).join("; ")}</div>` : "";
-  const usc = usciteAttive(iso).map(u=>
-    `<div class="pr-note">Uscita didattica: ${esc(u.nota||"—")} — classi ${(u.classi||[]).map(esc).join(", ")} fuori sede.</div>`).join("");
+  const usc = usciteAttive(iso).map(u=> u.delegazione
+    ? `<div class="pr-note">Uscita didattica: ${esc(u.nota||"—")} — delegazione delle classi ${(u.classi||[]).map(esc).join(", ")} (gli altri alunni restano a scuola).</div>`
+    : `<div class="pr-note">Uscita didattica: ${esc(u.nota||"—")} — classi ${(u.classi||[]).map(esc).join(", ")} fuori sede.</div>`).join("");
 
   const html = `
     <div class="pr-head">
@@ -1880,7 +1893,7 @@ function diffStati(prima, dopo){
   /* uscite didattiche */
   {
     const righe=diffById(prima&&prima.uscite, dopo&&dopo.uscite, x=>x.id,
-      x=>(x.nota||"Uscita")+" · "+x.dal+(x.classi&&x.classi.length?" · "+x.classi.join(","):""));
+      x=>(x.nota||"Uscita")+" · "+x.dal+(x.classi&&x.classi.length?" · "+x.classi.join(","):"")+(x.delegazione?" · delegazione":""));
     if(righe.length) sez.push({tit:"🚌 Uscite didattiche", righe});
   }
 
@@ -2400,8 +2413,10 @@ function renderOggi(){
       const accAss = (u.accomp||[]).filter(n=>n in S.assentiOggi);
       return `<div class="promemo" style="background:var(--tint-neutral); border-left-color:#8a7a5c">
         🚌 <b>${esc(u.nota||"Uscita didattica")}</b> · ${esc(oreTx)}<br>
-        Fuori sede: <b>${(u.classi||[]).map(esc).join(", ")||"—"}</b> — nessuna sostituzione per queste classi.<br>
-        ${acc.length ? `Accompagnatori (${acc.length}): ${acc.join(", ")} — le loro ore nelle <b>altre</b> classi verranno sostituite.`
+        ${u.delegazione
+          ? `Delegazione da: <b>${(u.classi||[]).map(esc).join(", ")||"—"}</b> — le classi <b>restano a scuola</b> con gli altri alunni: i loro docenti non si spostano e le ore dell'accompagnatore si sostituiscono anche lì.<br>`
+          : `Fuori sede: <b>${(u.classi||[]).map(esc).join(", ")||"—"}</b> — nessuna sostituzione per queste classi.<br>`}
+        ${acc.length ? `Accompagnatori (${acc.length}): ${acc.join(", ")} — ${u.delegazione?"le loro ore verranno sostituite.":"le loro ore nelle <b>altre</b> classi verranno sostituite."}`
                      : `Nessun accompagnatore indicato.`}
         ${ris.length?`<br>🔁 Riserve (restano a scuola, nessuna sostituzione): ${ris.join(", ")}.`:""}
         ${accAss.length&&ris.length?`<br><b style="color:var(--red)">⚠ ${accAss.map(n=>esc(cognomeBreve(n))).join(", ")} ${accAss.length===1?"è assente ma risulta accompagnatore":"sono assenti ma risultano accompagnatori"}.</b> La FS può far subentrare una riserva dal modulo viaggi («↔ Subentro»): nel modulo vede subito quali ore resterebbero scoperte.`:""}
@@ -2533,7 +2548,7 @@ function fotoIngressi(){
   const ore=u=>(u.ore&&u.ore.length)?u.ore.slice().sort((a,b)=>a-b).join(","):"tutte";
   us.forEach(u=>{
     (u.accomp||[]).forEach(n=>{ acc[n]=(acc[n]?acc[n]+"+":"")+ore(u); });
-    (u.classi||[]).forEach(c=>{ cl[c]=(cl[c]?cl[c]+"+":"")+ore(u); });
+    (u.classi||[]).forEach(c=>{ const k=c+(u.delegazione?"~":""); cl[k]=(cl[k]?cl[k]+"+":"")+ore(u); });
   });
   const ass={}; Object.keys(S.assentiOggi||{}).forEach(n=>{ const o=S.assentiOggi[n]; ass[n]=(Array.isArray(o)&&o.length)?o.slice().sort((a,b)=>a-b).join(","):"tutte"; });
   const regole=JSON.stringify([S.flagOggi||[], S.pnoOn||[], S.potMod||[], S.incompatibili||[], S.alunnoAssenteOggi||[], S.potAssign||{}, S.linguaSostegno||{}]);
@@ -3099,8 +3114,8 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "16.10.2026d";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
-const NUMERO_VERSIONE = 90;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
+const VERSIONE = "26.10.2026a";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const NUMERO_VERSIONE = 91;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -4096,6 +4111,7 @@ function diffUscite(prima, dopo){
     const ca=(a.classi||[]).join(","), cb=(b.classi||[]).join(",");
     if(ca!==cb) parti.push(`classi ${esc(ca||"—")} → ${esc(cb||"—")}`);
     if(oreTx(a)!==oreTx(b)) parti.push(`ore ${oreTx(a)} → ${oreTx(b)}`);
+    if(!!a.delegazione!==!!b.delegazione) parti.push(b.delegazione?"ora è <b>solo una delegazione</b>":"non è più una delegazione (classe fuori sede)");
     if(a.dal!==b.dal||a.al!==b.al) parti.push(`date ${q(a.dal)}–${q(a.al)} → ${q(b.dal)}–${q(b.al)}`);
     if(parti.length){ ids.push(id); out.push(`${et(b)}: ${parti.join(", ")}`); }
   });
@@ -4260,7 +4276,7 @@ function costruisciPrevisioni(j){
         r.riserve=v.riserve.map((nome,k)=>{
           const nomeFoglio=(v.riserveRaw||[])[k]||nome;
           if(base.senzaLezione) return {nome:nomeFoglio, ore:[], scoperte:0, sost:0};
-          const fin={id:"ris:"+nome, nota:v.nota, dal:v.dal, al:v.al||v.dal, ore:v.ore||[], classi:v.classi||[], accomp:[nome]};
+          const fin={id:"ris:"+nome, nota:v.nota, dal:v.dal, al:v.al||v.dal, ore:v.ore||[], classi:v.classi||[], accomp:[nome], delegazione:!!v.delegazione};
           const x=previsioneGiorno(d, ipotesi?[v,fin]:[fin], rec, {nome});
           const q=x&&x._riserva; if(!q) return {nome:nomeFoglio, ore:[], scoperte:0, sost:0, errore:true};
           return {nome:nomeFoglio, ore:q.ore, scoperte:q.scoperte, sost:q.sost, assente:q.assente};
@@ -4350,7 +4366,7 @@ function preparaAnteprima(righe, info, scartate, puro){
     const chiave = String(r.id||r.rif);       /* ID stabile scritto dallo script del foglio (v2); altrimenti il numero di riga */
     voci.push({ id:"uf"+chiave, origine:"foglio", rif:chiave, rifRiga:String(r.rif||""), idFoglio:r.id||"", firma:r.firma||"",
                 nota:r.nota||"", dal:r.dal, al:r.al||r.dal,
-                ore:Array.isArray(r.ore)?r.ore:[], classi:clOk, accomp:accOk, riserve:risOk, riserveRaw:risRaw });
+                ore:Array.isArray(r.ore)?r.ore:[], classi:clOk, accomp:accOk, riserve:risOk, riserveRaw:risRaw, delegazione:!!r.delegazione });
   });
   /* passaggio al codice ID dello script v2: le uscite già salvate col numero di riga prendono il nuovo id,
      così non risultano "tolte e nuove" */
@@ -4808,7 +4824,7 @@ function renderUscita(){
           <div style="flex:1">
             <b>${esc(u.nota || "Uscita didattica")}</b>
             <div class="regsub">${esc(periodo)} · ${esc(oreTx)}</div>
-            <div class="regsub">🎓 ${(u.classi||[]).map(esc).join(", ")||"—"}</div>
+            <div class="regsub">🎓 ${(u.classi||[]).map(esc).join(", ")||"—"}${u.delegazione?" · <b>solo delegazione</b>":""}</div>
             <div class="regsub">🧑‍🏫 ${(u.accomp||[]).map(n=>esc(cognomeBreve(n))).join(", ")||"nessun accompagnatore"}</div>
             ${(u.riserve||[]).length?`<div class="regsub">🔁 Riserve: ${u.riserve.map(n=>esc(cognomeBreve(n))).join(", ")}</div>`:""}
           </div>
@@ -4847,6 +4863,11 @@ function renderUscita(){
       ${classi.map(c=>`<div class="pick ${f.classi.includes(c)?'on':''}" onclick="togglePick('classi','${esc(c)}')">${esc(c)}</div>`).join("")}
     </div></div>`;
 
+  out += `<label style="display:flex; gap:9px; align-items:flex-start; font-size:14px; margin:0 0 14px">
+      <input type="checkbox" ${f.delegazione?'checked':''} onchange="S.uscitaForm.delegazione=this.checked; render()" style="margin-top:3px">
+      <span><b>Solo una delegazione</b> della classe: gli altri alunni restano a scuola.<br>
+      <span class="hint">La classe non risulta fuori sede: gli accompagnatori si sostituiscono anche nelle ore in quella classe e i docenti della classe non vengono spostati altrove.</span></span></label>`;
+
   out += `<div class="field"><label>Accompagnatori</label>
       <p class="hint" style="margin:0 0 6px">Includi anche il sostegno che accompagna il proprio alunno.</p>
       <div class="picklist">
@@ -4862,7 +4883,7 @@ function renderUscita(){
 }
 function nuovaUscita(){
   const oggi = S.dataOggi || isoOggi();
-  S.uscitaForm = { id:"u"+Date.now(), nota:"", dal:oggi, al:oggi, ore:[], classi:[], accomp:[] };
+  S.uscitaForm = { id:"u"+Date.now(), nota:"", dal:oggi, al:oggi, ore:[], classi:[], accomp:[], delegazione:false };
   render();
 }
 function toggleOraUscita(h){
