@@ -552,6 +552,7 @@ let S = { orario:null, tab:"oggi", day:"LUN",
           assenzeNote:[], assenzaForm:null, noteApplicate:null, daNote:[],
           pnoOn:[], potAssign:{}, potSel:"", potMod:[], potForm:null,
           sync:{url:"",token:"",utente:"",soloLettura:false,ultimoPull:null,info:null}, syncAttivo:false,
+          bancaOre:[],   /* banca ore: ore fatte a pagamento ma segnate a credito {id, docente, data, h, classe, assente, usata:false, usataIl, debitoId} */
           recuperi:[], recuperoForm:null,   /* debiti da permesso breve: {id, docente, ore, data, scadenza, restituite:0, chiuseManuale:0, origine} */
           configCriteri:null,   /* configurazione priorità e abilitamento criteri (legge da default se null) */
           uscFoglio:{url:"",token:"",ultimo:null}, uscAnteprima:null, uscAttivo:false, uscErr:"",
@@ -571,6 +572,7 @@ function save(){ try{
   localStorage.setItem("sostituto_potass", JSON.stringify(S.potAssign||{}));
   localStorage.setItem("sostituto_sync", JSON.stringify(S.sync||{}));
   localStorage.setItem("sostituto_recuperi", JSON.stringify(S.recuperi||[]));
+  localStorage.setItem("sostituto_bancaore", JSON.stringify(S.bancaOre||[]));
   if(S.configCriteri && S.configCriteri.length) localStorage.setItem("sostituto_config", JSON.stringify(S.configCriteri));
   localStorage.setItem("sostituto_recscartati", JSON.stringify(S.recScartati||[]));
   localStorage.setItem("sostituto_assistenti", JSON.stringify(S.assistenti||[]));
@@ -599,6 +601,7 @@ function load(){ try{
   const pa=localStorage.getItem("sostituto_potass"); if(pa) S.potAssign=JSON.parse(pa);
   const sy=localStorage.getItem("sostituto_sync"); if(sy) S.sync=Object.assign(S.sync||{},JSON.parse(sy));
   const rc=localStorage.getItem("sostituto_recuperi"); if(rc) S.recuperi=JSON.parse(rc);
+  const bo=localStorage.getItem("sostituto_bancaore"); if(bo) S.bancaOre=JSON.parse(bo);
   const cf=localStorage.getItem("sostituto_config");
   if(cf){ const v=JSON.parse(cf); if(Array.isArray(v) && v.length) S.configCriteri=v; }
   const uf=localStorage.getItem("sostituto_uscfoglio"); if(uf) S.uscFoglio=JSON.parse(uf);
@@ -1137,7 +1140,7 @@ function generaProspetto(o, giorno, assenti, opts){
   // PRIMA passata: applico gli override "forzati" (docente scelto a mano), così occupano il posto
   //                 e i loro nomi risultano impegnati per il resto del calcolo.
   const esitiMap = {};
-  const isFuori = (nome,h,motivo)=>{ if(motivo!=="recupero" && !/pagamento/.test(motivo||"")) return false; const d=o.docenti.find(x=>x.nome===nome); return !!(d && statoLinguaEff(d,giorno,h,o.ore).t==="FUORI"); };
+  const isFuori = (nome,h,motivo)=>{ if(motivo!=="recupero" && !/pagamento|banca ore/.test(motivo||"")) return false; const d=o.docenti.find(x=>x.nome===nome); return !!(d && statoLinguaEff(d,giorno,h,o.ore).t==="FUORI"); };
   const isRice = (nome,h)=>{ const d=o.docenti.find(x=>x.nome===nome); return !!(d && (d.cells[giorno+"|"+h]||{}).t==="RICE"); };
   for(const s of slot){
     const key = s.a.nome+"|"+s.h;
@@ -1172,6 +1175,15 @@ function generaProspetto(o, giorno, assenti, opts){
     esitiMap[key] = {...s, scelto:nome, motivo, rice:isRice(nome,s.h), fuori:isFuori(nome,s.h,motivo)};
   }
   const esiti = slot.map(s=> esitiMap[s.a.nome+"|"+s.h]);
+  /* banca ore: un'ora a pagamento segnata «a credito» non è pagata, va nel credito del docente */
+  const bo = opts.bancaOre || [];
+  esiti.forEach(e=>{
+    if(e && e.scelto && /pagamento/.test(e.motivo||"") && bo.some(c=>c.docente===e.scelto && c.h===e.h)){
+      e.credito = true;
+      e.motivo = e.motivo.replace("⚠ pagamento","banca ore");
+      ctx.pagamento--;
+    }
+  });
   return { giorno, esiti, note, coperte, pagamento: ctx.pagamento };
 }
 
@@ -1521,6 +1533,7 @@ function tipoEsteso(r){
 }
 function oneriEsteso(r){
   if(/pagamento/.test(r.motivo||"")) return "A PAGAMENTO";
+  if(/banca ore/.test(r.motivo||"")) return "BANCA ORE (a credito)";
   if(r.motivo==="recupero") return "Recupero";
   return "";
 }
@@ -1785,7 +1798,7 @@ function saveSync(){ try{ localStorage.setItem("sostituto_sync", JSON.stringify(
 function statoDaCondividere(){
   return { orario:S.orario||null, lingue:S.lingue||{}, flagOggi:S.flagOggi||[], linguaSostegno:S.linguaSostegno||{}, incompatibili:S.incompatibili||[],
     registro:S.registro||{}, uscite:S.uscite||[], uscFoglioCfg:{url:(S.uscFoglio&&S.uscFoglio.url)||"", token:(S.uscFoglio&&S.uscFoglio.token)||""}, assenzeNote:S.assenzeNote||[],
-    pnoOn:S.pnoOn||[], potAssign:S.potAssign||{}, potMod:S.potMod||[], recuperi:S.recuperi||[],
+    pnoOn:S.pnoOn||[], potAssign:S.potAssign||{}, potMod:S.potMod||[], recuperi:S.recuperi||[], bancaOre:S.bancaOre||[],
     /* da tenere allineati con datiBackup(): tutto ciò che un altro dispositivo
        deve ritrovare, non solo l'orario e il registro */
     assistenti:S.assistenti||[], configCriteri:S.configCriteri||null, potAuto:S.potAuto||[],
@@ -1813,6 +1826,7 @@ function applicaStato(d){
   S.potAssign   = d.potAssign || {};
   if(d.potMod) S.potMod = d.potMod;
   S.recuperi    = d.recuperi || [];
+  S.bancaOre    = d.bancaOre || [];
   if(d.configCriteri) S.configCriteri = d.configCriteri;
   if(d.assistenti) S.assistenti = d.assistenti;
   if(d.potAuto) S.potAuto = d.potAuto;
@@ -2614,10 +2628,64 @@ function lanciaProspetto(){
   const assenti=Object.keys(S.assentiOggi).map(n=>({nome:n, ore:S.assentiOggi[n]}));
   S.override = S.override || {};              /* {assente|h : nomeScelto|""(=svuota)} */
   sincronizzaRecuperiOggi();
-  S.prospetto = generaProspetto(o, S.day, assenti, { flag:S.flagOggi, override:S.override, alunnoAssente:S.alunnoAssenteOggi, uscite:usciteAttive(S.dataOggi), recuperi:recuperiPerMotore() });
+  S.prospetto = generaProspetto(o, S.day, assenti, { flag:S.flagOggi, override:S.override, alunnoAssente:S.alunnoAssenteOggi, uscite:usciteAttive(S.dataOggi), recuperi:recuperiPerMotore(), bancaOre:creditiDel(S.dataOggi) });
+  potaCrediti();
   S.ingressiProsp = fotoIngressi();
   archiviaRegistro();                         /* opzione 1: si salva da sé alla generazione */
   render();
+}
+
+/* ---------- banca ore ---------- */
+function creditiDel(iso){ return (S.bancaOre||[]).filter(c=>c.data===iso); }
+/* le ore a credito di oggi che nel prospetto non sono più un'ora a pagamento (cambiata la scelta,
+   tolta l'assenza…) non hanno più senso: via, a meno che non siano già state usate */
+function potaCrediti(){
+  if(!S.prospetto || !S.bancaOre || !S.bancaOre.length) return;
+  const iso=S.dataOggi;
+  S.bancaOre = S.bancaOre.filter(c=> c.usata || c.data!==iso || S.prospetto.esiti.some(e=>e.scelto===c.docente && e.h===c.h && e.credito));
+}
+function saldoCredito(docente){ return (S.bancaOre||[]).filter(c=>c.docente===docente && !c.usata).length; }
+/* segna / toglie «a credito» sull'ora a pagamento di una cella del prospetto */
+function creditoToggle(assente,h){
+  const e=(S.prospetto&&S.prospetto.esiti||[]).find(x=>x.a.nome===assente && x.h===h); if(!e||!e.scelto) return;
+  S.bancaOre = S.bancaOre || [];
+  const i=S.bancaOre.findIndex(c=>c.data===S.dataOggi && c.docente===e.scelto && c.h===h);
+  if(i>=0){
+    if(S.bancaOre[i].usata){ toast("Questa ora è già stata usata in un recupero: annullalo prima da Recuperi"); return; }
+    S.bancaOre.splice(i,1);
+  } else {
+    S.bancaOre.push({id:"b"+Date.now()+h, docente:e.scelto, data:S.dataOggi, h, classe:e.classe, assente:assente, usata:false, usataIl:null, debitoId:null});
+  }
+  S.apertoRiga=""; save(); lanciaProspetto();
+}
+/* compensa 1 ora di un debito con la più vecchia ora a credito dello stesso docente */
+function usaCredito(debitoId){
+  const r=(S.recuperi||[]).find(x=>x.id===debitoId); if(!r || debitoResiduo(r)<=0) return;
+  const c=(S.bancaOre||[]).filter(x=>x.docente===r.docente && !x.usata).sort((a,b)=>a.data.localeCompare(b.data)||a.h-b.h)[0];
+  if(!c){ toast("Nessuna ora a credito per questo docente"); return; }
+  c.usata=true; c.usataIl=isoOggi(); c.debitoId=debitoId;
+  r.chiuseManuale=(r.chiuseManuale||0)+1;
+  save(); render();
+}
+function annullaUsoCredito(id){
+  const c=(S.bancaOre||[]).find(x=>x.id===id); if(!c||!c.usata) return;
+  const r=(S.recuperi||[]).find(x=>x.id===c.debitoId);
+  if(r && (r.chiuseManuale||0)>0) r.chiuseManuale--;
+  c.usata=false; c.usataIl=null; c.debitoId=null;
+  save(); render();
+}
+function eliminaCredito(id){
+  const c=(S.bancaOre||[]).find(x=>x.id===id); if(!c||c.usata) return;
+  if(!confirm("Togliere questa ora dalla banca ore? Tornerà un'ora a pagamento.")) return;
+  S.bancaOre=S.bancaOre.filter(x=>x.id!==id);
+  const rec=S.registro && S.registro[c.data];
+  if(rec && c.data!==S.dataOggi){
+    /* giorno già archiviato e non aperto in Sostituzioni: la riga torna a pagamento */
+    (rec.righe||[]).forEach(r=>{ if(r.scelto===c.docente && r.h===c.h && /banca ore/.test(r.motivo||"")){ r.motivo=r.motivo.replace("banca ore","⚠ pagamento"); rec.pagamento=(rec.pagamento||0)+1; } });
+    saveRegistro();
+  }
+  save();
+  if(S.prospetto && c.data===S.dataOggi) lanciaProspetto(); else render();
 }
 
 /* ---------- data ↔ giorno settimana ---------- */
@@ -3126,8 +3194,8 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "28.10.2026a";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
-const NUMERO_VERSIONE = 92;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
+const VERSIONE = "28.10.2026b";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const NUMERO_VERSIONE = 93;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -3143,6 +3211,7 @@ function datiBackup(){
     potMod: S.potMod || [],
     potAssign: S.potAssign || {},
     recuperi: S.recuperi || [],
+    bancaOre: S.bancaOre || [],
     configCriteri: S.configCriteri || null,
     assistenti: S.assistenti || [],
     potAuto: S.potAuto || [],
@@ -3160,6 +3229,7 @@ function riepilogoBackup(d){
     `${(d.uscite||[]).length} uscite`,
     `${(d.assenzeNote||[]).length} assenze note`,
     `${(d.recuperi||[]).length} recuperi`,
+    ...((d.bancaOre||[]).length ? [`${d.bancaOre.length} ore in banca ore`] : []),
     `${(d.flagOggi||[]).length} flag`
   ];
 }
@@ -3304,12 +3374,16 @@ function renderRecuperi(){
           </div>
           <div class="regsub">${res} or${res===1?'a':'e'} da recuperare${fatte?` · ${fatte} già ${fatte===1?'restituita':'restituite'}`:''} · permesso del ${dataLeggibile(r.data).replace(/ \d{4}$/,'')}</div>
           <div style="margin-top:9px; display:flex; gap:7px; flex-wrap:wrap">
+            ${saldoCredito(r.docente)>0?`<button class="btn" style="padding:6px 11px; font-size:12.5px" onclick="usaCredito('${r.id}')">🏦 Compensa 1 ora con la banca ore (${saldoCredito(r.docente)})</button>`:''}
             <button class="btn ghost" style="padding:6px 11px; font-size:12.5px" onclick="chiudiOraRecupero('${r.id}')">Segna 1 ora recuperata a mano</button>
             <button class="btn ghost" style="padding:6px 11px; font-size:12.5px; color:var(--red); border-color:var(--red)" onclick="eliminaRecupero('${r.id}')">Elimina</button>
           </div>
         </div></div>`;
     }).join("");
   }
+
+  // banca ore
+  out += bancaOreHtml();
 
   // plafond annuo per docente
   out += `<h3 class="sub-sec">Plafond annuo dei permessi brevi</h3>
@@ -3358,6 +3432,30 @@ function renderRecuperi(){
   }
 
   el("main").innerHTML = out;
+}
+/* sezione «Banca ore» della scheda Recuperi: crediti per docente, con i loro usi */
+function bancaOreHtml(){
+  const tutte=(S.bancaOre||[]);
+  let out=`<h3 class="sub-sec">Banca ore${tutte.filter(c=>!c.usata).length?` · ${tutte.filter(c=>!c.usata).length} a credito`:''}</h3>
+    <p class="hint" style="margin-top:0">Un'ora fatta a pagamento si può segnare «a credito» (nel prospetto: tocca la riga → «Segna a credito»). Il docente poi la ripaga con un permesso breve: sul debito compare «Compensa con la banca ore».</p>`;
+  if(!tutte.length){ return out+`<p class="hint">Nessuna ora a credito.</p>`; }
+  const perDoc={}; tutte.forEach(c=>{ (perDoc[c.docente]=perDoc[c.docente]||[]).push(c); });
+  out += Object.keys(perDoc).sort((a,b)=>a.localeCompare(b)).map(n=>{
+    const l=perDoc[n].sort((a,b)=>a.data.localeCompare(b.data)||a.h-b.h);
+    const libere=l.filter(c=>!c.usata).length;
+    const righe=l.map(c=>{
+      const d=dataLeggibile(c.data).replace(/ \d{4}$/,'');
+      return `<div style="display:flex; align-items:center; gap:8px; font-size:12.5px; padding:6px 8px; background:var(--paper); border-radius:8px; ${c.usata?'opacity:.6':''}">
+        <span style="flex:1">${esc(d)} · ${c.h}ª ${esc(fmtCl(c.classe))}${c.usata?` · usata il ${esc(dataLeggibile(c.usataIl).replace(/ \d{4}$/,''))}`:''}</span>
+        ${c.usata?`<span style="color:var(--teal); cursor:pointer; font-weight:700" onclick="annullaUsoCredito('${c.id}')">Annulla uso</span>`
+                 :`<span style="color:var(--red); cursor:pointer; font-weight:700" onclick="eliminaCredito('${c.id}')">✕</span>`}</div>`;
+    }).join("");
+    return `<div class="regcard"><div class="reghead" style="cursor:default; display:block">
+      <b>${esc(cognomeBreve(n))}</b>
+      <div class="regsub">${libere} or${libere===1?'a':'e'} a credito${l.length>libere?` · ${l.length-libere} già compensat${l.length-libere===1?'a':'e'}`:''}</div>
+      <div style="margin-top:8px; display:flex; flex-direction:column; gap:6px">${righe}</div></div></div>`;
+  }).join("");
+  return out;
 }
 function aggiungiRecuperoManuale(){
   const f = S.recuperoForm; if(!f || !f.docente){ toast("Scegli il docente"); return; }
@@ -4555,6 +4653,7 @@ const RESET_ANNO = [
   { k:"assenzeNote",tit:"Assenze note",                n:()=>(S.assenzeNote||[]).length,        um:"annotate" },
   { k:"uscite",     tit:"Uscite didattiche",           n:()=>(S.uscite||[]).length,             um:"registrate" },
   { k:"recuperi",   tit:"Recuperi da permesso breve",  n:()=>(S.recuperi||[]).length,           um:"posizioni" },
+  { k:"bancaOre",   tit:"Banca ore (ore a credito)",   n:()=>(S.bancaOre||[]).length,           um:"ore" },
   { k:"potAssign",  tit:"Assegnazioni potenziamento",  n:()=>Object.keys(S.potAssign||{}).length,um:"assegnazioni" },
   { k:"potMod",    tit:"Modifiche temporanee al potenziamento", n:()=>(S.potMod||[]).length, um:"registrate" },
   { k:"pnoOn",      tit:"Potenziamenti non disponibili",n:()=>(S.pnoOn||[]).length,             um:"celle" },
@@ -4626,7 +4725,7 @@ function confermaNuovoAnno(){
   if(!confirm("Verranno svuotate queste voci:\n\n"+elenco+"\n\nL'operazione non è reversibile. Procedo?")) return;
   if(!confirm("Ultima conferma: azzero definitivamente?")) return;
 
-  const vuoto = { registro:{}, assenzeNote:[], uscite:[], recuperi:[], potAssign:{}, potMod:[], pnoOn:[],
+  const vuoto = { registro:{}, assenzeNote:[], uscite:[], recuperi:[], bancaOre:[], potAssign:{}, potMod:[], pnoOn:[],
                   orario:null, flagOggi:[], lingue:{} };
   sel.forEach(x=>{ S[x.k] = (Array.isArray(vuoto[x.k]) ? [] : vuoto[x.k]); });
   if(S.raSel.registro) localStorage.removeItem("sostituto_registro");
@@ -5109,6 +5208,11 @@ function renderProspettoHTML(p){
         html += `<div class="altbox">`;
         const sostForzato = isSost(e.a) && e.tipo && /AFFIAN/i.test(e.tipo) && e.manuale && !(S.flagOggi||[]).includes(e.a.nome+"|"+e.classe);
         html += inClasse_html(e);
+        if(e.scelto && (/pagamento/.test(e.motivo||"") || e.credito)){
+          html += e.credito
+            ? `<div class="alt-piu" style="text-align:left; padding:0 0 8px" onclick="event.stopPropagation(); creditoToggle('${esc(e.a.nome)}',${e.h})">↩ Togli dalla banca ore: torna a pagamento</div>`
+            : `<div class="alt-piu" style="text-align:left; padding:0 0 8px" onclick="event.stopPropagation(); creditoToggle('${esc(e.a.nome)}',${e.h})">🏦 Segna a credito (banca ore): non è pagata, ${esc(cognomeBreve(e.scelto,16))} la recupera con un permesso</div>`;
+        }
         if(sostForzato) html += `<div class="alt-piu" style="text-align:left; padding:0 0 8px" onclick="event.stopPropagation(); nonSostituireSostegno('${esc(e.a.nome)}',${e.h})">↩ Non sostituire più questo sostegno</div>`;
         if(alt.length){
           html += `<div class="alt-lbl">Al posto ${e.scelto?'di '+esc(e.scelto):'(vuoto)'}, scegli:</div>`;
@@ -5183,7 +5287,7 @@ function notaWA(e){
   if((e.tipo && /AFFIAN/i.test(e.tipo)) || isSost(ass)) return "affianc.";
   return "sost.curr.";
 }
-function oneriWA(e){ if(/pagamento/.test(e.motivo)) return "PAG"; if(e.motivo==="recupero") return "REC"; return ""; }
+function oneriWA(e){ if(/pagamento/.test(e.motivo)) return "PAG"; if(/banca ore/.test(e.motivo||"")) return "BANCA"; if(e.motivo==="recupero") return "REC"; return ""; }
 function pad(s,n){ s=String(s); return s.length>=n ? s : s+" ".repeat(n-s.length); }
 
 function testoWhatsApp(p){ return testoWhatsAppData(p, S.dataOggi || isoOggi()); }
@@ -5207,6 +5311,7 @@ function testoWhatsAppData(p, iso){
     if(e.tipo==="AIRC") bits.push("AIRC");
     else if(e.tipo && /AFFIAN/i.test(e.tipo)) bits.push("affianc.");
     if(/pagamento/.test(e.motivo)) bits.push("PAG");
+    else if(/banca ore/.test(e.motivo||"")) bits.push("BANCA ORE");
     else if(e.motivo==="recupero") bits.push("REC");
     if(e.rice) bits.push("⚠ricev.");
     if(e.fuori) bits.push("entra prima/esce dopo");
@@ -5423,6 +5528,7 @@ function trasformaCambioDocente(dati, v, n, opz){
   (dati.recuperi||[]).forEach(r=>{ if(r.docente!==v) return;
     if(tutto) r.docente=n;
     else { const aperte=Math.max(0,(r.ore||0)-(r.restituite||0)-(r.chiuseManuale||0)); if(aperte>0){ rep.recVoci++; rep.recOre+=aperte; } } });
+  (dati.bancaOre||[]).forEach(c=>{ if(c.docente===v && tutto) c.docente=n; if(c.assente===v && tutto) c.assente=n; });
   (dati.assenzeNote||[]).forEach(a=>{ if(a.docente!==v) return;
     if(tutto) a.docente=n; else if((a.al||a.dal||"")>=dal) rep.assenze++; });
   (dati.uscite||[]).forEach(u=>{ const i=(u.accomp||[]).indexOf(v); const j=(u.riserve||[]).indexOf(v);

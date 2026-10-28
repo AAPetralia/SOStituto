@@ -5,6 +5,11 @@ Si legge in alto nell'app, sotto il titolo. Da qui in avanti si aggiorna a ogni 
 
 ## Da qui in avanti (dettaglio certo)
 
+### 28.10.2026b — n. 93
+- **Banca ore.** Un'ora fatta a pagamento (buca o ora attaccata al servizio) si può segnare «a credito»: nel prospetto tocca la riga → «🏦 Segna a credito». L'ora non conta più tra quelle a pagamento (prospetto, stampa, registro, WhatsApp «BANCA ORE») e va nel credito del docente. Si può togliere dallo stesso punto.
+- **Scheda Recuperi → «Banca ore»**: crediti per docente, con data, ora e classe. Sui debiti aperti di chi ha credito compare «Compensa 1 ora con la banca ore»: usa il credito più vecchio e chiude un'ora del debito; «Annulla uso» rimette tutto com'era.
+- Il credito segue il prospetto: se rigenerando l'ora non è più a pagamento (altro sostituto, assenza tolta) il credito non ancora usato decade. Fa parte di backup, condivisione, reset d'anno e cambio nome docente.
+
 ### 28.10.2026a — n. 92
 - **Ore attaccate al servizio, a pagamento.** Oltre alle buche, diventa candidato a pagamento anche chi ha libera l'ora subito prima del primo turno o subito dopo l'ultimo: entra prima / esce dopo. Nella graduatoria sta dopo le buche vere (stessa posizione del criterio «pagamento», sottordine successivo); si vede con «mostra tutte» o scegliendo a mano. Vale anche per le ore di sostegno assente da coprire a mano.
 - La riga indica «⚠ pagamento · entra prima» / «esce dopo», con l'avviso «a pagamento, fuori orario»; l'ora entra nel conteggio delle ore a pagamento e nel testo WhatsApp (PAG).
