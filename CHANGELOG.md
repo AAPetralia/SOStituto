@@ -5,6 +5,10 @@ Si legge in alto nell'app, sotto il titolo. Da qui in avanti si aggiorna a ogni 
 
 ## Da qui in avanti (dettaglio certo)
 
+### 28.10.2026e — n. 96
+- **Importa ricevimenti (R)** (scheda Orario, sotto «Scarica l'orario»): legge il file `.json` scaricato dalla webapp «Ricevimento Mestica» (o un orario Excel con le R) e aggiorna **solo** le ore di ricevimento: le ore libere segnate R diventano R, le R non più presenti nel file tornano libere; le ore già occupate in SOStituto non si toccano e vengono elencate come «non applicabili». Prima di applicare mostra il riepilogo e salva un'istantanea (Altro → Backup); se c'è un prospetto in corso lo ricalcola.
+- Verificato con prove su JSON ed Excel (aggiunte, rimozioni, conflitti, docenti non trovati, reimportazione identica = nessuna modifica).
+
 ### 28.10.2026d — n. 95
 - **Scarica l'orario** (scheda Orario, in fondo): file Excel nello stesso formato di quello che si importa (foglio «orario», con le modifiche fatte a mano già dentro), pronto da ripubblicare o da reimportare; verificato che reimportandolo si ritrovano tutte le celle identiche. Se ci sono modifiche a mano, un secondo foglio «modifiche» le elenca (data, docente, ora, prima → dopo).
 - Non entrano nel file le sovrapposizioni temporanee dell'app (Pno, sospensioni e spostamenti del potenziamento, assegnazioni del potenziamento alle classi).

@@ -3194,8 +3194,8 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "28.10.2026d";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
-const NUMERO_VERSIONE = 95;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
+const VERSIONE = "28.10.2026e";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const NUMERO_VERSIONE = 96;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -5393,7 +5393,67 @@ function renderOrario(){
       <span><b style="background:var(--tint-red)"></b>da correggere</span>
     </div>
     <button class="btn ghost" style="width:100%; margin-top:14px" onclick="scaricaOrario()">⬇ Scarica l'orario (Excel)</button>
-    <p class="hint" style="margin-top:6px">Il file ha lo stesso formato di quello che importi, con le modifiche fatte a mano${(o.modifiche||[]).length?` (${o.modifiche.length})`:""}: si può ripubblicare e reimportare.</p>`;
+    <input type="file" id="fileRic" accept=".json,.xlsx,.xls" style="display:none" onchange="importaRicevimenti(this)">
+    <button class="btn ghost" style="width:100%; margin-top:8px" onclick="document.getElementById('fileRic').click()">⬆ Importa ricevimenti (R)</button>
+    <p class="hint" style="margin-top:6px">Il file ha lo stesso formato di quello che importi, con le modifiche fatte a mano${(o.modifiche||[]).length?` (${o.modifiche.length})`:""}: si può ripubblicare e reimportare. «Importa ricevimenti» legge il file della webapp dei ricevimenti (.json) o il suo foglio (.xlsx) e aggiorna <b>solo</b> le ore di ricevimento: il resto dell'orario non cambia.</p>`;
+}
+
+/* ---- importa i ricevimenti (R) raccolti nella webapp dei ricevimenti ----
+   File .json della webapp, oppure l'.xlsx del suo foglio «orario». Si toccano solo le celle
+   libere (→ R) e quelle già R che non lo sono più (→ libere), per i docenti presenti nel file. */
+function leggiRicevimenti(file, cb){
+  const rd=new FileReader();
+  rd.onload=e=>{
+    try{
+      const nomeF=file.name.toLowerCase();
+      if(/\.json$/.test(nomeF)){
+        const j=JSON.parse(e.target.result);
+        if(!j || j.app!=="SOStituto-ricevimenti" || !Array.isArray(j.docenti)) throw new Error("non è un file dei ricevimenti");
+        cb(null, {giorni:j.giorni, ore:j.ore, docenti:j.docenti.map(d=>({nome:d.nome, R:new Set(d.ricevimenti||[])}))});
+      } else {
+        const wb=XLSX.read(new Uint8Array(e.target.result), {type:"array"});
+        const p=importaWorkbook(wb);
+        cb(null, {giorni:p.giorni, ore:p.ore, docenti:p.docenti.map(d=>({nome:d.nome, R:new Set(Object.keys(d.cells).filter(k=>d.cells[k].t==="RICE"))}))});
+      }
+    }catch(err){ cb(err); }
+  };
+  if(/\.json$/i.test(file.name)) rd.readAsText(file); else rd.readAsArrayBuffer(file);
+}
+function pianoRicevimenti(ric){
+  const o=S.orario, norm=x=>String(x).replace(/\s+/g," ").trim().toUpperCase();
+  const piano={aggiungi:[], togli:[], conflitti:[], mancanti:[], docenti:0};
+  ric.docenti.forEach(rd=>{
+    const d=o.docenti.find(x=>norm(x.nome)===norm(rd.nome));
+    if(!d){ piano.mancanti.push(rd.nome); return; }
+    piano.docenti++;
+    ric.giorni.forEach(g=>ric.ore.forEach(h=>{
+      const k=g+"|"+h, c=d.cells[k]||{t:"VUOTA"};
+      if(!(k in d.cells) && !o.giorni.includes(g)) return;
+      if(rd.R.has(k)){
+        if(c.t==="VUOTA") piano.aggiungi.push({d, k});
+        else if(c.t!=="RICE") piano.conflitti.push({d, k, c});
+      } else if(c.t==="RICE") piano.togli.push({d, k});
+    }));
+  });
+  return piano;
+}
+function importaRicevimenti(inp){
+  const f=inp.files&&inp.files[0]; inp.value=""; if(!f||!S.orario) return;
+  leggiRicevimenti(f, (err, ric)=>{
+    if(err){ toast("Non riesco a leggere il file: "+err.message); return; }
+    const p=pianoRicevimenti(ric);
+    if(!p.docenti){ toast("Nessun docente del file è nell'orario"); return; }
+    const righe=[p.aggiungi.length+" ricevimenti da aggiungere", p.togli.length+" da togliere"];
+    if(p.conflitti.length) righe.push(p.conflitti.length+" non applicabili (l'ora non è libera in SOStituto): "+p.conflitti.slice(0,5).map(x=>cognomeBreve(x.d.nome)+" "+x.k.replace("|"," ")+"ª").join(", ")+(p.conflitti.length>5?"…":""));
+    if(p.mancanti.length) righe.push(p.mancanti.length+" docenti del file non trovati nell'orario: "+p.mancanti.slice(0,5).join(", ")+(p.mancanti.length>5?"…":""));
+    if(!p.aggiungi.length && !p.togli.length){ toast("Niente da aggiornare: i ricevimenti sono già allineati"); return; }
+    if(!confirm("Importo i ricevimenti dal file «"+f.name+"» (docenti letti: "+p.docenti+"):\n\n• "+righe.join("\n• ")+"\n\nPrima dell'importazione l'app salva un'istantanea (Altro → Backup).\n\nProcedere?")) return;
+    salvaPreSync(statoDaCondividere());
+    p.aggiungi.forEach(x=>{ x.d.cells[x.k]={t:"RICE"}; });
+    p.togli.forEach(x=>{ x.d.cells[x.k]={t:"VUOTA"}; });
+    save(); toast("Ricevimenti aggiornati: +"+p.aggiungi.length+" / −"+p.togli.length);
+    if(S.prospetto && Object.keys(S.assentiOggi||{}).length) lanciaProspetto(); else render();
+  });
 }
 
 /* ---- scarica l'orario in Excel, nello stesso formato dell'importazione ----
