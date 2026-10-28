@@ -5,6 +5,10 @@ Si legge in alto nell'app, sotto il titolo. Da qui in avanti si aggiorna a ogni 
 
 ## Da qui in avanti (dettaglio certo)
 
+### 28.10.2026d — n. 95
+- **Scarica l'orario** (scheda Orario, in fondo): file Excel nello stesso formato di quello che si importa (foglio «orario», con le modifiche fatte a mano già dentro), pronto da ripubblicare o da reimportare; verificato che reimportandolo si ritrovano tutte le celle identiche. Se ci sono modifiche a mano, un secondo foglio «modifiche» le elenca (data, docente, ora, prima → dopo).
+- Non entrano nel file le sovrapposizioni temporanee dell'app (Pno, sospensioni e spostamenti del potenziamento, assegnazioni del potenziamento alle classi).
+
 ### 28.10.2026c — n. 94
 - **Modifica dell'orario di un docente**, in Altro → Cambio e aggiunta docente (nuova sezione «Modifica l'orario di un docente»): scegli il docente, tocca l'ora nella griglia e la fai diventare *In una classe* (con la classe), *Libera*, *Ricevimento* o *Potenziamento* (con classe facoltativa). Vale subito per le sostituzioni, senza reimportare l'orario; se c'è un prospetto in corso viene rigenerato.
 - Ogni modifica è registrata in elenco, con prima → dopo: si può **annullare**; dopo un nuovo import dell'orario (che le cancella) restano in elenco segnate «non applicata» e si possono **riapplicare**. Prima di ogni modifica l'app salva un'istantanea (Altro → Backup).

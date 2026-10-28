@@ -3194,8 +3194,8 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "28.10.2026c";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
-const NUMERO_VERSIONE = 94;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
+const VERSIONE = "28.10.2026d";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const NUMERO_VERSIONE = 95;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -5391,7 +5391,63 @@ function renderOrario(){
       <span><b style="background:var(--tint-teal)"></b>disponibile</span>
       <span><b style="background:var(--tint-warm3)"></b>non disp.</span>
       <span><b style="background:var(--tint-red)"></b>da correggere</span>
-    </div>`;
+    </div>
+    <button class="btn ghost" style="width:100%; margin-top:14px" onclick="scaricaOrario()">⬇ Scarica l'orario (Excel)</button>
+    <p class="hint" style="margin-top:6px">Il file ha lo stesso formato di quello che importi, con le modifiche fatte a mano${(o.modifiche||[]).length?` (${o.modifiche.length})`:""}: si può ripubblicare e reimportare.</p>`;
+}
+
+/* ---- scarica l'orario in Excel, nello stesso formato dell'importazione ----
+   Si scrive l'orario di base (con le modifiche fatte a mano): non le sovrapposizioni temporanee
+   (Pno, sospensioni/spostamenti del potenziamento, assegnazioni del potenziamento). */
+function cellaPerExcel(c){
+  if(!c) return "";
+  switch(c.t){
+    case "CLASSE": return c.det;
+    case "ARTIC": return c.a+"-"+c.b;
+    case "AR": return "AR"+c.det;
+    case "LINGUA": return c.classe+(c.lingua==="FR"?"F":"S");
+    case "DISP": return c.det && c.det.indexOf("P·")===0 ? "P"+c.det.slice(2) : "P";
+    case "NOND": return "Pno";
+    case "EMERG": return "P"+c.det;           /* PVP / PCV */
+    case "RICE": return "R";
+    case "IGNOTA": return c.det||"";
+    default: return "";
+  }
+}
+function scaricaOrario(){
+  const o=S.orario; if(!o) return;
+  if(typeof XLSX==="undefined"){ toast("Il lettore Excel non è caricato: serve la connessione a internet"); return; }
+  const oggi=isoOggi(), data=oggi.split("-").reverse().join("/");
+  const righe=[];
+  righe.push(["Orario dei docenti — aggiornato al "+data]);
+  righe.push(["MATERIE","DOCENTI"].concat(...o.giorni.map(g=>[g].concat(o.ore.slice(1).map(()=>"")))));
+  righe.push(["",""].concat(...o.giorni.map(()=>o.ore.slice())));
+  let ultima=null;
+  o.docenti.forEach(d=>{
+    const mat = d.materia!==ultima ? (d.materia||"") : "";
+    ultima=d.materia;
+    righe.push([mat, d.nome].concat(...o.giorni.map(g=>o.ore.map(h=>cellaPerExcel(d.cells[g+"|"+h])))));
+  });
+  const ws=XLSX.utils.aoa_to_sheet(righe);
+  ws["!merges"]=o.giorni.map((g,i)=>({s:{r:1,c:2+i*o.ore.length}, e:{r:1,c:2+(i+1)*o.ore.length-1}}));
+  ws["!cols"]=[{wch:16},{wch:26}].concat(...o.giorni.map(()=>o.ore.map(()=>({wch:6}))));
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "orario");
+  const mod=o.modifiche||[];
+  if(mod.length){
+    const m=[["Data","Docente","Giorno","Ora","Prima","Dopo"]].concat(mod.map(x=>[x.quando.slice(0,10).split("-").reverse().join("/"), x.docente, x.g, x.h, moDescr(x.prima), moDescr(x.dopo)]));
+    const wm=XLSX.utils.aoa_to_sheet(m); wm["!cols"]=[{wch:11},{wch:26},{wch:8},{wch:5},{wch:22},{wch:22}];
+    XLSX.utils.book_append_sheet(wb, wm, "modifiche");
+  }
+  const nome="SOStituto-orario-"+oggi+".xlsx";
+  try{
+    const buf=XLSX.write(wb,{bookType:"xlsx", type:"array"});
+    const blob=new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+    const url=URL.createObjectURL(blob), a=document.createElement("a");
+    a.href=url; a.download=nome; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url), 4000);
+    toast("Orario scaricato: "+nome);
+  }catch(e){ toast("Scarico non riuscito: "+e.message); }
 }
 
 /* ---- DOV'È: localizza docente o classe ---- */
