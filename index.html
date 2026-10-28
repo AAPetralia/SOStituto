@@ -1008,6 +1008,12 @@ function candidati(o, classe, g, h, assenteObj, ctx, lingua){
     if(st.t==="EMERG"){ pool.push([PR_EMERG,...tie,"PVP/PCV",d.nome]); continue; }
     // g) ora buca curricolare = a pagamento
     if(PR.g!=null && st.t==="BUCA"){ pool.push([rango(PR.g),...tie,"⚠ pagamento",d.nome]); continue; }
+    // g-bis) ora libera ATTACCATA al servizio (l'ora subito prima del primo turno o subito dopo l'ultimo):
+    //        il docente entra prima / esce dopo, a pagamento. Viene dopo le buche vere (nessuna ora in più).
+    if(PR.g!=null && st.t==="FUORI" && !st.vacante && oraAttaccataServizio(d,g,h,o.ore)){
+      const [a0]=oreServizio(d,g,o.ore);
+      pool.push([rango(PR.g,0.5),...tie,"⚠ pagamento · "+(h<a0?"entra prima":"esce dopo"),d.nome]); continue;
+    }
   }
   pool.sort((A,B)=> A[0]-B[0] || A[1]-B[1] || A[2]-B[2] || A[3]-B[3] || String(A[4]).localeCompare(B[4]));
   return pool;
@@ -1131,15 +1137,21 @@ function generaProspetto(o, giorno, assenti, opts){
   // PRIMA passata: applico gli override "forzati" (docente scelto a mano), così occupano il posto
   //                 e i loro nomi risultano impegnati per il resto del calcolo.
   const esitiMap = {};
-  const isFuori = (nome,h,motivo)=>{ if(motivo!=="recupero") return false; const d=o.docenti.find(x=>x.nome===nome); return !!(d && statoLinguaEff(d,giorno,h,o.ore).t==="FUORI"); };
+  const isFuori = (nome,h,motivo)=>{ if(motivo!=="recupero" && !/pagamento/.test(motivo||"")) return false; const d=o.docenti.find(x=>x.nome===nome); return !!(d && statoLinguaEff(d,giorno,h,o.ore).t==="FUORI"); };
   const isRice = (nome,h)=>{ const d=o.docenti.find(x=>x.nome===nome); return !!(d && (d.cells[giorno+"|"+h]||{}).t==="RICE"); };
   for(const s of slot){
     const key = s.a.nome+"|"+s.h;
     if(key in override && override[key]){          /* scelta manuale di un docente */
       const nome = override[key];
+      /* se la scelta cade su un'ora a pagamento (buca o ora attaccata al servizio) lo dico e lo conto:
+         lo si vede prima di segnare il docente come impegnato */
+      const _pm = candidati(o, s.classe, giorno, s.h, s.a, ctx, s.lingua).find(x=>x[x.length-1]===nome);
+      const _mot = _pm ? _pm[_pm.length-2] : "";
+      const _pag = /pagamento/.test(_mot);
+      if(_pag) ctx.pagamento++;
       ctx.fatte[nome]=(ctx.fatte[nome]||0)+1;
       (ctx.occupati[giorno+"|"+s.h] = ctx.occupati[giorno+"|"+s.h]||new Set()).add(nome);
-      esitiMap[key] = {...s, scelto:nome, motivo:"scelta manuale", manuale:true, rice:isRice(nome,s.h)};
+      esitiMap[key] = {...s, scelto:nome, motivo:_pag?"scelta manuale · "+_mot:"scelta manuale", manuale:true, rice:isRice(nome,s.h), fuori:isFuori(nome,s.h,_mot)};
     }
   }
   // SECONDA passata: le celle non forzate. Se override vuoto ("") → cella svuotata da riempire.
@@ -3114,8 +3126,8 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "26.10.2026a";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
-const NUMERO_VERSIONE = 91;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
+const VERSIONE = "28.10.2026a";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const NUMERO_VERSIONE = 92;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -5069,7 +5081,7 @@ function renderProspettoHTML(p){
       const key=e.a.nome+"|"+e.h;
       const aperto = S.apertoRiga===key;
       const chevron = `<b class="chev">${aperto?'▲':'▾'}</b>`;
-      const fuoriWarn = e.fuori ? `<div class="ricewarn">⏱ recupero fuori orario: ${esc(e.scelto)} entra prima o esce dopo (ora attaccata al suo servizio)</div>` : "";
+      const fuoriWarn = e.fuori ? `<div class="ricewarn ${/pagamento/.test(e.motivo)?'pay':''}">⏱ ${/pagamento/.test(e.motivo)?"a pagamento, fuori orario":"recupero fuori orario"}: ${esc(e.scelto)} entra prima o esce dopo (ora attaccata al suo servizio)</div>` : "";
       const riceWarn = fuoriWarn + (e.rice ? `<div class="ricewarn ${/pagamento/.test(e.motivo)?'pay':''}">⚠ è la sua ora di ricevimento${/pagamento/.test(e.motivo)?' — e sarebbe a pagamento':''}</div>` : "");
       const clLab = clLabel(e);
       const artic = !!(e.gruppo && e.lingua);

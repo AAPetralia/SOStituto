@@ -5,6 +5,11 @@ Si legge in alto nell'app, sotto il titolo. Da qui in avanti si aggiorna a ogni 
 
 ## Da qui in avanti (dettaglio certo)
 
+### 28.10.2026a — n. 92
+- **Ore attaccate al servizio, a pagamento.** Oltre alle buche, diventa candidato a pagamento anche chi ha libera l'ora subito prima del primo turno o subito dopo l'ultimo: entra prima / esce dopo. Nella graduatoria sta dopo le buche vere (stessa posizione del criterio «pagamento», sottordine successivo); si vede con «mostra tutte» o scegliendo a mano. Vale anche per le ore di sostegno assente da coprire a mano.
+- La riga indica «⚠ pagamento · entra prima» / «esce dopo», con l'avviso «a pagamento, fuori orario»; l'ora entra nel conteggio delle ore a pagamento e nel testo WhatsApp (PAG).
+- **Scelta manuale e pagamento:** se la scelta a mano cade su un'ora a pagamento (buca o ora attaccata) l'ora è ora conteggiata e segnata come tale; prima una scelta manuale non risultava mai a pagamento.
+
 ### 26.10.2026a — n. 91
 - **Uscita con sola delegazione.** Un'uscita può essere segnata «solo una delegazione»: dalla classe esce solo una parte degli alunni, gli altri restano a scuola. In questo caso la classe **non è fuori sede**: l'accompagnatore si sostituisce anche nelle ore che avrebbe avuto in quella classe, e i docenti della classe (sostegno e potenziamento assegnato compresi) **non diventano una risorsa** per le altre classi, perché restano con gli alunni che non escono.
 - Spunta nel form delle uscite a mano e, per le uscite del foglio viaggi, nuova colonna «Delegazione» (x) e casella nel modulo della FS: serve la nuova versione dello script del foglio (v5, «Nuova versione» del deployment). Senza aggiornare lo script tutto funziona come prima.
