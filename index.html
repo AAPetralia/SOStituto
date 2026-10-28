@@ -3194,8 +3194,8 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "28.10.2026b";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
-const NUMERO_VERSIONE = 93;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
+const VERSIONE = "28.10.2026c";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const NUMERO_VERSIONE = 94;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -5652,10 +5652,143 @@ function renderCambioDocente(){
     }
     out+=`<div id="cdprev"></div>`;
   }
+  out+=renderModificaOrario();
   out+=renderDocentiExtra();
   el("main").innerHTML=out;
   if(c.vecchio) aggiornaAnteprimaCD();
 }
+/* ---- modifica a mano di UNA cella dell'orario di un docente (scambio d'ora, cambio di classe) ----
+   Si lavora sull'orario in memoria, senza reimportare. Ogni modifica è registrata in
+   S.orario.modifiche: si può annullare e, dopo un nuovo import dell'orario, riapplicare. */
+const MO_TIPI = [["CLASSE","In una classe"],["VUOTA","Libera"],["RICE","Ricevimento"],["DISP","Potenziamento"]];
+function classiOrario(){
+  const set=new Set();
+  ((S.orario&&S.orario.docenti)||[]).forEach(d=>{ for(const k in d.cells){ const c=d.cells[k];
+    if(c.t==="CLASSE"||c.t==="AR") set.add(c.det); else if(c.t==="ARTIC"){ set.add(c.a); set.add(c.b); } else if(c.t==="LINGUA") set.add(c.classe); } });
+  return [...set].filter(Boolean).sort((a,b)=>a.localeCompare(b,"it"));
+}
+function moDescr(c){
+  if(!c || c.t==="VUOTA") return "libera";
+  if(c.t==="CLASSE") return "classe "+c.det;
+  if(c.t==="RICE") return "ricevimento";
+  if(c.t==="DISP") return c.det && c.det!=="P" ? "potenziamento ("+c.det.replace("P·","")+")" : "potenziamento";
+  if(c.t==="ARTIC") return "articolata "+c.a+"·"+c.b;
+  if(c.t==="LINGUA") return "lingua "+c.classe+"·"+c.lingua;
+  if(c.t==="AR") return "AIRC "+c.det;
+  return cellShort(c)||"libera";
+}
+function renderModificaOrario(){
+  const o=S.orario; if(!o) return "";
+  S.mo = S.mo || {docente:"", g:"", h:0, tipo:"CLASSE", classe:""};
+  const m=S.mo, docs=(o.docenti||[]).slice().sort((a,b)=>a.nome.localeCompare(b.nome,"it"));
+  const d=o.docenti.find(x=>x.nome===m.docente);
+  let out=`<h2 class="sec" style="margin-top:26px">Modifica l'orario di un docente</h2>
+    <p class="hint" style="margin-top:0">Un docente ha cambiato un'ora (un giorno, una classe): la correggi qui, senza reimportare tutto l'orario. Vale da subito per le sostituzioni.</p>
+    <div class="field"><label>Docente</label>
+      <select onchange="S.mo={docente:this.value, g:'', h:0, tipo:'CLASSE', classe:''}; render()">
+        <option value="">— scegli docente —</option>
+        ${docs.map(x=>`<option value="${esc(x.nome)}"${x.nome===m.docente?" selected":""}>${esc(x.nome)} · ${esc(x.materia||"")}</option>`).join("")}
+      </select></div>`;
+  if(d){
+    out+=`<p class="hint" style="margin:0 0 6px">Tocca l'ora da cambiare.</p>
+      <div class="cellhead" style="padding:4px 0 6px"><span style="flex:0 0 40px"></span>${o.ore.map(h=>`<span>${h}ª</span>`).join("")}</div>`;
+    o.giorni.forEach(g=>{
+      out+=`<div style="display:flex; align-items:center; gap:6px; padding:3px 0"><div style="flex:0 0 34px; font-weight:700; font-size:13px">${g}</div><div class="thours">`+
+        o.ore.map(h=>{
+          const raw=d.cells[g+"|"+h]||{t:"VUOTA"}, sel=(m.g===g&&m.h===h);
+          return `<div class="cell ${cellClass(raw)}" style="cursor:pointer; ${sel?'outline:2px solid var(--teal); outline-offset:-2px':''}" onclick="moScegli('${g}',${h})">${esc(cellShort(raw))}</div>`;
+        }).join("")+`</div></div>`;
+    });
+    if(m.g && m.h){
+      const k=m.g+"|"+m.h, att=d.cells[k]||{t:"VUOTA"};
+      const classi=classiOrario();
+      out+=`<div class="promemo" style="margin-top:12px"><b>${esc(d.nome)} · ${NOMEGIORNO[m.g]||m.g} ${m.h}ª ora</b><br>
+        <span style="color:var(--ink-soft)">Ora: ${esc(moDescr(att))}</span>
+        <div class="field" style="margin-top:10px"><label>Diventa</label>
+          <div class="pickgrid">${MO_TIPI.map(([t,l])=>`<div class="pick${m.tipo===t?' on':''}" onclick="S.mo.tipo='${t}'; render()">${l}</div>`).join("")}</div></div>`;
+      if(m.tipo==="CLASSE" || m.tipo==="DISP"){
+        out+=`<div class="field"><label>${m.tipo==="CLASSE"?"Classe":"Classe assegnata (facoltativa)"}</label>
+          <select onchange="S.mo.classe=this.value">
+            <option value="">${m.tipo==="CLASSE"?"— scegli la classe —":"— nessuna: la scegli dopo in Potenziamento —"}</option>
+            ${classi.map(c=>`<option value="${esc(c)}"${c===m.classe?" selected":""}>${esc(fmtCl(c))}</option>`).join("")}
+          </select></div>`;
+      }
+      out+=`<div style="display:flex; gap:8px"><button class="btn ghost" style="flex:1" onclick="S.mo.g=''; S.mo.h=0; render()">Annulla</button>
+        <button class="btn" style="flex:1" onclick="moApplica()">Applica</button></div></div>`;
+    }
+  }
+  const log=(o.modifiche||[]);
+  if(log.length){
+    out+=`<h3 class="sub-sec" style="margin-top:16px">Modifiche fatte all'orario · ${log.length}</h3>`;
+    out+=log.slice().reverse().map(x=>{
+      const dd=o.docenti.find(z=>z.nome===x.docente), cur=dd?JSON.stringify(dd.cells[x.g+"|"+x.h]||{t:"VUOTA"}):null;
+      const applicata = cur!==null && cur===JSON.stringify(x.dopo);
+      return `<div class="regcard"><div class="reghead" style="cursor:default; display:block">
+        <b>${esc(cognomeBreve(x.docente))}</b> · ${NOMEGIORNO[x.g]||x.g} ${x.h}ª
+        <div class="regsub">${esc(moDescr(x.prima))} → <b>${esc(moDescr(x.dopo))}</b> · ${esc(new Date(x.quando).toLocaleDateString("it-IT"))}${applicata?"":" · <span style='color:var(--red)'>non applicata (nuovo import?)</span>"}</div>
+        <div style="margin-top:8px; display:flex; gap:7px">
+          ${applicata?`<button class="btn ghost" style="padding:6px 11px; font-size:12.5px" onclick="moAnnulla('${x.id}')">↩ Annulla questa modifica</button>`
+                     :`<button class="btn" style="padding:6px 11px; font-size:12.5px" onclick="moRiapplica('${x.id}')">Riapplica</button>
+                       <button class="btn ghost" style="padding:6px 11px; font-size:12.5px; color:var(--red); border-color:var(--red)" onclick="moScarta('${x.id}')">Togli dall'elenco</button>`}
+        </div></div></div>`;
+    }).join("");
+    out+=`<p class="hint">Se importi di nuovo l'orario queste modifiche si perdono, ma restano in elenco: le puoi riapplicare.</p>`;
+  }
+  return out;
+}
+function moScegli(g,h){
+  const m=S.mo, d=S.orario.docenti.find(x=>x.nome===m.docente); if(!d) return;
+  const c=d.cells[g+"|"+h]||{t:"VUOTA"};
+  m.g=g; m.h=h;
+  m.tipo = ({CLASSE:"CLASSE",RICE:"RICE",DISP:"DISP"})[c.t] || "VUOTA";
+  m.classe = c.t==="CLASSE" ? c.det : c.t==="DISP" && c.det && c.det.indexOf("P·")===0 ? c.det.slice(2) : "";
+  render();
+}
+/* scrive la cella nell'orario (e tiene allineate le assegnazioni del potenziamento) */
+function moScrivi(d, g, h, cella){
+  const k=g+"|"+h;
+  S.potAssign = S.potAssign || {};
+  delete S.potAssign[d.nome+"|"+k];
+  d.cells[k]=cella;
+  if(cella.t==="DISP" && cella.det && cella.det.indexOf("P·")===0) S.potAssign[d.nome+"|"+k]=cella.det.slice(2);
+}
+function moCella(m){
+  if(m.tipo==="CLASSE") return {t:"CLASSE", det:m.classe};
+  if(m.tipo==="RICE") return {t:"RICE"};
+  if(m.tipo==="DISP") return {t:"DISP", det:m.classe?"P·"+m.classe:"P"};
+  return {t:"VUOTA"};
+}
+function moApplica(){
+  const m=S.mo, o=S.orario, d=o&&o.docenti.find(x=>x.nome===m.docente); if(!d||!m.g||!m.h) return;
+  if(m.tipo==="CLASSE" && !m.classe){ toast("Scegli la classe"); return; }
+  const k=m.g+"|"+m.h, prima=d.cells[k]||{t:"VUOTA"}, dopo=moCella(m);
+  if(JSON.stringify(prima)===JSON.stringify(dopo)){ toast("È già così"); return; }
+  if(["ARTIC","LINGUA","AR"].includes(prima.t) && !confirm("Questa ora è "+moDescr(prima)+": cambiarla toglie il docente da quel gruppo. Procedo?")) return;
+  salvaPreSync(statoDaCondividere());
+  moScrivi(d, m.g, m.h, dopo);
+  o.modifiche = (o.modifiche||[]).concat([{id:"m"+Date.now(), docente:d.nome, g:m.g, h:m.h, prima, dopo, quando:new Date().toISOString()}]);
+  S.mo.g=""; S.mo.h=0;
+  save(); toast("Orario modificato: "+cognomeBreve(d.nome)+" "+m.g+" "+m.h+"ª");
+  if(S.prospetto && Object.keys(S.assentiOggi||{}).length) lanciaProspetto(); else render();
+}
+function moAnnulla(id){
+  const o=S.orario, x=(o.modifiche||[]).find(z=>z.id===id); if(!x) return;
+  const d=o.docenti.find(z=>z.nome===x.docente); if(!d) return;
+  moScrivi(d, x.g, x.h, x.prima);
+  o.modifiche=o.modifiche.filter(z=>z.id!==id);
+  save(); toast("Modifica annullata");
+  if(S.prospetto && Object.keys(S.assentiOggi||{}).length) lanciaProspetto(); else render();
+}
+function moRiapplica(id){
+  const o=S.orario, x=(o.modifiche||[]).find(z=>z.id===id); if(!x) return;
+  const d=o.docenti.find(z=>z.nome===x.docente); if(!d){ toast("Il docente non c'è più nell'orario"); return; }
+  x.prima = d.cells[x.g+"|"+x.h] || {t:"VUOTA"};
+  moScrivi(d, x.g, x.h, x.dopo);
+  save(); toast("Modifica riapplicata");
+  if(S.prospetto && Object.keys(S.assentiOggi||{}).length) lanciaProspetto(); else render();
+}
+function moScarta(id){ const o=S.orario; o.modifiche=(o.modifiche||[]).filter(z=>z.id!==id); save(); render(); }
+
 /* ---- docenti senza orario del mattino ---- */
 const NOTA_EXTRA="Strumento musicale · pomeriggio";
 function renderDocentiExtra(){
@@ -5819,7 +5952,7 @@ function onFile(ev){
       }
       html += `<button class="btn" style="margin-top:12px" id="confirm">Salva questo orario</button>`;
       el("report").innerHTML=html;
-      el("confirm").addEventListener("click", ()=>{ const ex=docentiExtra().filter(e=>!parsed.docenti.some(d=>d.nome===e.nome)); if(ex.length) parsed.docentiExtra=ex; S.orario=parsed; save(); S.tab="orario"; S.day=parsed.giorni[0]; S.selDoc=""; S.selClasse=""; render(); });
+      el("confirm").addEventListener("click", ()=>{ const ex=docentiExtra().filter(e=>!parsed.docenti.some(d=>d.nome===e.nome)); if(ex.length) parsed.docentiExtra=ex; const mod=(S.orario&&S.orario.modifiche)||[]; if(mod.length) parsed.modifiche=mod; S.orario=parsed; save(); S.tab="orario"; S.day=parsed.giorni[0]; S.selDoc=""; S.selClasse=""; render(); });
     }catch(err){
       el("report").innerHTML=`<div class="flag" style="white-space:pre-wrap; line-height:1.5">Non riesco a leggere il file: ${esc(err.message)}</div>`;
     }

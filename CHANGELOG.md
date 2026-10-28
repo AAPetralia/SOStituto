@@ -5,6 +5,11 @@ Si legge in alto nell'app, sotto il titolo. Da qui in avanti si aggiorna a ogni 
 
 ## Da qui in avanti (dettaglio certo)
 
+### 28.10.2026c — n. 94
+- **Modifica dell'orario di un docente**, in Altro → Cambio e aggiunta docente (nuova sezione «Modifica l'orario di un docente»): scegli il docente, tocca l'ora nella griglia e la fai diventare *In una classe* (con la classe), *Libera*, *Ricevimento* o *Potenziamento* (con classe facoltativa). Vale subito per le sostituzioni, senza reimportare l'orario; se c'è un prospetto in corso viene rigenerato.
+- Ogni modifica è registrata in elenco, con prima → dopo: si può **annullare**; dopo un nuovo import dell'orario (che le cancella) restano in elenco segnate «non applicata» e si possono **riapplicare**. Prima di ogni modifica l'app salva un'istantanea (Altro → Backup).
+- Cambiando un'ora di potenziamento si aggiorna anche la classe assegnata; sui gruppi lingua/AIRC l'app chiede conferma.
+
 ### 28.10.2026b — n. 93
 - **Banca ore.** Un'ora fatta a pagamento (buca o ora attaccata al servizio) si può segnare «a credito»: nel prospetto tocca la riga → «🏦 Segna a credito». L'ora non conta più tra quelle a pagamento (prospetto, stampa, registro, WhatsApp «BANCA ORE») e va nel credito del docente. Si può togliere dallo stesso punto.
 - **Scheda Recuperi → «Banca ore»**: crediti per docente, con data, ora e classe. Sui debiti aperti di chi ha credito compare «Compensa 1 ora con la banca ore»: usa il credito più vecchio e chiude un'ora del debito; «Annulla uso» rimette tutto com'era.
