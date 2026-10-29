@@ -5,6 +5,10 @@ Si legge in alto nell'app, sotto il titolo. Da qui in avanti si aggiorna a ogni 
 
 ## Da qui in avanti (dettaglio certo)
 
+### 29.10.2026a — n. 97
+- **Correzione: sostegno assente nelle ore di gruppo lingua.** Le ore di un sostegno assente segnate come gruppo di seconda lingua (es. 3B·SP, 2B·FR) venivano ignorate: non comparivano né fra le sostituzioni né fra i «sostegni non sostituiti». Ora seguono la stessa regola delle altre ore di sostegno: con il flag sulla classe si sostituiscono (affiancamento), senza flag compaiono fra i non sostituiti (con l'indicazione del gruppo, es. «2ª B·FR») e si possono sostituire a mano.
+- Caso di partenza: Pacetti assente di venerdì, con il flag su 3B, aveva la 1ª in 3B·SP scoperta senza avviso.
+
 ### 28.10.2026e — n. 96
 - **Importa ricevimenti (R)** (scheda Orario, sotto «Scarica l'orario»): legge il file `.json` scaricato dalla webapp «Ricevimento Mestica» (o un orario Excel con le R) e aggiorna **solo** le ore di ricevimento: le ore libere segnate R diventano R, le R non più presenti nel file tornano libere; le ore già occupate in SOStituto non si toccano e vengono elencate come «non applicabili». Prima di applicare mostra il riepilogo e salva un'istantanea (Altro → Backup); se c'è un prospetto in corso lo ricalcola.
 - Verificato con prove su JSON ed Excel (aggiunte, rimozioni, conflitti, docenti non trovati, reimportazione identica = nessuna modifica).

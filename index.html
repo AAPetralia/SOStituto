@@ -1098,11 +1098,13 @@ function generaProspetto(o, giorno, assenti, opts){
     for(const h of ore){
       const st=statoCella(doc,giorno,h,o.ore);
       if(cellaInGita(st,h)) continue;   /* la classe è in gita: non c'è nulla da coprire */
-      if(st.t==="CLASSE"||st.t==="ARTIC"||st.t==="AR"){
+      if(st.t==="LINGUA" && !sost) continue;   /* la cella «gruppo lingua» è solo del sostegno */
+      if(st.t==="CLASSE"||st.t==="ARTIC"||st.t==="AR"||st.t==="LINGUA"){
         // il sostegno assente NON si sostituisce (salvo flag) SOLO per le sue ore di sostegno;
-        // l'ora di AR (attività alternativa) è lezione vera → si copre come un curricolare
+        // l'ora di AR (attività alternativa) è lezione vera → si copre come un curricolare.
+        // Vale anche per le ore in un gruppo di seconda lingua (3B·SP, 2B·FR): è sempre il sostegno nella classe.
         if(sost && st.t!=="AR"){
-          const cl = st.det || st.a;
+          const cl = st.det || st.a || st.classe;
           if(opts.flag && new Set(opts.flag).has(a.nome+"|"+cl)){
             slot.push({h, a:doc, classe:cl, tipo:"AFFIANCAMENTO", lingua:null});
           } else if((a.nome+"|"+h) in ovr){
@@ -1110,7 +1112,7 @@ function generaProspetto(o, giorno, assenti, opts){
                vale solo per questa ora, di questo giorno — non è un flag permanente */
             slot.push({h, a:doc, classe:cl, tipo:"AFFIANCAMENTO", lingua:null});
           } else {
-            note.push({h, nome:a.nome, classe:cl});
+            note.push({h, nome:a.nome, classe:cl, gruppoL:(st.t==="LINGUA"?st.lingua:"")});
           }
           continue;
         }
@@ -1647,7 +1649,7 @@ function stampaProspetto(){
 
   const nonSost = (p.note||[]).length
     ? `<div class="pr-note">Sostegni assenti non sostituiti (la classe ha il docente curricolare): ${
-        p.note.map(n=>esc(n.nome)+" — "+n.h+"ª ora ("+esc(fmtCl(n.classe))+")").join("; ")}</div>` : "";
+        p.note.map(n=>esc(n.nome)+" — "+n.h+"ª ora ("+esc(fmtCl(n.classe))+(n.gruppoL?"·"+esc(n.gruppoL):"")+")").join("; ")}</div>` : "";
   const copPr = (p.coperte||[]).length
     ? `<div class="pr-note">Ore senza sostituzione perché la classe è già coperta dal potenziamento assegnato: ${
         p.coperte.slice().sort((a,b)=>a.h-b.h).map(c=>c.h+"ª ora "+esc(fmtCl(c.classe))+" ("+esc(c.a.nome)+") — "+esc(c.da)).join("; ")}</div>` : "";
@@ -3194,8 +3196,8 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "28.10.2026e";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
-const NUMERO_VERSIONE = 96;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
+const VERSIONE = "29.10.2026a";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const NUMERO_VERSIONE = 97;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -5236,7 +5238,7 @@ function renderProspettoHTML(p){
     p.note.forEach(n=>{
       const key=n.nome+"|"+n.h, aperto=S.apertoRiga===key;
       html += `<div class="prow" onclick="apriAlternative('${esc(n.nome)}',${n.h})">
-        <span class="ph">${n.h}ª</span><span class="pcl">${esc(fmtCl(n.classe))}</span>
+        <span class="ph">${n.h}ª</span><span class="pcl">${esc(fmtCl(n.classe))}${n.gruppoL?"·"+esc(n.gruppoL):""}</span>
         <span class="pto">${esc(n.nome)} <b class="chev">${aperto?'▲':'▾'}</b></span><span class="pmot">non sostituito</span></div>`;
       if(aperto){
         const tutte=alternativeNota(n), espanso=S.altTutte===key, alt=espanso?tutte:tutte.slice(0,3);
