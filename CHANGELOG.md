@@ -5,6 +5,13 @@ Si legge in alto nell'app, sotto il titolo. Da qui in avanti si aggiorna a ogni 
 
 ## Da qui in avanti (dettaglio certo)
 
+### 31.10.2026a — n. 98
+- **Aggiungi supplenza** (Altro → Cambio e aggiunta docente, nuova sezione): per un periodo (astensione, malattia lunga…) scegli il titolare, scrivi il supplente e le date «dal» e «fino al» (la fine si può lasciare vuota). Nel periodo il titolare esce dall'orario e il supplente **subentra in automatico con le sue classi**: ore in classe, sostegni intoccabili, gruppi lingua, potenziamento assegnato, Pno. Finito il periodo il titolare rientra com'era.
+- L'orario segue la **data su cui lavori** (quella scelta in Sostituzioni): preparando il prospetto di domani si vede già lo stato di domani; le previsioni dei giorni futuri usano l'orario giusto per ciascun giorno.
+- Le supplenze sono in elenco (programmata / in corso / conclusa): si cambiano le date o si tolgono, con ripristino immediato. Non si possono sovrapporre due supplenze sullo stesso titolare, ma una può dare il cambio a un'altra.
+- Restano alla persona e **non** passano al supplente: storico del registro, recuperi, incompatibilità, assenze note, uscite. Se avevi segnato il titolare assente per quel periodo in Assenze note, vanno tolte.
+- «Scarica l'orario» esporta sempre l'orario di base, con il titolare; dopo una reimportazione dell'orario le supplenze restano e si riattivano secondo le date.
+
 ### 29.10.2026a — n. 97
 - **Correzione: sostegno assente nelle ore di gruppo lingua.** Le ore di un sostegno assente segnate come gruppo di seconda lingua (es. 3B·SP, 2B·FR) venivano ignorate: non comparivano né fra le sostituzioni né fra i «sostegni non sostituiti». Ora seguono la stessa regola delle altre ore di sostegno: con il flag sulla classe si sostituiscono (affiancamento), senza flag compaiono fra i non sostituiti (con l'indicazione del gruppo, es. «2ª B·FR») e si possono sostituire a mano.
 - Caso di partenza: Pacetti assente di venerdì, con il flag su 3B, aveva la 1ª in 3B·SP scoperta senza avviso.

@@ -1489,6 +1489,7 @@ const OPERATIVO_TAB = ["dove","sync"];
 const SENZA_ORARIO = ["importa","altro","sync","backup"];   /* pagine raggiunte dal menu Altro */
 
 function render(){
+  if(S.orario){ try{ sincronizzaSupplenze(S.dataOggi||isoOggi()); }catch(e){ console.error(e); } }
   if(S.orario) salvaStatoOggi();
   // in modalità operativa le schede di configurazione non sono raggiungibili
   if(S.ruolo==="operativo" && SOTTO_ALTRO.includes(S.tab) && !OPERATIVO_TAB.includes(S.tab)) S.tab="altro";
@@ -3196,8 +3197,8 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "29.10.2026a";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
-const NUMERO_VERSIONE = 97;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
+const VERSIONE = "31.10.2026a";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const NUMERO_VERSIONE = 98;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -4344,6 +4345,7 @@ function previsioneGiorno(iso, uscExtra, rec, opz){
   if(!o.giorni.includes(g)) return {data:iso, senzaLezione:true, sost:0, scoperte:0};
   const salva={dataOggi:S.dataOggi, day:S.day, ass:S.assentiOggi, breve:S.breveOggi, ovr:S.override, al:S.alunnoAssenteOggi, pr:S.prospetto, ing:S.ingressiProsp, na:S.noteApplicate, dn:S.daNote};
   try{
+    sincronizzaSupplenze(iso, {tieniProspetto:true, senzaSalvare:true});
     S.dataOggi=iso; S.day=g; S.assentiOggi={}; S.breveOggi={}; S.override={}; S.alunnoAssenteOggi=[]; S.noteApplicate=null;
     applicaAssenzeNote();                                 /* le assenze già comunicate per quel giorno */
     const assenti=Object.keys(S.assentiOggi).map(n=>({nome:n, ore:S.assentiOggi[n]}));
@@ -4368,7 +4370,7 @@ function previsioneGiorno(iso, uscExtra, rec, opz){
              nonSost:Object.keys(per).map(n=>cognomeBreve(n,14)+" "+per[n].h.sort((a,b)=>a-b).map(h=>h+"ª").join(", ")+" ("+[...per[n].cl].join(", ")+")"),
              assentiNoti:assenti.length, testo:testo.slice(0,2500) };
   }catch(err){ return {data:iso, errore:String(err&&err.message||err), sost:0, scoperte:0}; }
-  finally{ S.dataOggi=salva.dataOggi; S.day=salva.day; S.assentiOggi=salva.ass; S.breveOggi=salva.breve; S.override=salva.ovr; S.alunnoAssenteOggi=salva.al; S.prospetto=salva.pr; S.ingressiProsp=salva.ing; S.noteApplicate=salva.na; S.daNote=salva.dn; }
+  finally{ sincronizzaSupplenze(salva.dataOggi, {tieniProspetto:true, senzaSalvare:true}); S.dataOggi=salva.dataOggi; S.day=salva.day; S.assentiOggi=salva.ass; S.breveOggi=salva.breve; S.override=salva.ovr; S.alunnoAssenteOggi=salva.al; S.prospetto=salva.pr; S.ingressiProsp=salva.ing; S.noteApplicate=salva.na; S.daNote=salva.dn; }
 }
 function costruisciPrevisioni(j){
   const oggi=isoOggi(), limite=isoPiuGiorni(oggi,60), out={}, cache={};
@@ -5486,9 +5488,10 @@ function scaricaOrario(){
   righe.push(["",""].concat(...o.giorni.map(()=>o.ore.slice())));
   let ultima=null;
   o.docenti.forEach(d=>{
-    const mat = d.materia!==ultima ? (d.materia||"") : "";
-    ultima=d.materia;
-    righe.push([mat, d.nome].concat(...o.giorni.map(g=>o.ore.map(h=>cellaPerExcel(d.cells[g+"|"+h])))));
+    const spl=supplenzeDi().find(x=>x.attiva && x.supplente===d.nome), matBase=(spl && spl.materiaOrig!=null) ? spl.materiaOrig : d.materia;
+    const mat = matBase!==ultima ? (matBase||"") : "";
+    ultima=matBase;
+    righe.push([mat, nomeDiBase(d.nome)].concat(...o.giorni.map(g=>o.ore.map(h=>cellaPerExcel(d.cells[g+"|"+h])))));
   });
   const ws=XLSX.utils.aoa_to_sheet(righe);
   ws["!merges"]=o.giorni.map((g,i)=>({s:{r:1,c:2+i*o.ore.length}, e:{r:1,c:2+(i+1)*o.ore.length-1}}));
@@ -5729,6 +5732,175 @@ function annullaCambioDocente(){
   S.cd.ris=null; toast("Cambio annullato");
   if(!S.prospetto && Object.keys(S.assentiOggi||{}).length) lanciaProspetto(); else render();
 }
+/* ================= SUPPLENZE A TEMPO =================
+   Un docente si assenta per un lungo periodo (astensione, malattia, aspettativa): per quel periodo
+   un supplente prende la sua cattedra. Il titolare esce dall'orario e il supplente subentra in
+   automatico con le sue classi (ore, sostegni intoccabili, gruppi lingua, potenziamento); finito il
+   periodo il titolare rientra com'era. È la stessa operazione del «subentra», ma legata alle date:
+   l'orario in uso segue il giorno su cui si lavora (la data scelta in Sostituzioni).
+   I record stanno in S.orario.supplenze: {id, titolare, supplente, materia, dal, al, attiva, materiaOrig}. */
+function supplenzeDi(){ return (S.orario && S.orario.supplenze) || []; }
+function supplenzaInCorso(s, iso){ return iso>=s.dal && (!s.al || iso<=s.al); }
+function rinominaInStato(v, n){
+  const o=S.orario;
+  const d=o && o.docenti.find(x=>x.nome===v); if(d) d.nome=n;
+  if(S.lingue) Object.keys(S.lingue).forEach(L=>{ if(S.lingue[L]===v) S.lingue[L]=n; });
+  S.flagOggi=(S.flagOggi||[]).map(k=>nomeInChiave(k,v,n));
+  const mappa=ob=>{ const out={}; for(const k in (ob||{})) out[nomeInChiave(k,v,n)]=ob[k]; return out; };
+  S.linguaSostegno=mappa(S.linguaSostegno);
+  S.potAssign=mappa(S.potAssign);
+  S.potAuto=(S.potAuto||[]).map(k=>nomeInChiave(k,v,n));
+  S.pnoOn=(S.pnoOn||[]).map(k=>nomeInChiave(k,v,n));
+  (S.potMod||[]).forEach(m=>{ if(m.docente===v) m.docente=n; });
+}
+/* porta l'orario nello stato giusto per il giorno `iso`: prima chiude le supplenze finite,
+   poi apre quelle iniziate (così un supplente può dare il cambio a un altro sullo stesso titolare) */
+function sincronizzaSupplenze(iso, opz){
+  const o=S.orario; if(!o || !o.supplenze || !o.supplenze.length) return false;
+  iso = iso || S.dataOggi || isoOggi();
+  let cambiato=false;
+  o.supplenze.forEach(s=>{
+    if(!s.attiva || supplenzaInCorso(s,iso)) return;
+    const d=o.docenti.find(x=>x.nome===s.supplente);
+    if(d){
+      rinominaInStato(s.supplente, s.titolare);
+      if(s.materiaOrig!=null) d.materia=s.materiaOrig;
+    }
+    s.attiva=false; cambiato=true;
+  });
+  o.supplenze.forEach(s=>{
+    if(s.attiva || !supplenzaInCorso(s,iso)) return;
+    const d=o.docenti.find(x=>x.nome===s.titolare);
+    if(!d || o.docenti.some(x=>x.nome===s.supplente)){ s.errore=!d ? "il titolare non è nell'orario" : "c'è già un docente con il nome del supplente"; return; }
+    delete s.errore;
+    s.materiaOrig=d.materia;
+    if(s.materia && s.materia!==d.materia) d.materia=s.materia;
+    rinominaInStato(s.titolare, s.supplente);
+    s.attiva=true; cambiato=true;
+  });
+  if(cambiato){
+    if(!(opz && opz.tieniProspetto)){ S.prospetto=null; S.noteApplicate=null; }
+    if(!(opz && opz.senzaSalvare)) { try{ save(); }catch(_){} }
+  }
+  return cambiato;
+}
+/* nome con cui un docente va scritto nell'orario «di base» (quello esportato): il titolare, non il supplente */
+function nomeDiBase(nome){
+  const s=supplenzeDi().find(x=>x.attiva && x.supplente===nome);
+  return s ? s.titolare : nome;
+}
+function supplenzaPiano(){
+  const f=S.sup||{}, o=S.orario;
+  const sup=String(f.supplente||"").trim().replace(/\s+/g," ");
+  if(!f.titolare || !sup) return {vuoto:true};
+  if(sup.indexOf("|")>=0) return {errore:"Il nome non può contenere il carattere «|»."};
+  if(!f.dal) return {errore:"Scrivi da che giorno subentra."};
+  if(f.al && f.al<f.dal) return {errore:"La data di fine è prima di quella di inizio."};
+  /* se si sceglie chi sta già facendo una supplenza, il titolare è quello vero */
+  const gia=supplenzeDi().find(x=>x.attiva && x.supplente===f.titolare);
+  const titolare = gia ? gia.titolare : f.titolare;
+  if(o.docenti.some(d=>d.nome.trim().toLowerCase()===sup.toLowerCase()))
+    return {errore:"Nell'orario c'è già un docente con questo nome."};
+  if(supplenzeDi().some(x=>x.supplente.trim().toLowerCase()===sup.toLowerCase() && f.dal<=(x.al||"9999-12-31") && (f.al||"9999-12-31")>=x.dal))
+    return {errore:"Questo supplente ha già una supplenza che si sovrappone a questo periodo."};
+  if(titolare.trim().toLowerCase()===sup.toLowerCase()) return {errore:"Il supplente ha lo stesso nome del titolare."};
+  const sov=supplenzeDi().find(x=>x.titolare===titolare && f.dal<=(x.al||"9999-12-31") && (f.al||"9999-12-31")>=x.dal);
+  if(sov) return {errore:"Si sovrappone alla supplenza di "+sov.supplente+" ("+dataBreve(sov.dal)+(sov.al?" → "+dataBreve(sov.al):" → senza fine")+"): cambia prima le sue date."};
+  const base=supplenzeDi().find(x=>x.attiva && x.titolare===titolare);
+  const doc=o.docenti.find(d=>d.nome===(base?base.supplente:titolare));
+  let ore=0; if(doc) for(const k in doc.cells){ const t=(doc.cells[k]||{}).t; if(t==="CLASSE"||t==="LINGUA"||t==="ARTIC"||t==="AR") ore++; }
+  return {titolare, sup, dal:f.dal, al:f.al||"", materia:String(f.materia||"").trim(), ore};
+}
+function dataBreve(iso){ return iso ? iso.split("-").reverse().join("/") : ""; }
+function aggiungiSupplenza(){
+  const p=supplenzaPiano(); if(p.vuoto){ toast("Scegli il titolare e scrivi il nome del supplente"); return; }
+  if(p.errore){ toast(p.errore); return; }
+  if(!confirm("Supplenza: "+p.sup+" al posto di "+p.titolare+" dal "+dataBreve(p.dal)+(p.al?" al "+dataBreve(p.al):" (senza data di fine)")+".\n\nNel periodo "+p.titolare+" esce dall'orario e "+p.sup+" subentra con le sue classi; alla fine "+p.titolare+" rientra.\n\nPrima l'app salva un'istantanea: la ritrovi in Altro → Backup.\n\nProcedere?")) return;
+  salvaPreSync(statoDaCondividere());
+  const o=S.orario; o.supplenze=(o.supplenze||[]).concat([{id:"s"+Date.now(), titolare:p.titolare, supplente:p.sup, materia:p.materia, dal:p.dal, al:p.al, attiva:false}]);
+  const att=sincronizzaSupplenze(S.dataOggi||isoOggi());
+  S.sup={titolare:"", supplente:"", materia:"", dal:isoOggi(), al:""};
+  save(); toast("Supplenza registrata"+(att?": subentra già oggi":""));
+  if(!S.prospetto && Object.keys(S.assentiOggi||{}).length) lanciaProspetto(); else render();
+}
+function supplenzaDate(id, campo, val){
+  const o=S.orario, s=supplenzeDi().find(x=>x.id===id); if(!s) return;
+  const nuovo=Object.assign({}, s, {[campo]:val||""});
+  if(!nuovo.dal){ toast("Serve la data di inizio"); render(); return; }
+  if(nuovo.al && nuovo.al<nuovo.dal){ toast("La fine è prima dell'inizio"); render(); return; }
+  const sov=supplenzeDi().find(x=>x.id!==id && x.titolare===s.titolare && nuovo.dal<=(x.al||"9999-12-31") && (nuovo.al||"9999-12-31")>=x.dal);
+  if(sov){ toast("Si sovrappone alla supplenza di "+sov.supplente); render(); return; }
+  s[campo]=val||"";
+  sincronizzaSupplenze(S.dataOggi||isoOggi()); save();
+  if(!S.prospetto && Object.keys(S.assentiOggi||{}).length) lanciaProspetto(); else render();
+}
+function eliminaSupplenza(id){
+  const o=S.orario, s=supplenzeDi().find(x=>x.id===id); if(!s) return;
+  if(!confirm("Tolgo la supplenza di "+s.supplente+" al posto di "+s.titolare+(s.attiva?"? "+s.titolare+" rientra subito nell'orario":"?")+"\n\nPrima l'app salva un'istantanea: la ritrovi in Altro → Backup.")) return;
+  salvaPreSync(statoDaCondividere());
+  if(s.attiva){
+    const d=o.docenti.find(x=>x.nome===s.supplente);
+    if(d){ rinominaInStato(s.supplente, s.titolare); if(s.materiaOrig!=null) d.materia=s.materiaOrig; }
+    S.prospetto=null; S.noteApplicate=null;
+  }
+  o.supplenze=o.supplenze.filter(x=>x.id!==id);
+  save(); toast("Supplenza tolta");
+  if(!S.prospetto && Object.keys(S.assentiOggi||{}).length) lanciaProspetto(); else render();
+}
+function renderSupplenze(){
+  const o=S.orario; if(!o) return "";
+  S.sup = S.sup || {titolare:"", supplente:"", materia:"", dal:isoOggi(), al:""};
+  const f=S.sup, oggi=S.dataOggi||isoOggi();
+  /* il titolare si sceglie fra chi è in orario (chi è già in supplenza è indicato) */
+  const docs=(o.docenti||[]).slice().sort((a,b)=>a.nome.localeCompare(b.nome,"it"));
+  const lista=supplenzeDi().slice().sort((a,b)=>b.dal.localeCompare(a.dal));
+  let out=`<h2 class="sec" style="margin-top:26px">Aggiungi supplenza</h2>
+    <p class="hint" style="margin-top:0">Per un periodo (astensione, malattia lunga…) un supplente prende il posto del collega: <b>subentra in automatico con le sue classi</b> dalla data scelta, e quando il periodo finisce il titolare rientra com'era. Non serve segnare il titolare assente.</p>`;
+  if(lista.length){
+    out+=lista.map(s=>{
+      const stato = s.errore ? `<span style="color:var(--red); font-weight:700">⚠ ${esc(s.errore)}</span>`
+        : s.attiva ? `<span style="color:var(--ok-tx); font-weight:700">● in corso${s.al?"":" · senza data di fine"}</span>`
+        : (s.al && oggi>s.al) ? `<span style="color:var(--ink-soft); font-weight:700">conclusa</span>`
+        : `<span style="color:var(--amber); font-weight:700">programmata</span>`;
+      return `<div class="promemo" style="margin-bottom:8px">
+        <b>${esc(s.supplente)}</b> al posto di <b>${esc(s.titolare)}</b><br>${stato}
+        <div style="display:flex; gap:10px; margin-top:8px; align-items:end; flex-wrap:wrap">
+          <div style="flex:1 1 130px"><label style="font-size:12px; color:var(--ink-soft)">Dal</label><input type="date" class="databig" value="${esc(s.dal)}" onchange="supplenzaDate('${s.id}','dal',this.value)"></div>
+          <div style="flex:1 1 130px"><label style="font-size:12px; color:var(--ink-soft)">Al (vuoto = senza fine)</label><input type="date" class="databig" value="${esc(s.al||"")}" onchange="supplenzaDate('${s.id}','al',this.value)"></div>
+        </div>
+        <span class="chip-ann" style="display:inline-block; margin-top:8px; color:var(--red); font-weight:700; cursor:pointer" onclick="eliminaSupplenza('${s.id}')">🗑 Togli questa supplenza</span></div>`;
+    }).join("");
+  }
+  out+=`<div class="field"><label>Docente da sostituire (titolare)</label>
+      <select onchange="S.sup.titolare=this.value; const d=S.orario.docenti.find(x=>x.nome===this.value); S.sup.materia=d?(d.materia||''):''; render()">
+        <option value="">— scegli docente —</option>
+        ${docs.map(d=>`<option value="${esc(d.nome)}"${d.nome===f.titolare?" selected":""}>${esc(d.nome)} · ${esc(d.materia||"")}</option>`).join("")}
+      </select></div>`;
+  if(f.titolare){
+    out+=`<div class="field"><label>Nome del supplente</label>
+        <input type="text" value="${esc(f.supplente||"")}" placeholder="es. ROSSI Maria" autocomplete="off" oninput="S.sup.supplente=this.value; aggiornaAnteprimaSup()">
+        <p class="hint" style="margin:5px 0 0">Come gli altri nell'orario: cognome in MAIUSCOLO e poi il nome.</p></div>
+      <div class="field"><label>Materia</label>
+        <input type="text" value="${esc(f.materia||"")}" oninput="S.sup.materia=this.value">
+        <p class="hint" style="margin:5px 0 0">Lasciala così se il supplente ha la stessa cattedra.</p></div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap">
+        <div class="field" style="flex:1 1 140px"><label>Subentra dal</label><input type="date" class="databig" value="${esc(f.dal||isoOggi())}" onchange="S.sup.dal=this.value; aggiornaAnteprimaSup()"></div>
+        <div class="field" style="flex:1 1 140px"><label>Fino al (facoltativo)</label><input type="date" class="databig" value="${esc(f.al||"")}" onchange="S.sup.al=this.value; aggiornaAnteprimaSup()"></div>
+      </div>
+      <div id="supprev"></div>`;
+  }
+  return out;
+}
+function supplenzaAnteprima_html(p){
+  if(p.vuoto) return `<p class="hint">Scrivi il nome del supplente: qui compare cosa cambierà.</p>`;
+  if(p.errore) return `<div class="promemo" style="background:var(--tint-red); border-left-color:var(--red)">${esc(p.errore)}</div>`;
+  return `<div class="promemo"><b>${esc(p.sup)}</b> al posto di <b>${esc(p.titolare)}</b> · dal ${dataBreve(p.dal)}${p.al?" al "+dataBreve(p.al):" (senza data di fine)"}<br>
+    <span style="color:var(--ink-soft)">${p.ore} ore settimanali in classe passano a ${esc(p.sup)}, con sostegni intoccabili, gruppi lingua e potenziamento. Nel periodo ${esc(p.titolare)} non compare nell'orario; poi rientra.</span><br>
+    <span style="color:var(--ink-soft)">Se hai già inserito assenze note per ${esc(p.titolare)} in quel periodo, toglile (Altro → Assenze note): non servono più.</span></div>
+    <button class="btn" style="width:100%; margin-top:4px" onclick="aggiungiSupplenza()">Aggiungi la supplenza</button>`;
+}
+function aggiornaAnteprimaSup(){ const b=el("supprev"); if(b) b.innerHTML=supplenzaAnteprima_html(supplenzaPiano()); }
+
 function renderCambioDocente(){
   const o=S.orario;
   S.cd = S.cd || {vecchio:"", nuovo:"", materia:"", modo:"subentra", dal:isoOggi(), ris:null};
@@ -5770,10 +5942,12 @@ function renderCambioDocente(){
     }
     out+=`<div id="cdprev"></div>`;
   }
+  out+=renderSupplenze();
   out+=renderModificaOrario();
   out+=renderDocentiExtra();
   el("main").innerHTML=out;
   if(c.vecchio) aggiornaAnteprimaCD();
+  if(S.sup && S.sup.titolare) aggiornaAnteprimaSup();
 }
 /* ---- modifica a mano di UNA cella dell'orario di un docente (scambio d'ora, cambio di classe) ----
    Si lavora sull'orario in memoria, senza reimportare. Ogni modifica è registrata in
@@ -6070,7 +6244,7 @@ function onFile(ev){
       }
       html += `<button class="btn" style="margin-top:12px" id="confirm">Salva questo orario</button>`;
       el("report").innerHTML=html;
-      el("confirm").addEventListener("click", ()=>{ const ex=docentiExtra().filter(e=>!parsed.docenti.some(d=>d.nome===e.nome)); if(ex.length) parsed.docentiExtra=ex; const mod=(S.orario&&S.orario.modifiche)||[]; if(mod.length) parsed.modifiche=mod; S.orario=parsed; save(); S.tab="orario"; S.day=parsed.giorni[0]; S.selDoc=""; S.selClasse=""; render(); });
+      el("confirm").addEventListener("click", ()=>{ const ex=docentiExtra().filter(e=>!parsed.docenti.some(d=>d.nome===e.nome)); if(ex.length) parsed.docentiExtra=ex; const mod=(S.orario&&S.orario.modifiche)||[]; if(mod.length) parsed.modifiche=mod; const sup=supplenzeDi().map(x=>Object.assign({},x,{attiva:false})); if(sup.length) parsed.supplenze=sup; S.orario=parsed; save(); S.tab="orario"; S.day=parsed.giorni[0]; S.selDoc=""; S.selClasse=""; render(); });
     }catch(err){
       el("report").innerHTML=`<div class="flag" style="white-space:pre-wrap; line-height:1.5">Non riesco a leggere il file: ${esc(err.message)}</div>`;
     }
