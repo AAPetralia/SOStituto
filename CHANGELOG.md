@@ -5,6 +5,11 @@ Si legge in alto nell'app, sotto il titolo. Da qui in avanti si aggiorna a ogni 
 
 ## Da qui in avanti (dettaglio certo)
 
+### 02.11.2026a — n. 99
+- **Ricevimento (R) e supplenze a pagamento.** Il ricevimento mattutino c'è solo nella **1ª e 3ª settimana del mese** (giorni 1-7 e 15-21: la 1ª e la 3ª volta che quel giorno ricorre nel mese). In quelle settimane l'ora R **non viene più usata per le supplenze**, nemmeno a pagamento: il docente risulta non disponibile (nella griglia resta «R»). Nelle altre settimane il ricevimento non c'è e l'ora vale come una normale ora libera (buca, o «entra prima / esce dopo» se è ai margini del servizio), quindi può essere proposta a pagamento come le altre.
+- Se scegli a mano un docente in ora di ricevimento (1ª/3ª settimana) resta l'avviso «è la sua ora di ricevimento».
+- Verificato con prove su date di tutte e quattro le settimane (nov 2026).
+
 ### 31.10.2026a — n. 98
 - **Aggiungi supplenza** (Altro → Cambio e aggiunta docente, nuova sezione): per un periodo (astensione, malattia lunga…) scegli il titolare, scrivi il supplente e le date «dal» e «fino al» (la fine si può lasciare vuota). Nel periodo il titolare esce dall'orario e il supplente **subentra in automatico con le sue classi**: ore in classe, sostegni intoccabili, gruppi lingua, potenziamento assegnato, Pno. Finito il periodo il titolare rientra com'era.
 - L'orario segue la **data su cui lavori** (quella scelta in Sostituzioni): preparando il prospetto di domani si vede già lo stato di domani; le previsioni dei giorni futuri usano l'orario giusto per ciascun giorno.

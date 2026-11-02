@@ -829,6 +829,14 @@ function statoPotMod(m){
 }
 
 
+/* settimana di ricevimento: l'n-esimo giorno della settimana nel mese (giorni 1-7 = 1ª, 15-21 = 3ª).
+   Il ricevimento mattutino c'è solo nella 1ª e nella 3ª. */
+function settimanaRicevimento(iso){
+  if(!iso) return false;
+  const n = Math.ceil(parseInt(iso.slice(8,10),10)/7);
+  return n===1 || n===3;
+}
+
 /* ---------- stato posizionale: buca vs fuori servizio ---------- */
 function oreServizio(doc,g,ore){
   // il ricevimento (RICE) NON è servizio: cade in buca o ai margini, quindi lo escludo dal range
@@ -836,7 +844,7 @@ function oreServizio(doc,g,ore){
   return hs.length ? [Math.min(...hs), Math.max(...hs)] : [null,null];
 }
 function statoCella(doc,g,h,ore){
-  const cl = cellaEff(doc,g,h) || {t:"VUOTA"};
+  let cl = cellaEff(doc,g,h) || {t:"VUOTA"};
   if(cl.t==="DISP"){
     /* potenziamento marcato a mano come NON disponibile (progetti, impegni fuori sede):
        correzione sull'orario importato, senza toccare il file Excel */
@@ -844,7 +852,13 @@ function statoCella(doc,g,h,ore){
     /* sospeso a tempo: stesso effetto del Pno ma solo per il periodo indicato */
     if(sospesaIn(doc,g,h)) return {t:"NOND", det:"Sosp", manuale:true, sospesa:true};
   }
-  if(cl.t==="RICE") return {t:"BUCA", rice:true};    /* ricevimento: disponibile come una buca, ma marcato */
+  if(cl.t==="RICE"){
+    /* ricevimento: si svolge SOLO nella 1ª e 3ª settimana del mese. In quelle settimane l'ora è del
+       ricevimento e NON si usa per le supplenze (nemmeno a pagamento); nelle altre il ricevimento non
+       c'è e l'ora vale come una normale ora libera (buca o fuori servizio, secondo la posizione). */
+    if(settimanaRicevimento(S.dataOggi)) return {t:"NOND", det:"Ricev", rice:true};
+    cl = {t:"VUOTA"};
+  }
   if(cl.vacante) return {t:"FUORI", vacante:true};   /* ora di potenziamento spostata altrove: il docente non c'è */
   if(cl.t!=="VUOTA") return cl;
   const [a,b]=oreServizio(doc,g,ore);
@@ -1143,7 +1157,7 @@ function generaProspetto(o, giorno, assenti, opts){
   //                 e i loro nomi risultano impegnati per il resto del calcolo.
   const esitiMap = {};
   const isFuori = (nome,h,motivo)=>{ if(motivo!=="recupero" && !/pagamento|banca ore/.test(motivo||"")) return false; const d=o.docenti.find(x=>x.nome===nome); return !!(d && statoLinguaEff(d,giorno,h,o.ore).t==="FUORI"); };
-  const isRice = (nome,h)=>{ const d=o.docenti.find(x=>x.nome===nome); return !!(d && (d.cells[giorno+"|"+h]||{}).t==="RICE"); };
+  const isRice = (nome,h)=>{ const d=o.docenti.find(x=>x.nome===nome); return !!(d && (d.cells[giorno+"|"+h]||{}).t==="RICE" && settimanaRicevimento(S.dataOggi)); };
   for(const s of slot){
     const key = s.a.nome+"|"+s.h;
     if(key in override && override[key]){          /* scelta manuale di un docente */
@@ -1439,7 +1453,7 @@ function cellShort(cl){
     case "AR": return "AR "+cl.det;
     case "LINGUA": return cl.classe+"·"+cl.lingua;
     case "DISP": return cl.det;
-    case "NOND": return cl.det==="Sosp" ? "Sosp" : "Pno";
+    case "NOND": return cl.det==="Sosp" ? "Sosp" : (cl.det==="Ricev" ? "R" : "Pno");
     case "EMERG": return cl.det;
     case "BUCA": return "—";
     case "RICE": return "R";
@@ -1466,7 +1480,7 @@ function cellDesc(cl){
     case "AR": return "attività alternativa in "+fmtCl(cl.det);
     case "LINGUA": return "sostegno in "+fmtCl(cl.classe)+" · gruppo "+(cl.lingua==="FR"?"francese":"spagnolo");
     case "DISP": return cl.det==="P" ? "potenziamento — a disposizione" : "potenziamento ("+cl.det.replace("·"," in ")+") — a disposizione";
-    case "NOND": return cl.det==="Sosp" ? "potenziamento sospeso temporaneamente — non disponibile" : "progetti extracurricolari — non disponibile";
+    case "NOND": return cl.det==="Sosp" ? "potenziamento sospeso temporaneamente — non disponibile" : (cl.det==="Ricev" ? "ricevimento mattutino (1ª/3ª settimana) — non disponibile" : "progetti extracurricolari — non disponibile");
     case "EMERG": return (cl.det==="VP"?"ore di vicepresidenza":"ore commissione viaggi")+" — solo emergenza";
     case "BUCA": return "ora libera (a disposizione)";
     case "RICE": return "ricevimento mattutino (disponibile, ma è il suo ricevimento)";
@@ -3197,8 +3211,8 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "31.10.2026a";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
-const NUMERO_VERSIONE = 98;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
+const VERSIONE = "02.11.2026a";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const NUMERO_VERSIONE = 99;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
