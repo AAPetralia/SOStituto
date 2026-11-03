@@ -960,9 +960,11 @@ function candidati(o, classe, g, h, assenteObj, ctx, lingua){
     if(assenteAllOra(ctx, d.nome, h)) continue;
     if(ctx.occupati[g+"|"+h] && ctx.occupati[g+"|"+h].has(d.nome)) continue;  /* già impegnato */
     const st = statoLinguaEff(d,g,h,o.ore);
-    /* delegazione: i docenti della classe da cui parte una delegazione (sostegno e potenziamento
-       assegnato compresi) restano con gli alunni che non escono: non sono una risorsa per le altre classi */
-    if(ctx.classeDelegata){
+    /* delegazione: i docenti NON di sostegno della classe da cui parte una delegazione (potenziamento
+       assegnato compreso) restano con gli alunni che non escono: non sono una risorsa per le altre classi */
+    if(ctx.classeDelegata && !isSost(d)){
+      /* il SOSTEGNO resta una via residuale (criterio h) come in un giorno normale: la classe in delegazione
+         resta con il suo curricolare, quindi il sostegno può essere spostato */
       const sua = st.t==="ARTIC" ? [st.a,st.b] : st.t==="DISP" ? [potAssEff(d,g,h)] : [st.det||st.classe];
       if(sua.some(c=>c && c!==classe && ctx.classeDelegata(c,h))) continue;
     }
@@ -2915,7 +2917,7 @@ function motivoNonProposto(e, nome){
   if(assenteAllOra(ctx, nome, h)) return "risulta assente a quest'ora (assenza, permesso breve, o accompagnatore di un'uscita).";
   if(ctx.occupati[g+"|"+h] && ctx.occupati[g+"|"+h].has(nome)) return "è già scelto per un'altra sostituzione alla stessa ora (o sta già coprendo una cella).";
   const st=statoLinguaEff(d,g,h,o.ore);
-  if(ctx.classeDelegata){
+  if(ctx.classeDelegata && !isSost(d)){
     const sua = st.t==="ARTIC" ? [st.a,st.b] : st.t==="DISP" ? [potAssEff(d,g,h)] : [st.det||st.classe];
     const dl = sua.find(c=>c && c!==classe && ctx.classeDelegata(c,h));
     if(dl) return "la sua classe "+dl+" è in uscita con delegazione: resta con gli alunni che non escono.";
@@ -3242,8 +3244,8 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "03.11.2026b";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
-const NUMERO_VERSIONE = 101;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
+const VERSIONE = "03.11.2026c";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const NUMERO_VERSIONE = 102;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,

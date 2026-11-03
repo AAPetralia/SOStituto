@@ -5,6 +5,10 @@ Si legge in alto nell'app, sotto il titolo. Da qui in avanti si aggiorna a ogni 
 
 ## Da qui in avanti (dettaglio certo)
 
+### 03.11.2026c — n. 102
+- **Uscita con delegazione: il sostegno delle classi coinvolte torna disponibile come «sostegno spostato».** Prima i sostegni delle classi da cui parte una delegazione erano esclusi del tutto. Ma la classe resta a scuola con una parte degli alunni e con il suo curricolare, quindi il sostegno (che non accompagna) può essere spostato, come in un giorno normale (criterio H, via residuale, in fondo all'elenco). Restano esclusi nelle classi in delegazione i docenti non di sostegno (es. potenziamento assegnato alla classe).
+- Caso: Clementi (sostegno 3A) per la 4ª ora di mercoledì 4/11, con la 3A in delegazione (ore 2-5): ora compare come «⚠ unico sostegno di 3A».
+
 ### 03.11.2026b — n. 101
 - **«Perché manca un docente?»** Nell'elenco delle alternative di una cella (tocca la riga della sostituzione) in fondo c'è un menù con i docenti che NON compaiono fra le alternative: sceglierne uno mostra il motivo (incompatibile, assente o accompagnatore, già impegnato alla stessa ora, classe in uscita con delegazione, flag «non toccare», criterio disattivato, ora fuori servizio non attaccata al suo orario…).
 - Caso di partenza (backup del 03/11): Clementi non proposta per la 4ª ora di mercoledì 4/11 perché la 3A è in uscita **con delegazione** (ore 2-5): il sostegno resta con gli alunni che non escono. Era il comportamento previsto, non un errore.
