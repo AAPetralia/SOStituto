@@ -5,6 +5,10 @@ Si legge in alto nell'app, sotto il titolo. Da qui in avanti si aggiorna a ogni 
 
 ## Da qui in avanti (dettaglio certo)
 
+### 03.11.2026a — n. 100
+- **Correzione: sostegno in un gruppo di seconda lingua mai proposto come «sostegno spostato».** Se un sostegno era in un'ora assegnata a un gruppo lingua (es. 3A·SP, 2B·FR — anche solo con l'assegnazione in «Gruppi di seconda lingua», che nella griglia dell'orario continua a mostrarsi come classe), il motore non lo considerava affatto: non compariva nemmeno in «mostra tutte» come ultima spiaggia. Ora vale come un sostegno in classe: «sostegno spostato da 3A» o «⚠ unico sostegno di 3A», con le stesse tutele (flag «non toccare», altri sostegni nella classe, curricolare assente in classe).
+- Caso di partenza: Clementi (sostegno 3A) non proposta per la 4ª ora di mercoledì.
+
 ### 02.11.2026a — n. 99
 - **Ricevimento (R) e supplenze a pagamento.** Il ricevimento mattutino c'è solo nella **1ª e 3ª settimana del mese** (giorni 1-7 e 15-21: la 1ª e la 3ª volta che quel giorno ricorre nel mese). In quelle settimane l'ora R **non viene più usata per le supplenze**, nemmeno a pagamento: il docente risulta non disponibile (nella griglia resta «R»). Nelle altre settimane il ricevimento non c'è e l'ora vale come una normale ora libera (buca, o «entra prima / esce dopo» se è ai margini del servizio), quindi può essere proposta a pagamento come le altre.
 - Se scegli a mano un docente in ora di ricevimento (1ª/3ª settimana) resta l'avviso «è la sua ora di ricevimento».

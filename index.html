@@ -1007,16 +1007,18 @@ function candidati(o, classe, g, h, assenteObj, ctx, lingua){
          può raggiungere (la tutela di dove si trova è il controllo su st.det più sotto) */
       const qui = (st.t==="CLASSE" && st.det===classe) || (st.t==="LINGUA" && st.classe===classe);
       if(flagged && qui) continue;
-      if(st.t==="CLASSE"){
+      if(st.t==="CLASSE" || st.t==="LINGUA"){
+        /* il sostegno in un gruppo di seconda lingua (3A·FR, 3A·SP) è in classe come gli altri:
+           vale come sostegno spostato dalla sua classe (prima veniva ignorato e non era mai proposto) */
+        const sua = st.det || st.classe;
         if(PR.h==null) continue;                              /* criterio disattivato: salta */
-        if(ctx.flag.has(d.nome+"|"+st.det)) continue;         /* non toccare il suo caso grave */
-        /* un sostegno spostato fa vigilanza/accompagnamento: vale anche per i gruppi lingua */
-        const altri = sostSuClasse(o, st.det, g, h).filter(n=>n!==d.nome);
+        if(ctx.flag.has(d.nome+"|"+sua)) continue;            /* non toccare il suo caso grave */
+        const altri = sostSuClasse(o, sua, g, h).filter(n=>n!==d.nome);
         // se nella SUA classe c'è un curricolare assente, quel sostegno serve LÌ → penalizza lo spostamento
-        const servaCasa = curricolareAssenteInClasse(o, st.det, g, h, ctx, d.nome);
-        if(!altri.length) pool.push([rango(PR.h,2),...tie,"⚠ unico sostegno di "+st.det,d.nome]);
-        else if(servaCasa) pool.push([rango(PR.h,1),...tie,"sostegno spostato da "+st.det+" (serviva lì)",d.nome]);
-        else pool.push([rango(PR.h,0),...tie,"sostegno spostato da "+st.det,d.nome]);
+        const servaCasa = curricolareAssenteInClasse(o, sua, g, h, ctx, d.nome);
+        if(!altri.length) pool.push([rango(PR.h,2),...tie,"⚠ unico sostegno di "+sua,d.nome]);
+        else if(servaCasa) pool.push([rango(PR.h,1),...tie,"sostegno spostato da "+sua+" (serviva lì)",d.nome]);
+        else pool.push([rango(PR.h,0),...tie,"sostegno spostato da "+sua,d.nome]);
         continue;
       }
       /* un sostegno in ora BUCA è fuori servizio come chiunque → cade nel pagamento sotto */
@@ -3211,8 +3213,8 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "02.11.2026a";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
-const NUMERO_VERSIONE = 99;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
+const VERSIONE = "03.11.2026a";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const NUMERO_VERSIONE = 100;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
