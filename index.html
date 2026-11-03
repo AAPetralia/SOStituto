@@ -2905,6 +2905,35 @@ function alternativeCella(e){
   });
 }
 function p_corrente(){ return S.prospetto; }
+/* Diagnostica: perché un docente NON compare fra le alternative di una cella? Rispecchia, nello stesso ordine,
+   i filtri di candidati(), ma solo per spiegare (non influisce sulle scelte). */
+function motivoNonProposto(e, nome){
+  const o=S.orario, d=o.docenti.find(x=>x.nome===nome); if(!d) return "docente non trovato";
+  const g=p_corrente().giorno, h=e.h, classe=e.classe, lingua=e.lingua||null;
+  const ctx=ricostruisciCtx(o, p_corrente(), e), PR=priorityMap();
+  if(incompatibile(nome, classe)) return "è segnato come incompatibile con la "+classe+" (Altro → Incompatibilità).";
+  if(assenteAllOra(ctx, nome, h)) return "risulta assente a quest'ora (assenza, permesso breve, o accompagnatore di un'uscita).";
+  if(ctx.occupati[g+"|"+h] && ctx.occupati[g+"|"+h].has(nome)) return "è già scelto per un'altra sostituzione alla stessa ora (o sta già coprendo una cella).";
+  const st=statoLinguaEff(d,g,h,o.ore);
+  if(ctx.classeDelegata){
+    const sua = st.t==="ARTIC" ? [st.a,st.b] : st.t==="DISP" ? [potAssEff(d,g,h)] : [st.det||st.classe];
+    const dl = sua.find(c=>c && c!==classe && ctx.classeDelegata(c,h));
+    if(dl) return "la sua classe "+dl+" è in uscita con delegazione: resta con gli alunni che non escono.";
+  }
+  const cella = "a quest'ora è «"+cellDesc(st)+"»";
+  if(isSost(d)){
+    const sua = st.det || st.classe;
+    if(st.t==="CLASSE" || st.t==="LINGUA"){
+      if((e.classe===sua) && (S.flagOggi||[]).includes(nome+"|"+classe)) return "ha il flag «non toccare» su "+classe+" ed è già lì.";
+      if(PR.h==null) return "è in "+sua+" e potrebbe solo come «sostegno spostato», ma il criterio H è disattivato (Altro → Configurazione criteri).";
+      if((S.flagOggi||[]).includes(nome+"|"+sua)) return "ha il flag «non toccare» sulla sua classe "+sua+" (caso grave da presidiare).";
+    }
+  }
+  if(PR.g==null && (st.t==="BUCA"||st.t==="FUORI")) return cella+", ma il criterio G (pagamento) è disattivato.";
+  if(st.t==="FUORI") return cella+": fuori servizio e non attaccato al suo orario (entra prima / esce dopo vale solo per l'ora subito prima del primo turno o subito dopo l'ultimo).";
+  return cella+": non rientra in nessun criterio.";
+}
+
 /* candidati per un'ora di sostegno assente che per regola non verrebbe sostituita */
 function alternativeNota(n){
   const o=S.orario; const doc=o.docenti.find(d=>d.nome===n.nome); if(!doc) return [];
@@ -3213,8 +3242,8 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "03.11.2026a";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
-const NUMERO_VERSIONE = 100;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
+const VERSIONE = "03.11.2026b";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const NUMERO_VERSIONE = 101;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -5244,6 +5273,20 @@ function renderProspettoHTML(p){
           }
         } else {
           html += `<div class="alt-lbl">Nessun altro docente disponibile per quest'ora.</div>`;
+        }
+        /* diagnostica: «perché manca X?» */
+        {
+          const inLista = new Set(tutte.map(a=>a.nome).concat([e.scelto, e.a.nome]));
+          const mancanti = (S.orario.docenti||[]).filter(d=>!inLista.has(d.nome)).sort((a,b)=>a.nome.localeCompare(b.nome));
+          const sel = (S.diagNome && mancanti.some(d=>d.nome===S.diagNome)) ? S.diagNome : "";
+          html += `<div class="alt-lbl" style="margin-top:10px" onclick="event.stopPropagation()">🔍 Perché manca un docente?
+            <select style="width:100%; margin-top:4px; padding:6px; border-radius:8px; border:1px solid var(--line, #ccc); background:transparent; color:inherit; font:inherit"
+              onclick="event.stopPropagation()" onchange="S.diagNome=this.value; render()">
+              <option value="">— scegli —</option>
+              ${mancanti.map(d=>`<option value="${esc(d.nome)}"${d.nome===sel?" selected":""}>${esc(d.nome)}</option>`).join("")}
+            </select>
+            ${sel ? `<div style="margin-top:6px; font-size:12.5px"><b>${esc(sel)}</b> ${esc(motivoNonProposto(e, sel))}</div>` : ""}
+          </div>`;
         }
         html += `</div>`;
       }

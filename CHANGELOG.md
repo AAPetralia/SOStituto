@@ -5,6 +5,10 @@ Si legge in alto nell'app, sotto il titolo. Da qui in avanti si aggiorna a ogni 
 
 ## Da qui in avanti (dettaglio certo)
 
+### 03.11.2026b — n. 101
+- **«Perché manca un docente?»** Nell'elenco delle alternative di una cella (tocca la riga della sostituzione) in fondo c'è un menù con i docenti che NON compaiono fra le alternative: sceglierne uno mostra il motivo (incompatibile, assente o accompagnatore, già impegnato alla stessa ora, classe in uscita con delegazione, flag «non toccare», criterio disattivato, ora fuori servizio non attaccata al suo orario…).
+- Caso di partenza (backup del 03/11): Clementi non proposta per la 4ª ora di mercoledì 4/11 perché la 3A è in uscita **con delegazione** (ore 2-5): il sostegno resta con gli alunni che non escono. Era il comportamento previsto, non un errore.
+
 ### 03.11.2026a — n. 100
 - **Correzione: sostegno in un gruppo di seconda lingua mai proposto come «sostegno spostato».** Se un sostegno era in un'ora assegnata a un gruppo lingua (es. 3A·SP, 2B·FR — anche solo con l'assegnazione in «Gruppi di seconda lingua», che nella griglia dell'orario continua a mostrarsi come classe), il motore non lo considerava affatto: non compariva nemmeno in «mostra tutte» come ultima spiaggia. Ora vale come un sostegno in classe: «sostegno spostato da 3A» o «⚠ unico sostegno di 3A», con le stesse tutele (flag «non toccare», altri sostegni nella classe, curricolare assente in classe).
 - Caso di partenza: Clementi (sostegno 3A) non proposta per la 4ª ora di mercoledì.
