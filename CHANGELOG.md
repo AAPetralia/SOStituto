@@ -5,6 +5,9 @@ Si legge in alto nell'app, sotto il titolo. Da qui in avanti si aggiorna a ogni 
 
 ## Da qui in avanti (dettaglio certo)
 
+### 04.11.2026b — n. 105
+- PDF ricevimenti: i docenti che non sono nell'elenco della scuola (es. un supplente nuovo) compaiono con il nome dell'orario «Cognome Nome» invece che in maiuscolo.
+
 ### 04.11.2026a — n. 104
 - **Nuovo: «Ricevimenti per la segreteria (PDF)»** (Orario → pulsante sotto «Importa ricevimenti»). Genera il PDF «RICEVIMENTO GENITORI» nel formato della scuola: **A3 verticale, tutto in una pagina**, DOCENTE · MATERIA · CLASSE · GIORNO · ORARIO, ordine alfabetico, ore consecutive unite (es. 8:05 - 10:00).
 - È **indipendente dalla webapp**: dalla webapp serve solo il file dei ricevimenti (già importato). Ore R e classi si leggono sempre dall'orario di SOStituto: se sposti o togli un'ora R, ristampi e il PDF esce aggiornato.

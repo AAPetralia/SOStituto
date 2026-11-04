@@ -3236,8 +3236,8 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "04.11.2026a";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
-const NUMERO_VERSIONE = 104;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
+const VERSIONE = "04.11.2026b";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const NUMERO_VERSIONE = 105;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -5515,7 +5515,12 @@ function ricGiornoExtra(txt){
   const t=String(txt||"").trim(), k=t.toUpperCase().slice(0,3);
   return RIC_GIORNI[k] || t;
 }
-function ricNomeDi(d, cfg){ const m=(cfg.nomi[d.nome]||"").trim(); if(m) return m; const df=ricDef(d.nome); return df ? df.nome : d.nome; }
+function ricNomeDi(d, cfg){
+  const m=(cfg.nomi[d.nome]||"").trim(); if(m) return m;
+  const df=ricDef(d.nome); if(df) return df.nome;
+  /* non nell'elenco della scuola: «PUCCI Erika» → «Pucci Erika» */
+  return d.nome.replace(/\b[A-ZÀ-Ý]{3,}\b/g, w=>w.charAt(0)+w.slice(1).toLowerCase());
+}
 function ricMateriaDi(doc, cfg){
   const m = (cfg.materie[doc.nome]||"").trim();
   if(m) return m;
@@ -5642,7 +5647,7 @@ function renderRicPdf(){
   const sorted=docR.slice().sort((a,b)=>(cfg.nomi[a.nome]||a.nome).localeCompare(cfg.nomi[b.nome]||b.nome,"it"));
   const inp=(extra)=>`style="width:100%; padding:7px 8px; border-radius:8px; border:1px solid var(--rule); background:var(--card, transparent); color:inherit; font:inherit; font-size:13px; box-sizing:border-box" ${extra||""}`;
   const esito=S.ricEsito; S.ricEsito=null;
-  const senzaNome=docR.filter(d=>ricNomeDi(d,cfg)===d.nome);
+  const senzaNome=docR.filter(d=>!(cfg.nomi[d.nome]||"").trim() && !ricDef(d.nome));
   el("main").innerHTML=`
     <div class="backlink" onclick="S.tab='orario'; render()">‹ Orario</div>
     <h2 class="sec">Ricevimenti per la segreteria</h2>
