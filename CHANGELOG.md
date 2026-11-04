@@ -5,6 +5,9 @@ Si legge in alto nell'app, sotto il titolo. Da qui in avanti si aggiorna a ogni 
 
 ## Da qui in avanti (dettaglio certo)
 
+### 04.11.2026d — n. 107
+- **Gruppi di seconda lingua: l'elenco mostra tutti i sostegni con la lingua**, non solo quelli indicati a mano. Per ognuno: docente, lingua, giorno, ora, classe e origine («orario» se la cella lo dice già, «a mano» se l'hai indicato qui, con ✕). Ordine per giorno e ora. Con ⚠ le celle la cui classe non è in articolata di lingua in quell'ora secondo i docenti di francese/spagnolo (di solito un'ora sbagliata nell'orario importato).
+
 ### 04.11.2026c — n. 106
 - PDF ricevimenti: Pucci Erika (supplente temporanea di Pacetti) compare con il nome della titolare, «Pacetti Elisa».
 

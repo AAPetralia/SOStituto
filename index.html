@@ -3236,8 +3236,8 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "04.11.2026c";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
-const NUMERO_VERSIONE = 106;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
+const VERSIONE = "04.11.2026d";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const NUMERO_VERSIONE = 107;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -4118,11 +4118,27 @@ function renderLinguaSostegno(){
 
   const daFare = sostegniSenzaLingua(S.orario, S.lingue)
     .filter(x=> !lg[x.nome+"|"+x.g+"|"+x.h]);
-  const assegnati = Object.keys(lg).map(k=>{
-    const [nome,g,h]=k.split("|");
-    const st=statoCella(S.orario.docenti.find(d=>d.nome===nome)||{cells:{}}, g, +h, S.orario.ore);
-    return {nome, g, h:+h, classe: st.det || "?", lingua: lg[k]};
-  }).sort((a,b)=> a.nome.localeCompare(b.nome) || a.g.localeCompare(b.g) || a.h-b.h);
+  /* tutti i sostegni con una lingua: quelle già scritte nell'orario (cella FR/SP) e quelle indicate qui a mano */
+  const ordG=S.orario.giorni, tutti=[], visti=new Set();
+  const gruppoLingua=(g,h)=>{   /* classi che fanno lingua in quell'ora, secondo i docenti di lingua */
+    for(const l of ["FR","SP"]){ const dd=S.lingue&&S.lingue[l] && S.orario.docenti.find(x=>x.nome===S.lingue[l]); const c=dd&&dd.cells[g+"|"+h]; if(c&&c.t==="ARTIC") return [c.a,c.b]; }
+    return null;
+  };
+  S.orario.docenti.forEach(d=>{
+    if(!isSost(d)) return;
+    Object.keys(d.cells).forEach(k=>{
+      const [g,h]=k.split("|"), c=d.cells[k], key=d.nome+"|"+k;
+      let lingua=null, classe=null, origine=null;
+      if(lg[key]){ lingua=lg[key]; classe=c.det||c.classe||"?"; origine="mano"; }
+      else if(c.t==="LINGUA"){ lingua=c.lingua; classe=c.classe; origine="orario"; }
+      if(!lingua || visti.has(key)) return;
+      visti.add(key);
+      const gr=gruppoLingua(g,+h);
+      tutti.push({nome:d.nome, g, h:+h, classe, lingua, origine, dubbia: !!(gr && !gr.includes(classe)) || (!gr && !!(S.lingue&&S.lingue.FR&&S.lingue.SP))});
+    });
+  });
+  tutti.sort((a,b)=> ordG.indexOf(a.g)-ordG.indexOf(b.g) || a.h-b.h || a.classe.localeCompare(b.classe) || a.nome.localeCompare(b.nome));
+  const nMano=tutti.filter(x=>x.origine==="mano").length, nDubbie=tutti.filter(x=>x.dubbia).length;
 
   el("main").innerHTML = `
     <div class="backlink" onclick="S.tab='altro'; render()">‹ Altro</div>
@@ -4152,16 +4168,17 @@ function renderLinguaSostegno(){
           </div>
         </div>`).join("")}</div>`}
 
-    <h2 class="sec">Assegnati${assegnati.length?" ("+assegnati.length+")":""}</h2>
-    ${!assegnati.length ? `<p class="hint" style="margin-top:0">Nessuno ancora.</p>` :
-      `<div class="criteria-list">${assegnati.map(x=>`
+    <h2 class="sec">Sostegni con la lingua (${tutti.length})</h2>
+    <p class="hint" style="margin-top:0">Tutti i sostegni in seconda lingua: quelli già scritti nell'orario (<b>orario</b>) e quelli indicati qui (<b>a mano</b>, con ✕ per toglierli)${nMano?` — a mano: ${nMano}`:""}.${nDubbie?` <b style="color:var(--red)">⚠ ${nDubbie}</b>: la classe non risulta in articolata di lingua in quell'ora (controlla l'orario).`:""}</p>
+    ${!tutti.length ? `<p class="hint" style="margin-top:0">Nessuno.</p>` :
+      `<div class="criteria-list">${tutti.map(x=>`
         <div class="criterion-row">
           <div class="criterion-label">
-            <div class="criterion-code">${esc(cognomeBreve(x.nome))} <span style="color:${x.lingua==='FR'?'var(--teal)':'var(--amber)'}">${x.lingua==='FR'?'francese':'spagnolo'}</span></div>
-            <div class="criterion-desc">${esc(x.g)} · ${x.h}ª · ${esc(fmtCl(x.classe))}</div>
+            <div class="criterion-code">${esc(cognomeBreve(x.nome))} <span style="color:${x.lingua==='FR'?'var(--teal)':'var(--amber)'}">${x.lingua==='FR'?'francese':'spagnolo'}</span>${x.dubbia?' <span style="color:var(--red)" title="la classe non è in articolata di lingua in quest\'ora">⚠</span>':''}</div>
+            <div class="criterion-desc">${esc(x.g)} · ${x.h}ª · ${esc(fmtCl(x.classe))} · ${x.origine==="mano"?"a mano":"orario"}</div>
           </div>
-          <button class="btn ghost" style="padding:7px 12px; font-size:13px; color:var(--red); border-color:var(--red)"
-            onclick="rimuoviLinguaSostegno('${esc(x.nome)}','${x.g}',${x.h})">✕</button>
+          ${x.origine==="mano" ? `<button class="btn ghost" style="padding:7px 12px; font-size:13px; color:var(--red); border-color:var(--red)"
+            onclick="rimuoviLinguaSostegno('${esc(x.nome)}','${x.g}',${x.h})">✕</button>` : ``}
         </div>`).join("")}</div>`}
   `;
 }
