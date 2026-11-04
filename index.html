@@ -579,6 +579,7 @@ function save(){ try{
   localStorage.setItem("sostituto_linguasost", JSON.stringify(S.linguaSostegno||{}));
   localStorage.setItem("sostituto_incompat", JSON.stringify(S.incompatibili||[]));
   localStorage.setItem("sostituto_potauto", JSON.stringify(S.potAuto||[]));
+  localStorage.setItem("sostituto_ricpdf", JSON.stringify(S.ricPdf||null));
   localStorage.setItem("sostituto_ruolo", S.ruolo||"completo");
 }catch(e){} }
 function load(){ try{
@@ -610,6 +611,7 @@ function load(){ try{
   const lgs=localStorage.getItem("sostituto_linguasost"); if(lgs) S.linguaSostegno=JSON.parse(lgs);
   const inc=localStorage.getItem("sostituto_incompat"); if(inc) S.incompatibili=JSON.parse(inc);
   const pau=localStorage.getItem("sostituto_potauto"); if(pau) S.potAuto=JSON.parse(pau);
+  const rpd=localStorage.getItem("sostituto_ricpdf"); if(rpd){ const v=JSON.parse(rpd); if(v) S.ricPdf=v; }
   const ru=localStorage.getItem("sostituto_ruolo"); if(ru) S.ruolo=ru;
 }catch(e){} }
 
@@ -1509,7 +1511,7 @@ function render(){
   document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on", b.dataset.tab===attivo));
   if(!S.orario && !SENZA_ORARIO.includes(S.tab)){ renderVuoto(); return; }
   ({oggi:renderOggi, registro:renderRegistro, orario:renderOrario, altro:renderAltro,
-    dove:renderDove, importa:renderImporta, cambiodoc:renderCambioDocente, uscita:renderUscita, assenze:renderAssenze, backup:renderBackup, potenz:renderPotenziamento, sync:renderSync, flag:renderFlag, recuperi:renderRecuperi, config:renderConfigCriteri, nuovoanno:renderNuovoAnno, uscfoglio:renderUscFoglio, coperture:renderCoperture, assist:renderAssist, linguasost:renderLinguaSostegno, incompat:renderIncompatibili})[S.tab]();
+    ricpdf:renderRicPdf, dove:renderDove, importa:renderImporta, cambiodoc:renderCambioDocente, uscita:renderUscita, assenze:renderAssenze, backup:renderBackup, potenz:renderPotenziamento, sync:renderSync, flag:renderFlag, recuperi:renderRecuperi, config:renderConfigCriteri, nuovoanno:renderNuovoAnno, uscfoglio:renderUscFoglio, coperture:renderCoperture, assist:renderAssist, linguasost:renderLinguaSostegno, incompat:renderIncompatibili})[S.tab]();
   aggiornaBarraSync();
   aggiornaBarraStale();
 }
@@ -1816,7 +1818,7 @@ function statoDaCondividere(){
     pnoOn:S.pnoOn||[], potAssign:S.potAssign||{}, potMod:S.potMod||[], recuperi:S.recuperi||[], bancaOre:S.bancaOre||[],
     /* da tenere allineati con datiBackup(): tutto ciò che un altro dispositivo
        deve ritrovare, non solo l'orario e il registro */
-    assistenti:S.assistenti||[], configCriteri:S.configCriteri||null, potAuto:S.potAuto||[],
+    assistenti:S.assistenti||[], configCriteri:S.configCriteri||null, potAuto:S.potAuto||[], ricPdf:S.ricPdf||null,
     /* il prospetto generato ma non ancora eliminato: senza questo, ogni Scarica
        lo cancellava sul dispositivo che riceveva, anche se era ancora lì su chi
        l'aveva fatto */
@@ -1845,6 +1847,7 @@ function applicaStato(d){
   if(d.configCriteri) S.configCriteri = d.configCriteri;
   if(d.assistenti) S.assistenti = d.assistenti;
   if(d.potAuto) S.potAuto = d.potAuto;
+  if(d.ricPdf) S.ricPdf = d.ricPdf;
   if(d.prospettoOggi){
     /* uno stato arrivato da un altro dispositivo (o da un backup): il prospetto
        generato lì vale anche qui, come se l'avessi fatto io */
@@ -3233,8 +3236,8 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "03.11.2026d";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
-const NUMERO_VERSIONE = 103;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
+const VERSIONE = "04.11.2026a";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const NUMERO_VERSIONE = 104;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -3254,6 +3257,7 @@ function datiBackup(){
     configCriteri: S.configCriteri || null,
     assistenti: S.assistenti || [],
     potAuto: S.potAuto || [],
+    ricPdf: S.ricPdf || null,
     linguaSostegno: S.linguaSostegno || {},
     incompatibili: S.incompatibili || [],
     prospettoOggi: { dataOggi:S.dataOggi||null, prospetto:S.prospetto||null, assentiOggi:S.assentiOggi||{},
@@ -5449,7 +5453,246 @@ function renderOrario(){
     <button class="btn ghost" style="width:100%; margin-top:14px" onclick="scaricaOrario()">⬇ Scarica l'orario (Excel)</button>
     <input type="file" id="fileRic" accept=".json,.xlsx,.xls" style="display:none" onchange="importaRicevimenti(this)">
     <button class="btn ghost" style="width:100%; margin-top:8px" onclick="document.getElementById('fileRic').click()">⬆ Importa ricevimenti (R)</button>
+    <button class="btn ghost" style="width:100%; margin-top:8px" onclick="S.tab='ricpdf'; render()">📄 Ricevimenti per la segreteria (PDF)</button>
     <p class="hint" style="margin-top:6px">Il file ha lo stesso formato di quello che importi, con le modifiche fatte a mano${(o.modifiche||[]).length?` (${o.modifiche.length})`:""}: si può ripubblicare e reimportare. «Importa ricevimenti» legge il file della webapp dei ricevimenti (.json) o il suo foglio (.xlsx) e aggiorna <b>solo</b> le ore di ricevimento: il resto dell'orario non cambia.</p>`;
+}
+
+/* ================= RICEVIMENTI PER LA SEGRETERIA (PDF A3) =================
+   Stesso formato della scheda «Ricevimento genitori» della scuola: DOCENTE · MATERIA · CLASSE · GIORNO · ORARIO.
+   Le ore R vengono dall'orario; le classi sono quelle dell'orario; nome per esteso e materia si scrivono qui
+   (o si incollano dal foglio); i maestri di strumento musicale (ricevimenti concordati a voce) sono righe a parte. */
+const RIC_ORARI_DEFAULT = {1:"8:05 - 9:05", 2:"9:05 - 10:00", 3:"10:10 - 11:05", 4:"11:05 - 12:10", 5:"12:10 - 13:05", 6:"13:05 - 14:05"};
+const RIC_INTESTAZIONE_DEFAULT = ['ISTITUTO COMPRENSIVO STATALE "VIA TACITO"', 'Via Salvatore Quasimodo 18, 62012 Civitanova Marche (MC)', 'Cod. Meccanografico MCIC83500T',
+  'email MCIC83500T@istruzione.it - PEC MCIC83500T@pec.istruzione.it - www.civitanovatacito.edu.it'];
+const RIC_MATERIE = {"ARTE E IMMAGINE":"Arte e Immagine", "ED. FISICA":"Ed. Fisica", "INGLESE":"Inglese", "2ª LINGUA":"Seconda lingua", "ITALIANO":"Italiano, Storia, Geografia",
+  "MATEMATICA":"Matematica e Scienze", "MUSICA":"Musica", "RELIGIONE":"Religione Cattolica", "TECNOLOGIA":"Tecnologia", "SOSTEGNO":"Sostegno alla Classe"};
+/* dati della scuola a.s. 2026/27 (assegnazione docenti «Allegato 3»): nome per esteso e materia come da cattedra; modificabili a mano nella schermata */
+const RIC_ELENCO_DEFAULT = [["Curzi Suzy", "Arte e Immagine"], ["Eleuteri Bianca Maria", "Arte e Immagine"], ["Gioia Leonardo", "Ed. Fisica"], ["Leoni Dylan", "Ed. Fisica"], ["Gironella Valentina", "Inglese"], ["Marinangeli Patrizia", "Inglese"], ["Ricketts Beatrice", "Inglese"], ["Sabatini Roberta", "Inglese"], ["Basso Romana", "Francese"], ["Martinelli Maria Silvina", "Spagnolo"], ["Croceri Marina", "Italiano, Storia, Geografia"], ["Galiano Maria Antonietta", "Italiano, Storia, Geografia, Approfondimento"], ["Mayerle Margherita", "Italiano, Storia, Geografia, Approfondimento"], ["Melatini Chiara", "Italiano, Storia, Geografia"], ["Pepa Aurora", "Italiano, Approfondimento"], ["Rogante Giada", "Italiano, Storia, Geografia"], ["Santini Laura", "Italiano, Storia, Geografia, Approfondimento"], ["Sgariglia Andrea", "Geografia, Approfondimento"], ["Bambozzi Chiara", "Matematica e Scienze"], ["Luciani Emanuela", "Matematica e Scienze"], ["Paolucci Eleonora", "Matematica e Scienze"], ["Petralia Alfio Aldo", "Matematica e Scienze"], ["Piergentili Andrea", "Musica"], ["Ranieri Federico", "Musica"], ["Iervicella Barbara", "Religione Cattolica"], ["Bolognese Andrea", "Tecnologia"], ["Fiorelli Cristina", "Tecnologia"], ["Balestrini Federica", ""], ["Frallicciardi Fiorella", "Sostegno alla Classe"], ["Chiacchiera Marta", "Sostegno alla Classe"], ["Pacetti Elisa", "Sostegno alla Classe"], ["Bidini Nicoletta", "Sostegno alla Classe"], ["Ribustini Claudia", "Sostegno alla Classe"], ["Ragni Ludovica", ""], ["Pieroni Michele", "Sostegno alla Classe"], ["Longarini Laura", "Sostegno alla Classe"], ["Migliorelli Federica", "Sostegno alla Classe"], ["Vico Claudia", "Sostegno alla Classe"], ["Giustozzi Maria Vittoria", "Sostegno alla Classe"], ["Ricci Chiara", "Sostegno alla Classe"], ["Cola Filippo", "Sostegno alla Classe"], ["Forani Sara", "Sostegno alla Classe"], ["Clementi Sofia", "Sostegno alla Classe"], ["Del Mastro Pamela", "Sostegno alla Classe"], ["De Luca Letizia", ""], ["Cimica Raffaele", ""]];
+const RIC_EXTRA_DEFAULT = [{"nome": "Arima Kahoru", "materia": "Strumento musicale: Pianoforte", "classi": "1A - 1C - 1D - 2A - 2B - 2C - 2D - 3A - 3B - 3C - 3D", "giorno": "Martedì", "orario": "6"}, {"nome": "Nardi Ilaria", "materia": "Strumento musicale: Fisarmonica", "classi": "1A - 1B - 1C - 1D - 2A - 2B - 2C - 2D - 3A - 3B - 3C - 3D", "giorno": "Venerdì", "orario": "2"}, {"nome": "Organtini Giorgio", "materia": "Strumento musicale: Saxofono", "classi": "1A - 1B - 1C - 1D - 2A - 2B - 2C - 2D - 3A - 3B - 3C - 3D", "giorno": "Martedì", "orario": "6"}, {"nome": "Sette Alfredo", "materia": "Strumento musicale: Tromba", "classi": "1A - 1B - 1C - 2A - 2B - 2C - 2D - 3A - 3B - 3C - 3D", "giorno": "Venerdì", "orario": "12:05 - 13:05"}];
+const RIC_GIORNI = {LUN:"Lunedì", MAR:"Martedì", MER:"Mercoledì", GIO:"Giovedì", VEN:"Venerdì", SAB:"Sabato"};
+
+function ricCfg(){
+  const r = S.ricPdf = S.ricPdf || {};
+  r.nomi = r.nomi || {}; r.materie = r.materie || {};
+  if(!Array.isArray(r.extra)) r.extra = RIC_EXTRA_DEFAULT.map(e=>Object.assign({},e));
+  r.orari = Object.assign({}, RIC_ORARI_DEFAULT, r.orari || {});
+  if(!Array.isArray(r.intestazione) || !r.intestazione.length) r.intestazione = RIC_INTESTAZIONE_DEFAULT.slice();
+  return r;
+}
+/* abbina un nome dell'orario («Basso R.», «CLEMENTI Sofia») all'elenco della scuola; se è ambiguo non indovina */
+const _ricDef = {};
+function ricDef(nomeOrario){
+  if(nomeOrario in _ricDef) return _ricDef[nomeOrario];
+  const m = RIC_ELENCO_DEFAULT.filter(e=>ricCorrisponde(nomeOrario, e[0]));
+  let r = null;
+  if(m.length===1) r = {nome:m[0][0], materia:m[0][1]};
+  else if(m.length>1){ const t=new Set(ricTokens(nomeOrario)), pt=e=>ricTokens(e[0]).filter(x=>t.has(x)).length, b=m.slice().sort((a,c)=>pt(c)-pt(a)); if(pt(b[0])>pt(b[1])) r={nome:b[0][0], materia:b[0][1]}; }
+  return _ricDef[nomeOrario] = r;
+}
+function ricAnno(){ const d=new Date(), a = d.getMonth()>=7 ? d.getFullYear() : d.getFullYear()-1; return a+"/"+(a+1); }
+function ricIntervallo(orari, h0, h1){
+  const a = orari[h0] || (h0+"ª ora"), b = orari[h1] || (h1+"ª ora");
+  return h0===h1 ? a : a.split(" - ")[0]+" - "+b.split(" - ").slice(-1)[0];
+}
+/* R dell'orario, con le ore consecutive dello stesso giorno unite in un intervallo */
+function ricVoci(doc, cfg){
+  const o=S.orario, out=[];
+  o.giorni.forEach(g=>{
+    let u=null;
+    o.ore.forEach(h=>{
+      if((cellaEff(doc,g,h)||{}).t!=="RICE"){ u=null; return; }
+      if(u && h===u.h1+1) u.h1=h; else { u={g, h0:h, h1:h}; out.push(u); }
+    });
+  });
+  return out.map(v=>({g:RIC_GIORNI[v.g]||v.g, orario:ricIntervallo(cfg.orari, v.h0, v.h1)}));
+}
+/* testo libero di un maestro: «6», «6ª ora», «3-4» → orario della scansione; altro testo resta com'è */
+function ricOrarioExtra(txt, cfg){
+  const t=String(txt||"").trim(), m=/^(\d)\s*[ªa°]?\s*(?:ora)?\s*(?:[-–—]\s*(\d)\s*[ªa°]?\s*(?:ora)?)?$/i.exec(t);
+  return m ? ricIntervallo(cfg.orari, +m[1], +(m[2]||m[1])) : t;
+}
+function ricGiornoExtra(txt){
+  const t=String(txt||"").trim(), k=t.toUpperCase().slice(0,3);
+  return RIC_GIORNI[k] || t;
+}
+function ricNomeDi(d, cfg){ const m=(cfg.nomi[d.nome]||"").trim(); if(m) return m; const df=ricDef(d.nome); return df ? df.nome : d.nome; }
+function ricMateriaDi(doc, cfg){
+  const m = (cfg.materie[doc.nome]||"").trim();
+  if(m) return m;
+  const df = ricDef(doc.nome); if(df && df.materia) return df.materia;
+  const base=String(doc.materia||"").trim();
+  return RIC_MATERIE[base.toUpperCase()] || (base ? base.charAt(0).toUpperCase()+base.slice(1).toLowerCase() : "");
+}
+function ricRighe(){
+  const o=S.orario, cfg=ricCfg(), righe=[];
+  o.docenti.forEach(d=>{
+    const voci=ricVoci(d,cfg); if(!voci.length) return;
+    const classi=[...classiDi(d)].filter(Boolean).sort().join(" - ");
+    righe.push({chiave:d.nome, nome:ricNomeDi(d, cfg), materia:ricMateriaDi(d,cfg), classi, voci});
+  });
+  cfg.extra.forEach(e=>{
+    const nome=String(e.nome||"").trim(); if(!nome) return;
+    const voce={g:ricGiornoExtra(e.giorno), orario:ricOrarioExtra(e.orario,cfg)};
+    const gia=righe.find(r=>r.nome.toLowerCase()===nome.toLowerCase());
+    if(gia){ gia.voci.push(voce); return; }
+    righe.push({chiave:"", nome, materia:String(e.materia||"").trim(), classi:String(e.classi||"").trim(), voci:[voce]});
+  });
+  righe.sort((a,b)=>a.nome.localeCompare(b.nome,"it"));
+  return righe;
+}
+
+/* abbinamento «Cognome Nome» ↔ nome nell'orario (Curzi, Basso R., GIUSTOZZI M.Vittoria …) */
+function ricTokens(s){ return String(s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().split(/[^a-z]+/).filter(Boolean); }
+function ricCorrisponde(nomeOrario, nomeCompleto){
+  const t=ricTokens(nomeOrario), f=ricTokens(nomeCompleto); if(!t.length||!f.length) return false;
+  let pos=0;
+  for(const x of t){
+    let i=-1;
+    if(x.length===1){ for(let k=Math.max(1,pos);k<f.length;k++) if(f[k][0]===x){ i=k; break; } }
+    else { for(let k=pos;k<f.length;k++) if(f[k]===x){ i=k; break; } }
+    if(i<0) return false;
+    pos=i+1;
+  }
+  return true;
+}
+function ricApplicaElenco(){
+  const cfg=ricCfg(), txt=(el("ricElenco")||{}).value||"", righe=txt.split(/\r?\n/).map(l=>l.split(/\t|;/)).filter(c=>c[0] && c[0].trim());
+  let ok=0; const no=[], dup=[];
+  righe.forEach(c=>{
+    const nome=c[0].trim(), mat=(c[1]||"").trim();
+    const m=S.orario.docenti.filter(d=>ricCorrisponde(d.nome,nome));
+    if(m.length===1){ cfg.nomi[m[0].nome]=nome; if(mat) cfg.materie[m[0].nome]=mat; ok++; }
+    else if(m.length>1){ /* più corrispondenze: scelgo quella con più parole in comune */
+      const ft=new Set(ricTokens(nome)), best=m.map(d=>[ricTokens(d.nome).filter(x=>ft.has(x)).length,d]).sort((a,b)=>b[0]-a[0]);
+      if(best[0][0]>best[1][0]){ cfg.nomi[best[0][1].nome]=nome; if(mat) cfg.materie[best[0][1].nome]=mat; ok++; } else dup.push(nome);
+    } else no.push(nome);
+  });
+  save(); S.ricEsito={ok, no, dup}; render();
+  toast(ok+" docenti aggiornati"+(no.length?" · "+no.length+" non trovati":""));
+}
+function ricApplicaExtra(){
+  const cfg=ricCfg(), txt=(el("ricExtraTxt")||{}).value||"";
+  const righe=txt.split(/\r?\n/).map(l=>l.split("\t")).filter(c=>c[0] && c[0].trim());
+  if(!righe.length) return toast("Incolla prima le righe");
+  cfg.extra=righe.map(c=>({nome:(c[0]||"").trim(), materia:(c[1]||"").trim(), classi:(c[2]||"").trim(), giorno:(c[3]||"").trim(), orario:(c[4]||"").trim()}));
+  save(); render(); toast(cfg.extra.length+" righe dei maestri");
+}
+function ricSet(campo, el_){ const cfg=ricCfg(); cfg[campo][el_.dataset.k]=el_.value; save(); }
+function ricSetOra(el_){ const cfg=ricCfg(); cfg.orari[el_.dataset.k]=el_.value; save(); }
+function ricSetInt(el_){ const cfg=ricCfg(); cfg.intestazione=el_.value.split(/\r?\n/).filter(l=>l.trim()); save(); }
+function ricSetExtra(i,campo,el_){ ricCfg().extra[i][campo]=el_.value; save(); }
+function ricAggiungiExtra(){ ricCfg().extra.push({nome:"",materia:"Strumento musicale: ",classi:"",giorno:"Lunedì",orario:""}); save(); render(); }
+function ricTogliExtra(i){ ricCfg().extra.splice(i,1); save(); render(); }
+function ricRipristina(){ if(!confirm("Rimettere intestazione e orari delle ore ai valori iniziali?")) return; const c=ricCfg(); c.orari=Object.assign({},RIC_ORARI_DEFAULT); c.intestazione=RIC_INTESTAZIONE_DEFAULT.slice(); save(); render(); }
+
+function ricCaricaLib(){
+  if(window.jspdf && window.jspdf.jsPDF && (window.jspdf.jsPDF.API||{}).autoTable) return Promise.resolve();
+  const carica=src=>new Promise((ok,ko)=>{ const s=document.createElement("script"); s.src=src; s.onload=ok; s.onerror=()=>ko(new Error("non riesco a caricare "+src)); document.head.appendChild(s); });
+  return (window.jspdf ? Promise.resolve() : carica("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"))
+    .then(()=>carica("https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"));
+}
+/* foglio A3 in verticale, tutto in una pagina: il corpo cala di dimensione finché non ci sta */
+function ricCostruisciPdf(righe, cfg){
+  const J=window.jspdf, W=297, M=12; let doc=null, riuscito=false;
+  for(let fs=13; fs>=5 && !riuscito; fs-=0.5){
+    doc=new J.jsPDF({orientation:"portrait", unit:"mm", format:"a3"});
+    let y=M+4;
+    cfg.intestazione.forEach((riga,i)=>{ doc.setFont("times","bold"); doc.setFontSize(i===0?20:11); doc.text(riga, W/2, y, {align:"center"}); y+=(i===0?8:5); });
+    y+=3; doc.setFillColor(201,201,201); doc.rect(M,y,W-2*M,9,"F");
+    doc.setFont("helvetica","bold"); doc.setFontSize(14); doc.setTextColor(20);
+    doc.text("RICEVIMENTO GENITORI", W/2, y+6.2, {align:"center"}); y+=15;
+    doc.setFontSize(12); doc.text("A.S. "+ricAnno(), W/2, y, {align:"center"}); y+=4;
+    const corpo=[];
+    righe.forEach((rg,n)=>{
+      const fondo=(n%2===1)?[240,240,240]:[255,255,255];
+      rg.voci.forEach((v,i)=>{
+        const riga=[];
+        if(i===0){ const rs=rg.voci.length;
+          riga.push({content:rg.nome, rowSpan:rs, styles:{fontStyle:"bold", fillColor:fondo}});
+          riga.push({content:rg.materia, rowSpan:rs, styles:{fillColor:fondo}});
+          riga.push({content:rg.classi, rowSpan:rs, styles:{fillColor:fondo}}); }
+        riga.push({content:v.g, styles:{fillColor:fondo}});
+        riga.push({content:v.orario, styles:{fontStyle:"bold", fillColor:fondo}});
+        corpo.push(riga);
+      });
+    });
+    doc.autoTable({ startY:y, margin:{left:M,right:M,top:M,bottom:M}, head:[["DOCENTE","MATERIA","CLASSE","GIORNO","ORARIO"]], body:corpo, theme:"grid",
+      styles:{font:"helvetica", fontSize:fs, cellPadding:fs>9?1.6:1.1, halign:"center", valign:"middle", lineColor:[110,110,110], lineWidth:0.2, textColor:20},
+      headStyles:{fillColor:[189,189,189], textColor:20, fontStyle:"bold"},
+      columnStyles:{0:{cellWidth:56}, 1:{cellWidth:62}, 3:{cellWidth:30}, 4:{cellWidth:34}} });
+    riuscito = doc.getNumberOfPages()===1;
+  }
+  return doc;
+}
+function scaricaRicevimentiPdf(b){
+  const righe=ricRighe(); if(!righe.length) return toast("Non c'è nessun ricevimento (R) da stampare");
+  const cfg=ricCfg(), testo=b?b.textContent:""; if(b){ b.disabled=true; b.textContent="Preparo il PDF…"; }
+  const fine=()=>{ if(b){ b.disabled=false; b.textContent=testo; } };
+  ricCaricaLib().then(()=>{
+    const doc=ricCostruisciPdf(righe,cfg), nome="ricevimento-genitori-"+isoOggi()+".pdf";
+    const a=document.createElement("a"); a.href=URL.createObjectURL(doc.output("blob")); a.download=nome;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    fine(); toast("Scaricato: "+nome+" ("+righe.length+" docenti)");
+  }).catch(e=>{ fine(); toast("Servono le librerie PDF (serve internet): "+(e&&e.message||e)); });
+}
+
+function renderRicPdf(){
+  const o=S.orario, cfg=ricCfg(), righe=ricRighe();
+  const docR=o.docenti.filter(d=>ricVoci(d,cfg).length);
+  const sorted=docR.slice().sort((a,b)=>(cfg.nomi[a.nome]||a.nome).localeCompare(cfg.nomi[b.nome]||b.nome,"it"));
+  const inp=(extra)=>`style="width:100%; padding:7px 8px; border-radius:8px; border:1px solid var(--rule); background:var(--card, transparent); color:inherit; font:inherit; font-size:13px; box-sizing:border-box" ${extra||""}`;
+  const esito=S.ricEsito; S.ricEsito=null;
+  const senzaNome=docR.filter(d=>ricNomeDi(d,cfg)===d.nome);
+  el("main").innerHTML=`
+    <div class="backlink" onclick="S.tab='orario'; render()">‹ Orario</div>
+    <h2 class="sec">Ricevimenti per la segreteria</h2>
+    <p class="hint" style="margin-top:0">PDF A3 in verticale, tutto in una pagina. Si genera sempre dall'orario di adesso: ore R e classi sono quelle dell'orario di SOStituto (se sposti o togli un'ora R, ristampa e il PDF è aggiornato); nome per esteso e materia sono quelli della cattedra, già inseriti; i maestri di strumento musicale sono in «Correzioni a mano».</p>
+    <button class="btn" style="width:100%" onclick="scaricaRicevimentiPdf(this)">📄 Scarica il PDF (${righe.length} righe)</button>
+    ${senzaNome.length ? `<p class="hint"><b>Nome per esteso non trovato</b> (compare come nell'orario; correggilo qui sotto): ${senzaNome.map(d=>esc(d.nome)).join(", ")}.</p>` : ""}
+
+    <details style="margin-top:14px"><summary style="cursor:pointer; font-weight:600">Correzioni a mano</summary>
+    <h3 class="sec" style="margin-top:12px">Docenti con ricevimento (${docR.length})</h3>
+    ${docR.length ? sorted.map(d=>{
+      const voci=ricVoci(d,cfg);
+      return `<div class="box" style="padding:8px 10px; margin-bottom:8px">
+        <div class="hint" style="margin:0 0 4px">${esc(d.nome)} · ${voci.map(v=>esc(v.g+" "+v.orario)).join(" · ")} · ${esc([...classiDi(d)].sort().join(" "))}</div>
+        <input ${inp(`data-k="${esc(d.nome)}" value="${esc(cfg.nomi[d.nome]||"")}" placeholder="${esc(ricNomeDi(d,{nomi:{}}))}" oninput="ricSet('nomi',this)"`)}>
+        <input ${inp(`data-k="${esc(d.nome)}" value="${esc(cfg.materie[d.nome]||"")}" placeholder="Materia: ${esc(ricMateriaDi(d,{materie:{}}))}" oninput="ricSet('materie',this)" `).replace('style="','style="margin-top:6px; ')}>
+      </div>`; }).join("") : `<p class="hint">Nessuna R nell'orario: importa i ricevimenti (scheda Orario → Importa ricevimenti).</p>`}
+
+    <details style="margin-top:6px"${esito?" open":""}><summary style="cursor:pointer; font-weight:600">Incolla l'elenco: cognome e nome + materia</summary>
+      <p class="hint">Una riga per docente, due colonne separate da tabulazione (come nel foglio Google): <i>Curzi Suzy&nbsp;&nbsp;Arte e Immagine</i>. Il programma abbina ogni nome a quello dell'orario.</p>
+      <textarea id="ricElenco" rows="5" ${inp('placeholder="Curzi Suzy[TAB]Arte e Immagine"')}></textarea>
+      <button class="btn ghost" style="width:100%; margin-top:6px" onclick="ricApplicaElenco()">Applica l'elenco</button>
+      ${esito?`<p class="hint">Aggiornati ${esito.ok}.${esito.no.length?" <b>Non trovati:</b> "+esito.no.map(esc).join("; ")+".":""}${esito.dup.length?" <b>Ambigui:</b> "+esito.dup.map(esc).join("; ")+".":""}</p>`:""}
+    </details>
+
+    <h3 class="sec" style="margin-top:18px">Maestri di strumento musicale (ricevimenti concordati)</h3>
+    <p class="hint" style="margin-top:0">Non sono nell'orario della secondaria: si scrivono qui. Orario: numero dell'ora (6, 6ª, 3-4) oppure testo libero (12:05 - 13:05).</p>
+    ${cfg.extra.map((e,i)=>`<div class="box" style="padding:8px 10px; margin-bottom:8px">
+      <input ${inp(`list="ricDocEx" value="${esc(e.nome)}" placeholder="Cognome e nome" oninput="ricSetExtra(${i},'nome',this)"`)}>
+      <input ${inp(`value="${esc(e.materia)}" placeholder="Materia (es. Strumento musicale: Tromba)" oninput="ricSetExtra(${i},'materia',this)"`).replace('style="','style="margin-top:6px; ')}>
+      <input ${inp(`value="${esc(e.classi)}" placeholder="Classi (es. 1A - 1B - 2A)" oninput="ricSetExtra(${i},'classi',this)"`).replace('style="','style="margin-top:6px; ')}>
+      <div style="display:flex; gap:6px; margin-top:6px">
+        <select ${inp(`onchange="ricSetExtra(${i},'giorno',this)"`)}>${Object.values(RIC_GIORNI).map(g=>`<option${ricGiornoExtra(e.giorno)===g?" selected":""}>${g}</option>`).join("")}</select>
+        <input ${inp(`value="${esc(e.orario)}" placeholder="Orario / ora" oninput="ricSetExtra(${i},'orario',this)"`)}>
+        <button class="btn ghost" style="flex:0 0 auto" onclick="ricTogliExtra(${i})">✕</button>
+      </div></div>`).join("")}
+    <datalist id="ricDocEx">${docentiExtra().map(e=>`<option value="${esc(e.nome)}">`).join("")}</datalist>
+    <button class="btn ghost" style="width:100%" onclick="ricAggiungiExtra()">+ Aggiungi un maestro</button>
+    <details style="margin-top:8px"><summary style="cursor:pointer; font-weight:600">Incolla le righe dei maestri (5 colonne)</summary>
+      <p class="hint">Docente, Materia, Classi, Giorno, Orario, separati da tabulazione (come il foglio «extra»). Sostituisce l'elenco qui sopra.</p>
+      <textarea id="ricExtraTxt" rows="4" ${inp()}></textarea>
+      <button class="btn ghost" style="width:100%; margin-top:6px" onclick="ricApplicaExtra()">Applica le righe</button>
+    </details>
+
+    <h3 class="sec" style="margin-top:18px">Orari delle ore e intestazione</h3>
+    <p class="hint" style="margin-top:0">Scansione 2026/27 (la 4ª finisce alle 12:10 nella settimana normale, alle 12:00 nella corta).</p>
+    ${Object.keys(RIC_ORARI_DEFAULT).map(h=>`<div style="display:flex; align-items:center; gap:8px; margin-bottom:6px"><span style="flex:0 0 28px">${h}ª</span>
+      <input ${inp(`data-k="${h}" value="${esc(cfg.orari[h])}" oninput="ricSetOra(this)"`)}></div>`).join("")}
+    <textarea rows="5" ${inp('oninput="ricSetInt(this)"')}>${esc(cfg.intestazione.join("\n"))}</textarea>
+    <button class="btn ghost" style="width:100%; margin-top:6px" onclick="ricRipristina()">Ripristina orari e intestazione</button>
+    </details>`;
 }
 
 /* ---- importa i ricevimenti (R) raccolti nella webapp dei ricevimenti ----

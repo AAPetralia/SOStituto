@@ -5,6 +5,12 @@ Si legge in alto nell'app, sotto il titolo. Da qui in avanti si aggiorna a ogni 
 
 ## Da qui in avanti (dettaglio certo)
 
+### 04.11.2026a — n. 104
+- **Nuovo: «Ricevimenti per la segreteria (PDF)»** (Orario → pulsante sotto «Importa ricevimenti»). Genera il PDF «RICEVIMENTO GENITORI» nel formato della scuola: **A3 verticale, tutto in una pagina**, DOCENTE · MATERIA · CLASSE · GIORNO · ORARIO, ordine alfabetico, ore consecutive unite (es. 8:05 - 10:00).
+- È **indipendente dalla webapp**: dalla webapp serve solo il file dei ricevimenti (già importato). Ore R e classi si leggono sempre dall'orario di SOStituto: se sposti o togli un'ora R, ristampi e il PDF esce aggiornato.
+- Nome per esteso e materia sono quelli della cattedra 2026/27 (Allegato 3, già inseriti nel programma, compreso «Approfondimento»); i quattro maestri di strumento musicale (Arima, Nardi, Organtini, Sette) sono già inseriti con giorno e ora. Tutto correggibile in «Correzioni a mano» (anche orari delle ore e intestazione); salvato con i dati e nel backup.
+- Le librerie PDF (jsPDF) si caricano al momento del download: serve internet.
+
 ### 03.11.2026d — n. 103
 - **Uscita con delegazione: tolta del tutto l'esclusione dei docenti delle classi coinvolte.** Con la n. 102 era tornato disponibile solo il sostegno; ora vale anche per il **potenziamento assegnato** alla classe in delegazione: la classe resta a scuola con una parte degli alunni e con il suo curricolare, quindi non ha bisogno del potenziatore, che può essere usato per le sostituzioni come in un giorno normale. Cambia solo la delegazione («solo una parte della classe esce»); se la classe è tutta fuori sede resta com'era.
 
