@@ -3236,8 +3236,8 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "04.11.2026b";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
-const NUMERO_VERSIONE = 105;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
+const VERSIONE = "04.11.2026c";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const NUMERO_VERSIONE = 106;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -5469,6 +5469,8 @@ const RIC_MATERIE = {"ARTE E IMMAGINE":"Arte e Immagine", "ED. FISICA":"Ed. Fisi
 /* dati della scuola a.s. 2026/27 (assegnazione docenti «Allegato 3»): nome per esteso e materia come da cattedra; modificabili a mano nella schermata */
 const RIC_ELENCO_DEFAULT = [["Curzi Suzy", "Arte e Immagine"], ["Eleuteri Bianca Maria", "Arte e Immagine"], ["Gioia Leonardo", "Ed. Fisica"], ["Leoni Dylan", "Ed. Fisica"], ["Gironella Valentina", "Inglese"], ["Marinangeli Patrizia", "Inglese"], ["Ricketts Beatrice", "Inglese"], ["Sabatini Roberta", "Inglese"], ["Basso Romana", "Francese"], ["Martinelli Maria Silvina", "Spagnolo"], ["Croceri Marina", "Italiano, Storia, Geografia"], ["Galiano Maria Antonietta", "Italiano, Storia, Geografia, Approfondimento"], ["Mayerle Margherita", "Italiano, Storia, Geografia, Approfondimento"], ["Melatini Chiara", "Italiano, Storia, Geografia"], ["Pepa Aurora", "Italiano, Approfondimento"], ["Rogante Giada", "Italiano, Storia, Geografia"], ["Santini Laura", "Italiano, Storia, Geografia, Approfondimento"], ["Sgariglia Andrea", "Geografia, Approfondimento"], ["Bambozzi Chiara", "Matematica e Scienze"], ["Luciani Emanuela", "Matematica e Scienze"], ["Paolucci Eleonora", "Matematica e Scienze"], ["Petralia Alfio Aldo", "Matematica e Scienze"], ["Piergentili Andrea", "Musica"], ["Ranieri Federico", "Musica"], ["Iervicella Barbara", "Religione Cattolica"], ["Bolognese Andrea", "Tecnologia"], ["Fiorelli Cristina", "Tecnologia"], ["Balestrini Federica", ""], ["Frallicciardi Fiorella", "Sostegno alla Classe"], ["Chiacchiera Marta", "Sostegno alla Classe"], ["Pacetti Elisa", "Sostegno alla Classe"], ["Bidini Nicoletta", "Sostegno alla Classe"], ["Ribustini Claudia", "Sostegno alla Classe"], ["Ragni Ludovica", ""], ["Pieroni Michele", "Sostegno alla Classe"], ["Longarini Laura", "Sostegno alla Classe"], ["Migliorelli Federica", "Sostegno alla Classe"], ["Vico Claudia", "Sostegno alla Classe"], ["Giustozzi Maria Vittoria", "Sostegno alla Classe"], ["Ricci Chiara", "Sostegno alla Classe"], ["Cola Filippo", "Sostegno alla Classe"], ["Forani Sara", "Sostegno alla Classe"], ["Clementi Sofia", "Sostegno alla Classe"], ["Del Mastro Pamela", "Sostegno alla Classe"], ["De Luca Letizia", ""], ["Cimica Raffaele", ""]];
 const RIC_EXTRA_DEFAULT = [{"nome": "Arima Kahoru", "materia": "Strumento musicale: Pianoforte", "classi": "1A - 1C - 1D - 2A - 2B - 2C - 2D - 3A - 3B - 3C - 3D", "giorno": "Martedì", "orario": "6"}, {"nome": "Nardi Ilaria", "materia": "Strumento musicale: Fisarmonica", "classi": "1A - 1B - 1C - 1D - 2A - 2B - 2C - 2D - 3A - 3B - 3C - 3D", "giorno": "Venerdì", "orario": "2"}, {"nome": "Organtini Giorgio", "materia": "Strumento musicale: Saxofono", "classi": "1A - 1B - 1C - 1D - 2A - 2B - 2C - 2D - 3A - 3B - 3C - 3D", "giorno": "Martedì", "orario": "6"}, {"nome": "Sette Alfredo", "materia": "Strumento musicale: Tromba", "classi": "1A - 1B - 1C - 2A - 2B - 2C - 2D - 3A - 3B - 3C - 3D", "giorno": "Venerdì", "orario": "12:05 - 13:05"}];
+/* supplenti temporanei: nel PDF figura il titolare della cattedra */
+const RIC_ALIAS_DEFAULT = {"PUCCI Erika":"Pacetti Elisa"};
 const RIC_GIORNI = {LUN:"Lunedì", MAR:"Martedì", MER:"Mercoledì", GIO:"Giovedì", VEN:"Venerdì", SAB:"Sabato"};
 
 function ricCfg(){
@@ -5483,10 +5485,11 @@ function ricCfg(){
 const _ricDef = {};
 function ricDef(nomeOrario){
   if(nomeOrario in _ricDef) return _ricDef[nomeOrario];
-  const m = RIC_ELENCO_DEFAULT.filter(e=>ricCorrisponde(nomeOrario, e[0]));
+  const cerca = RIC_ALIAS_DEFAULT[nomeOrario] || nomeOrario;
+  const m = RIC_ELENCO_DEFAULT.filter(e=>ricCorrisponde(cerca, e[0]));
   let r = null;
   if(m.length===1) r = {nome:m[0][0], materia:m[0][1]};
-  else if(m.length>1){ const t=new Set(ricTokens(nomeOrario)), pt=e=>ricTokens(e[0]).filter(x=>t.has(x)).length, b=m.slice().sort((a,c)=>pt(c)-pt(a)); if(pt(b[0])>pt(b[1])) r={nome:b[0][0], materia:b[0][1]}; }
+  else if(m.length>1){ const t=new Set(ricTokens(cerca)), pt=e=>ricTokens(e[0]).filter(x=>t.has(x)).length, b=m.slice().sort((a,c)=>pt(c)-pt(a)); if(pt(b[0])>pt(b[1])) r={nome:b[0][0], materia:b[0][1]}; }
   return _ricDef[nomeOrario] = r;
 }
 function ricAnno(){ const d=new Date(), a = d.getMonth()>=7 ? d.getFullYear() : d.getFullYear()-1; return a+"/"+(a+1); }

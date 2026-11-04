@@ -5,6 +5,9 @@ Si legge in alto nell'app, sotto il titolo. Da qui in avanti si aggiorna a ogni 
 
 ## Da qui in avanti (dettaglio certo)
 
+### 04.11.2026c — n. 106
+- PDF ricevimenti: Pucci Erika (supplente temporanea di Pacetti) compare con il nome della titolare, «Pacetti Elisa».
+
 ### 04.11.2026b — n. 105
 - PDF ricevimenti: i docenti che non sono nell'elenco della scuola (es. un supplente nuovo) compaiono con il nome dell'orario «Cognome Nome» invece che in maiuscolo.
 
