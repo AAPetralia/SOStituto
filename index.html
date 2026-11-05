@@ -3236,8 +3236,8 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "04.11.2026d";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
-const NUMERO_VERSIONE = 107;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
+const VERSIONE = "05.11.2026a";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const NUMERO_VERSIONE = 108;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -5527,6 +5527,18 @@ function ricVoci(doc, cfg){
   return out.map(v=>({g:RIC_GIORNI[v.g]||v.g, orario:ricIntervallo(cfg.orari, v.h0, v.h1)}));
 }
 /* testo libero di un maestro: «6», «6ª ora», «3-4» → orario della scansione; altro testo resta com'è */
+/* «ARIMA Kahoru» → «Arima Kahoru» */
+function ricNomeExtra(n){ return String(n||"").replace(/\b[A-ZÀ-Ý]{3,}\b/g, w=>w.charAt(0)+w.slice(1).toLowerCase()); }
+/* una tantum: ai docenti senza orario già in elenco si copia il ricevimento già noto (dati salvati o della scuola) */
+function ricSeminaExtra(){
+  const cfg=ricCfg(), fonti=(Array.isArray(cfg.extra)?cfg.extra:[]).concat(RIC_EXTRA_DEFAULT); let n=0;
+  docentiExtra().forEach(e=>{
+    if(e.ric) return;
+    const f=fonti.find(x=>ricCorrisponde(e.nome, x.nome)); if(!f) return;
+    e.ric={materia:f.materia||"", classi:f.classi||"", giorno:f.giorno||"", orario:f.orario||""}; n++;
+  });
+  if(n) save();
+}
 function ricOrarioExtra(txt, cfg){
   const t=String(txt||"").trim(), m=/^(\d)\s*[ªa°]?\s*(?:ora)?\s*(?:[-–—]\s*(\d)\s*[ªa°]?\s*(?:ora)?)?$/i.exec(t);
   return m ? ricIntervallo(cfg.orari, +m[1], +(m[2]||m[1])) : t;
@@ -5555,12 +5567,15 @@ function ricRighe(){
     const classi=[...classiDi(d)].filter(Boolean).sort().join(" - ");
     righe.push({chiave:d.nome, nome:ricNomeDi(d, cfg), materia:ricMateriaDi(d,cfg), classi, voci});
   });
-  cfg.extra.forEach(e=>{
-    const nome=String(e.nome||"").trim(); if(!nome) return;
-    const voce={g:ricGiornoExtra(e.giorno), orario:ricOrarioExtra(e.orario,cfg)};
-    const gia=righe.find(r=>r.nome.toLowerCase()===nome.toLowerCase());
+  /* docenti senza orario del mattino (maestri di strumento): il ricevimento si scrive in Altro → Cambio e aggiunta docente */
+  ricSeminaExtra();
+  docentiExtra().forEach(e=>{
+    const r=e.ric; if(!r || !String(r.giorno||"").trim() || !String(r.orario||"").trim()) return;
+    const nome=ricNomeExtra(e.nome);
+    const voce={g:ricGiornoExtra(r.giorno), orario:ricOrarioExtra(r.orario,cfg)};
+    const gia=righe.find(x=>x.nome.toLowerCase()===nome.toLowerCase());
     if(gia){ gia.voci.push(voce); return; }
-    righe.push({chiave:"", nome, materia:String(e.materia||"").trim(), classi:String(e.classi||"").trim(), voci:[voce]});
+    righe.push({chiave:"", nome, materia:String(r.materia||"").trim(), classi:String(r.classi||"").trim(), voci:[voce]});
   });
   righe.sort((a,b)=>a.nome.localeCompare(b.nome,"it"));
   return righe;
@@ -5595,19 +5610,9 @@ function ricApplicaElenco(){
   save(); S.ricEsito={ok, no, dup}; render();
   toast(ok+" docenti aggiornati"+(no.length?" · "+no.length+" non trovati":""));
 }
-function ricApplicaExtra(){
-  const cfg=ricCfg(), txt=(el("ricExtraTxt")||{}).value||"";
-  const righe=txt.split(/\r?\n/).map(l=>l.split("\t")).filter(c=>c[0] && c[0].trim());
-  if(!righe.length) return toast("Incolla prima le righe");
-  cfg.extra=righe.map(c=>({nome:(c[0]||"").trim(), materia:(c[1]||"").trim(), classi:(c[2]||"").trim(), giorno:(c[3]||"").trim(), orario:(c[4]||"").trim()}));
-  save(); render(); toast(cfg.extra.length+" righe dei maestri");
-}
 function ricSet(campo, el_){ const cfg=ricCfg(); cfg[campo][el_.dataset.k]=el_.value; save(); }
 function ricSetOra(el_){ const cfg=ricCfg(); cfg.orari[el_.dataset.k]=el_.value; save(); }
 function ricSetInt(el_){ const cfg=ricCfg(); cfg.intestazione=el_.value.split(/\r?\n/).filter(l=>l.trim()); save(); }
-function ricSetExtra(i,campo,el_){ ricCfg().extra[i][campo]=el_.value; save(); }
-function ricAggiungiExtra(){ ricCfg().extra.push({nome:"",materia:"Strumento musicale: ",classi:"",giorno:"Lunedì",orario:""}); save(); render(); }
-function ricTogliExtra(i){ ricCfg().extra.splice(i,1); save(); render(); }
 function ricRipristina(){ if(!confirm("Rimettere intestazione e orari delle ore ai valori iniziali?")) return; const c=ricCfg(); c.orari=Object.assign({},RIC_ORARI_DEFAULT); c.intestazione=RIC_INTESTAZIONE_DEFAULT.slice(); save(); render(); }
 
 function ricCaricaLib(){
@@ -5692,24 +5697,8 @@ function renderRicPdf(){
       ${esito?`<p class="hint">Aggiornati ${esito.ok}.${esito.no.length?" <b>Non trovati:</b> "+esito.no.map(esc).join("; ")+".":""}${esito.dup.length?" <b>Ambigui:</b> "+esito.dup.map(esc).join("; ")+".":""}</p>`:""}
     </details>
 
-    <h3 class="sec" style="margin-top:18px">Maestri di strumento musicale (ricevimenti concordati)</h3>
-    <p class="hint" style="margin-top:0">Non sono nell'orario della secondaria: si scrivono qui. Orario: numero dell'ora (6, 6ª, 3-4) oppure testo libero (12:05 - 13:05).</p>
-    ${cfg.extra.map((e,i)=>`<div class="box" style="padding:8px 10px; margin-bottom:8px">
-      <input ${inp(`list="ricDocEx" value="${esc(e.nome)}" placeholder="Cognome e nome" oninput="ricSetExtra(${i},'nome',this)"`)}>
-      <input ${inp(`value="${esc(e.materia)}" placeholder="Materia (es. Strumento musicale: Tromba)" oninput="ricSetExtra(${i},'materia',this)"`).replace('style="','style="margin-top:6px; ')}>
-      <input ${inp(`value="${esc(e.classi)}" placeholder="Classi (es. 1A - 1B - 2A)" oninput="ricSetExtra(${i},'classi',this)"`).replace('style="','style="margin-top:6px; ')}>
-      <div style="display:flex; gap:6px; margin-top:6px">
-        <select ${inp(`onchange="ricSetExtra(${i},'giorno',this)"`)}>${Object.values(RIC_GIORNI).map(g=>`<option${ricGiornoExtra(e.giorno)===g?" selected":""}>${g}</option>`).join("")}</select>
-        <input ${inp(`value="${esc(e.orario)}" placeholder="Orario / ora" oninput="ricSetExtra(${i},'orario',this)"`)}>
-        <button class="btn ghost" style="flex:0 0 auto" onclick="ricTogliExtra(${i})">✕</button>
-      </div></div>`).join("")}
-    <datalist id="ricDocEx">${docentiExtra().map(e=>`<option value="${esc(e.nome)}">`).join("")}</datalist>
-    <button class="btn ghost" style="width:100%" onclick="ricAggiungiExtra()">+ Aggiungi un maestro</button>
-    <details style="margin-top:8px"><summary style="cursor:pointer; font-weight:600">Incolla le righe dei maestri (5 colonne)</summary>
-      <p class="hint">Docente, Materia, Classi, Giorno, Orario, separati da tabulazione (come il foglio «extra»). Sostituisce l'elenco qui sopra.</p>
-      <textarea id="ricExtraTxt" rows="4" ${inp()}></textarea>
-      <button class="btn ghost" style="width:100%; margin-top:6px" onclick="ricApplicaExtra()">Applica le righe</button>
-    </details>
+    <h3 class="sec" style="margin-top:18px">Maestri di strumento musicale</h3>
+    <p class="hint" style="margin-top:0">Il loro ricevimento (giorno, ora, classi) si scrive in <span style="color:var(--teal); font-weight:600; cursor:pointer" onclick="S.tab='cambiodoc'; render()">Altro → Cambio e aggiunta docente → Docente senza orario del mattino</span>. Nel PDF ora ci sono: ${righe.filter(r=>!r.chiave).map(r=>esc(r.nome)).join(", ")||"nessuno"}.</p>
 
     <h3 class="sec" style="margin-top:18px">Orari delle ore e intestazione</h3>
     <p class="hint" style="margin-top:0">Scansione 2026/27 (la 4ª finisce alle 12:10 nella settimana normale, alle 12:00 nella corta).</p>
@@ -6403,6 +6392,7 @@ function moScarta(id){ const o=S.orario; o.modifiche=(o.modifiche||[]).filter(z=
 const NOTA_EXTRA="Strumento musicale · pomeriggio";
 function renderDocentiExtra(){
   S.extraForm = S.extraForm || {nome:"", nota:NOTA_EXTRA};
+  ricSeminaExtra();
   const f=S.extraForm, ex=docentiExtra().slice().sort((a,b)=>a.nome.localeCompare(b.nome,"it"));
   const usati=n=>(S.uscite||[]).filter(u=>(u.accomp||[]).includes(n)||(u.riserve||[]).includes(n)).length;
   let out=`<h2 class="sec" style="margin-top:26px">Docente senza orario del mattino</h2>
@@ -6417,9 +6407,27 @@ function renderDocentiExtra(){
     out+=`<div style="margin-top:14px">`+ex.map(d=>{ const n=usati(d.nome);
       return `<div class="regcard"><div class="reghead" style="cursor:default"><div style="flex:1"><b>${esc(d.nome)}</b>
         <div class="regsub">${esc(d.nota||NOTA_EXTRA)}${n?` · in ${n} ${n===1?"uscita":"uscite"}`:""}</div></div>
-        <b class="chev" style="color:var(--red); cursor:pointer" onclick="togliDocenteExtra(decodeURIComponent('${encodeURIComponent(d.nome)}'))" aria-label="Rimuovi">✕</b></div></div>`; }).join("")+`</div>`;
+        <b class="chev" style="color:var(--red); cursor:pointer" onclick="togliDocenteExtra(decodeURIComponent('${encodeURIComponent(d.nome)}'))" aria-label="Rimuovi">✕</b></div>
+        ${extraRicevimentoHtml(d)}</div>`; }).join("")+`</div>`;
   }
   return out;
+}
+/* ricevimento dei docenti senza orario del mattino: finisce nel PDF per la segreteria */
+function extraRicevimentoHtml(d){
+  const r=d.ric||{}, q=encodeURIComponent(d.nome);
+  const campo=(k,ph,w)=>`<input type="text" value="${esc(r[k]||"")}" placeholder="${esc(ph)}" style="${w}; padding:6px 8px; border-radius:8px; border:1px solid var(--rule); background:transparent; color:inherit; font:inherit; font-size:13px; box-sizing:border-box" oninput="extraRicSet(decodeURIComponent('${q}'),'${k}',this.value)">`;
+  return `<div style="padding:4px 14px 12px">
+    <div class="regsub" style="margin-bottom:6px">Ricevimento genitori (per il PDF della segreteria)</div>
+    <div style="display:flex; gap:6px; margin-bottom:6px">
+      <select style="flex:1; padding:6px 8px; border-radius:8px; border:1px solid var(--rule); background:transparent; color:inherit; font:inherit; font-size:13px" onchange="extraRicSet(decodeURIComponent('${q}'),'giorno',this.value)">
+        <option value="">— giorno —</option>${Object.values(RIC_GIORNI).map(g=>`<option${ricGiornoExtra(r.giorno)===g?" selected":""}>${g}</option>`).join("")}</select>
+      ${campo("orario","ora o orario (6, 3-4, 12:05 - 13:05)","flex:1.4;min-width:0")}</div>
+    ${campo("materia","Materia (es. Strumento musicale: Tromba)","width:100%;margin-bottom:6px")}
+    ${campo("classi","Classi (es. 1A - 1B - 2A)","width:100%")}</div>`;
+}
+function extraRicSet(nome,campo,val){
+  const d=docentiExtra().find(x=>x.nome===nome); if(!d) return;
+  d.ric=Object.assign({materia:"",classi:"",giorno:"",orario:""}, d.ric||{}); d.ric[campo]=val; save();
 }
 function aggiungiDocenteExtra(){
   const f=S.extraForm||{}, nome=String(f.nome||"").replace(/\s+/g," ").trim();

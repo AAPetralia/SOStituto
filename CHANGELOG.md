@@ -5,6 +5,9 @@ Si legge in alto nell'app, sotto il titolo. Da qui in avanti si aggiorna a ogni 
 
 ## Da qui in avanti (dettaglio certo)
 
+### 05.11.2026a — n. 108
+- **Ricevimento dei maestri di strumento musicale associato al docente.** In Altro → Cambio e aggiunta docente → «Docente senza orario del mattino» ogni docente ha ora i campi del ricevimento: giorno, ora (un numero come «6», un intervallo «3-4» oppure un orario scritto «12:05 - 13:05»), materia e classi. Sono i dati che finiscono nel PDF dei ricevimenti per la segreteria, che li legge da qui; sparisce l'elenco dei maestri nella schermata del PDF. Arima, Nardi, Organtini e Sette sono già precompilati (ricevimenti concordati), modificabili. I dati restano nell'orario e viaggiano con la condivisione e il backup.
+
 ### 04.11.2026d — n. 107
 - **Gruppi di seconda lingua: l'elenco mostra tutti i sostegni con la lingua**, non solo quelli indicati a mano. Per ognuno: docente, lingua, giorno, ora, classe e origine («orario» se la cella lo dice già, «a mano» se l'hai indicato qui, con ✕). Ordine per giorno e ora. Con ⚠ le celle la cui classe non è in articolata di lingua in quell'ora secondo i docenti di francese/spagnolo (di solito un'ora sbagliata nell'orario importato).
 
