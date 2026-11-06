@@ -1866,13 +1866,13 @@ function salvaProspettoPot(){
   if(gia) lista[lista.indexOf(gia)]=rec; else lista.push(rec);
   S.potProspNome=""; save(); toast("Prospetto salvato: "+nome); render();
 }
-/* il file Excel del prospetto (quello scaricato da «Prospetto in Excel») si può riportare qui: diventa un prospetto salvato,
-   che si ristampa in PDF o si riscarica. Si riconosce l'intestazione: riga «DOCENTE» con i giorni, riga sotto con le ore. */
-function importaProspettoPot(inp){
-  const f=inp.files&&inp.files[0]; inp.value=""; if(!f) return;
-  if(typeof XLSX==="undefined"){ toast("Il lettore Excel non è caricato: serve la connessione a internet"); return; }
+/* Importazione da Excel: il file scaricato da «Prospetto in Excel», modificato a mano, si riporta qui e CAMBIA le scelte:
+   la classe scritta in una cella diventa l'assegnazione di quell'ora, «P» la toglie (ora a disposizione), «Pno» la marca
+   non disponibile. «Sosp.» e ↔ sono modifiche temporanee con un periodo: il file non le può descrivere, si lasciano come sono. */
+function leggiProspettoXlsx(f, cb){
+  if(typeof XLSX==="undefined"){ cb(new Error("il lettore Excel non è caricato: serve la connessione a internet")); return; }
   const rd=new FileReader();
-  rd.onerror=()=>toast("Non riesco a leggere il file");
+  rd.onerror=()=>cb(new Error("non riesco a leggere il file"));
   rd.onload=e=>{
     try{
       const wb=XLSX.read(new Uint8Array(e.target.result),{type:"array"});
@@ -1880,7 +1880,6 @@ function importaProspettoPot(inp){
       const g=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:""}).map(r=>r.map(c=>String(c==null?"":c).trim()));
       const ih=g.findIndex(r=>r[0].toUpperCase()==="DOCENTE");
       if(ih<0 || !g[ih+1]) throw new Error("non è un prospetto del potenziamento (manca la riga «DOCENTE»)");
-      /* giorni: celle non vuote della riga DOCENTE; ore: numeri della riga sotto */
       const gg=[], inizi=[];
       g[ih].forEach((c,i)=>{ if(i>0 && c){ gg.push(c); inizi.push(i); } });
       const nOre=inizi.length>1 ? inizi[1]-inizi[0] : g[ih+1].slice(1).filter(Boolean).length;
@@ -1890,33 +1889,59 @@ function importaProspettoPot(inp){
       for(let r=ih+2;r<g.length;r++){
         const row=g[r]; if(!row[0]) break;
         const celle=gg.map((_,gi)=>oo.map((_,hi)=>{
-          const v=(row[inizi[gi]+hi]||"").replace(/\s*↔\s*$/,"").trim(), sp=/↔/.test(row[inizi[gi]+hi]||"");
+          const raw=row[inizi[gi]+hi]||"", v=raw.replace(/\s*↔\s*$/,"").trim(), sp=/↔/.test(raw);
           if(!v) return {t:"off"};
           if(/^pno$/i.test(v)) return {t:"pno"};
           if(/^sosp\.?$/i.test(v)) return {t:"sosp"};
           if(/^p$/i.test(v)) return {t:"p", sp};
-          return {t:"cl", c:v, sp};
+          return {t:"cl", c:v.toUpperCase(), sp};
         }));
         righe.push({nome:row[0], celle});
       }
       if(!righe.length) throw new Error("nessun docente nella tabella");
-      /* nome e settimana dalle righe del titolo, se ci sono */
-      const tit=(g[1]&&g[1][0])||"", parti=tit.split(" — ");
-      let nome=(parti.length>=4 && !/^Ore a disposizione/.test(parti[1])) ? parti[1] : "";
-      const mp=/(\d\d)\/(\d\d)\/(\d{4})\s*[–-]\s*(\d\d)\/(\d\d)\/(\d{4})/.exec(tit);
-      const cur=modelloPotenziamento();
-      const dal=mp ? mp[3]+"-"+mp[2]+"-"+mp[1] : cur.dal, al=mp ? mp[6]+"-"+mp[5]+"-"+mp[4] : cur.al;
-      if(!nome) nome=f.name.replace(/\.[^.]+$/,"").replace(/^SOStituto-potenziamento-?/i,"").replace(/-?\d{4}-\d\d-\d\d$/,"").replace(/-/g," ").trim() || ("Settimana "+fmtDM(dal)+" – "+fmtDM(al));
-      const lista=S.potProspetti=S.potProspetti||[];
-      const gia=lista.find(x=>x.nome.toLowerCase()===nome.toLowerCase());
-      if(gia && !confirm("Esiste già un prospetto «"+nome+"». Lo sostituisco con quello del file?")) return;
-      const rec={ id:gia?gia.id:"pp"+Date.now()+Math.floor(Math.random()*1000), nome, salvato:new Date().toISOString(),
-        gg, oo, dal, al, modAttive:/con modifiche temporanee/.test(tit), istituto:(g[0]&&g[0][0])||ISTITUTO, righe, daExcel:true };
-      if(gia) lista[lista.indexOf(gia)]=rec; else lista.push(rec);
-      save(); toast("Importato: "+nome+" ("+righe.length+" docenti)"); render();
-    }catch(err){ toast("File non valido: "+(err&&err.message||err)); }
+      cb(null,{gg,oo,righe});
+    }catch(err){ cb(err); }
   };
   rd.readAsArrayBuffer(f);
+}
+function importaProspettoPot(inp){
+  const f=inp.files&&inp.files[0]; inp.value=""; if(!f || !S.orario) return;
+  leggiProspettoXlsx(f,(err,m)=>{
+    if(err){ toast("File non valido: "+(err.message||err)); return; }
+    const o=S.orario, classi=new Set(tutteLeClassi(o));
+    const pa=Object.assign({}, S.potAssign||{}), pno=new Set(S.pnoOn||[]);
+    const nuoviPa={}, canc=[], camb=[], pnoOnN=[], pnoOffN=[], salt=[], noDoc=[], noClasse=[]; let uguali=0;
+    m.righe.forEach(r=>{
+      const d=o.docenti.find(x=>x.nome.toLowerCase()===r.nome.toLowerCase());
+      if(!d){ noDoc.push(r.nome); return; }
+      const slot=new Set(slotPot(d).map(x=>x.g+"|"+x.h));
+      m.gg.forEach((gname,gi)=>m.oo.forEach((h,hi)=>{
+        const c=r.celle[gi][hi], k=gname+"|"+h, key=d.nome+"|"+k;
+        if(c.t==="off" || c.t==="sosp") return;
+        if(!slot.has(k)){ salt.push(d.nome+" "+gname+" "+h+"ª"); return; }
+        if(c.t==="pno"){ if(!pno.has(key)){ pno.add(key); pnoOnN.push(key); } else uguali++; return; }
+        if(c.t==="cl" && !classi.has(c.c)){ noClasse.push(d.nome+" "+gname+" "+h+"ª: "+c.c); return; }
+        const nuova = c.t==="cl" ? c.c : "", vecchia=pa[key]||"";
+        if(pno.has(key)){ pno.delete(key); pnoOffN.push(key); }
+        if(nuova===vecchia){ uguali++; return; }
+        if(nuova){ pa[key]=nuova; camb.push(d.nome+" "+gname+" "+h+"ª: "+(vecchia||"—")+" → "+nuova); }
+        else { delete pa[key]; canc.push(d.nome+" "+gname+" "+h+"ª: "+vecchia+" → —"); }
+      }));
+    });
+    const tot=camb.length+canc.length+pnoOnN.length+pnoOffN.length;
+    if(!tot){ toast("Il file non cambia nulla: le scelte sono già queste"+(noDoc.length||noClasse.length?" (alcune righe non riconosciute)":"")); return; }
+    const righe=[ camb.length&&camb.length+" classi assegnate o cambiate", canc.length&&canc.length+" assegnazioni tolte (P)", pnoOnN.length&&pnoOnN.length+" ore marcate Pno", pnoOffN.length&&pnoOffN.length+" ore riattivate (non più Pno)" ].filter(Boolean);
+    const avvisi=[ noDoc.length&&"Docenti non riconosciuti: "+noDoc.join(", "), noClasse.length&&"Classi non riconosciute (saltate): "+noClasse.join("; "), salt.length&&salt.length+" celle in ore che non sono di potenziamento (saltate)" ].filter(Boolean);
+    if(!confirm("Dal file «"+f.name+"»:\n• "+righe.join("\n• ")+(avvisi.length?"\n\nAttenzione:\n"+avvisi.join("\n"):"")+"\n\nApplico queste scelte?")) return;
+    S.potUndo={potAssign:Object.assign({}, S.potAssign||{}), pnoOn:(S.pnoOn||[]).slice(), quando:new Date().toISOString(), file:f.name};
+    S.potAssign=pa; S.pnoOn=[...pno]; S.prospetto=null; S.potSel=""; S.potForm=null;
+    save(); toast("Importato: "+tot+" modifiche"); render();
+  });
+}
+function annullaImportoPot(){
+  const u=S.potUndo; if(!u) return;
+  if(!confirm("Annullo l'ultima importazione («"+u.file+"») e torno alle scelte di prima?")) return;
+  S.potAssign=u.potAssign; S.pnoOn=u.pnoOn; S.potUndo=null; S.prospetto=null; save(); toast("Importazione annullata"); render();
 }
 function prospettoSalvato(id){ return (S.potProspetti||[]).find(x=>x.id===id); }
 function eliminaProspettoPot(id){
@@ -1933,9 +1958,7 @@ function htmlProspettiSalvati(){
       <input type="text" id="potProspNome" value="${esc(S.potProspNome||"")}" placeholder="${esc(nomePropostoProspetto(mod))}" oninput="S.potProspNome=this.value"
         style="flex:1; min-width:0; padding:9px 10px; border-radius:10px; border:1px solid var(--rule); background:transparent; color:inherit; font:inherit; font-size:14px; box-sizing:border-box">
       <button class="btn" style="flex:0 0 auto; padding:9px 14px; font-size:14px" onclick="salvaProspettoPot()">Salva</button>
-    </div>
-    <input type="file" id="potProspFile" accept=".xlsx,.xls" style="display:none" onchange="importaProspettoPot(this)">
-    <button class="btn ghost" style="width:100%; margin-top:8px; padding:8px; font-size:13.5px" onclick="document.getElementById('potProspFile').click()">⬆ Importa un prospetto da Excel</button>`;
+    </div>`;
   out+=lista.map(m=>`<div class="regcard" style="padding:11px 13px; margin-top:8px">
       <div style="display:flex; justify-content:space-between; align-items:baseline; gap:8px">
         <b>${esc(m.nome)}</b>
@@ -3231,6 +3254,9 @@ function renderPotenziamento(){
   out += `<div style="display:flex; gap:8px; margin:14px 0">
     <button class="btn" style="flex:1; padding:10px; font-size:14px" onclick="stampaPotenziamento()">Prospetto in PDF</button>
     <button class="btn" style="flex:1; padding:10px; font-size:14px" onclick="scaricaPotenziamentoExcel()">Prospetto in Excel</button></div>`;
+  out += `<input type="file" id="potProspFile" accept=".xlsx,.xls" style="display:none" onchange="importaProspettoPot(this)">
+    <button class="btn ghost" style="width:100%; margin:-4px 0 6px; padding:9px; font-size:13.5px" onclick="document.getElementById('potProspFile').click()">⬆ Importa le scelte da Excel</button>
+    ${S.potUndo?`<div class="hint" style="margin:0 0 8px; text-align:center">Ultima importazione: ${esc(S.potUndo.file)} · <span style="color:var(--teal); font-weight:700; cursor:pointer" onclick="annullaImportoPot()">↩ Annulla</span></div>`:""}`;
   out += htmlProspettiSalvati();
 
   out += elenco.map(({doc,slot,vac})=>{
@@ -3398,8 +3424,8 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "06.11.2026c";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
-const NUMERO_VERSIONE = 111;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
+const VERSIONE = "06.11.2026d";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const NUMERO_VERSIONE = 112;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,

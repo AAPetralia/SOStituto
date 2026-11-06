@@ -5,6 +5,9 @@ Si legge in alto nell'app, sotto il titolo. Da qui in avanti si aggiorna a ogni 
 
 ## Da qui in avanti (dettaglio certo)
 
+### 06.11.2026d — n. 112
+- **Potenziamento: l'importazione da Excel cambia le scelte di assegnazione** (corregge la 06.11.2026c, che si limitava a salvare un prospetto). Il pulsante «⬆ Importa le scelte da Excel» legge il file scaricato da «Prospetto in Excel», modificato a mano, e applica: la classe scritta in una cella diventa l'assegnazione di quell'ora, «P» toglie l'assegnazione, «Pno» marca l'ora non disponibile (una cella con classe o P la riattiva). «Sosp.» e ↔ non si toccano (sono modifiche temporanee con un periodo). Prima di applicare mostra il riepilogo (quante assegnazioni cambiano, docenti o classi non riconosciuti, celle in ore che non sono di potenziamento) e chiede conferma; «↩ Annulla» riporta alle scelte di prima.
+
 ### 06.11.2026c — n. 111
 - **Prospetti del potenziamento: importazione da Excel.** In «Prospetti salvati» il pulsante «⬆ Importa un prospetto da Excel» legge un file scaricato da «Prospetto in Excel» (anche modificato a mano: classi, P, Pno, Sosp., ↔) e lo aggiunge ai prospetti salvati, con nome e settimana presi dal titolo del file. Da lì si ristampa in PDF o si riscarica. Se esiste già un prospetto con lo stesso nome chiede se sostituirlo.
 
