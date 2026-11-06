@@ -5,6 +5,9 @@ Si legge in alto nell'app, sotto il titolo. Da qui in avanti si aggiorna a ogni 
 
 ## Da qui in avanti (dettaglio certo)
 
+### 06.11.2026e — n. 113
+- **Prospetti del potenziamento: ogni prospetto salvato si può «usare».** Il pulsante «Usa questo» sotto un prospetto salvato applica le sue scelte al motore: le assegnazioni a classe e le ore Pno diventano quelle del prospetto (ricalcolando così coperture e sostituzioni). Un prospetto che coincide già con le scelte attuali mostra «✓ in uso». «↩ Annulla» riporta alle scelte di prima. Stesso meccanismo dell'importazione da Excel, che è un modo per entrare nel motore; PDF ed Excel restano la stampa.
+
 ### 06.11.2026d — n. 112
 - **Potenziamento: l'importazione da Excel cambia le scelte di assegnazione** (corregge la 06.11.2026c, che si limitava a salvare un prospetto). Il pulsante «⬆ Importa le scelte da Excel» legge il file scaricato da «Prospetto in Excel», modificato a mano, e applica: la classe scritta in una cella diventa l'assegnazione di quell'ora, «P» toglie l'assegnazione, «Pno» marca l'ora non disponibile (una cella con classe o P la riattiva). «Sosp.» e ↔ non si toccano (sono modifiche temporanee con un periodo). Prima di applicare mostra il riepilogo (quante assegnazioni cambiano, docenti o classi non riconosciuti, celle in ore che non sono di potenziamento) e chiede conferma; «↩ Annulla» riporta alle scelte di prima.
 

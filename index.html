@@ -1904,38 +1904,51 @@ function leggiProspettoXlsx(f, cb){
   };
   rd.readAsArrayBuffer(f);
 }
+/* confronto fra un prospetto (letto da un file o salvato) e le scelte attuali del motore: cosa cambierebbe */
+function diffModelloPot(m){
+  const o=S.orario, classi=new Set(tutteLeClassi(o));
+  const pa=Object.assign({}, S.potAssign||{}), pno=new Set(S.pnoOn||[]);
+  const r={camb:[], canc:[], pnoOnN:[], pnoOffN:[], salt:[], noDoc:[], noClasse:[], uguali:0};
+  m.righe.forEach(rg=>{
+    const d=o.docenti.find(x=>x.nome.toLowerCase()===rg.nome.toLowerCase());
+    if(!d){ r.noDoc.push(rg.nome); return; }
+    const slot=new Set(slotPot(d).map(x=>x.g+"|"+x.h));
+    m.gg.forEach((gname,gi)=>m.oo.forEach((h,hi)=>{
+      const c=rg.celle[gi][hi], k=gname+"|"+h, key=d.nome+"|"+k;
+      if(c.t==="off" || c.t==="sosp") return;
+      if(!slot.has(k)){ r.salt.push(d.nome+" "+gname+" "+h+"ª"); return; }
+      if(c.t==="pno"){ if(!pno.has(key)){ pno.add(key); r.pnoOnN.push(key); } else r.uguali++; return; }
+      if(c.t==="cl" && !classi.has(c.c)){ r.noClasse.push(d.nome+" "+gname+" "+h+"ª: "+c.c); return; }
+      const nuova = c.t==="cl" ? c.c : "", vecchia=pa[key]||"";
+      if(pno.has(key)){ pno.delete(key); r.pnoOffN.push(key); }
+      if(nuova===vecchia){ r.uguali++; return; }
+      if(nuova){ pa[key]=nuova; r.camb.push(d.nome+" "+gname+" "+h+"ª: "+(vecchia||"—")+" → "+nuova); }
+      else { delete pa[key]; r.canc.push(d.nome+" "+gname+" "+h+"ª: "+vecchia+" → —"); }
+    }));
+  });
+  r.pa=pa; r.pno=[...pno]; r.tot=r.camb.length+r.canc.length+r.pnoOnN.length+r.pnoOffN.length;
+  return r;
+}
+/* applica un prospetto alle scelte del motore: assegnazioni a classe e ore Pno. Le sostituzioni e le coperture
+   leggono da qui, quindi da questo momento sono coerenti con il prospetto. */
+function applicaModelloPot(m, etichetta, conferma){
+  const d=diffModelloPot(m);
+  if(!d.tot){ toast("«"+etichetta+"» è già in uso: le scelte coincidono"+(d.noDoc.length||d.noClasse.length?" (alcune righe non riconosciute)":"")); return; }
+  if(conferma){
+    const righe=[ d.camb.length&&d.camb.length+" classi assegnate o cambiate", d.canc.length&&d.canc.length+" assegnazioni tolte (P)", d.pnoOnN.length&&d.pnoOnN.length+" ore marcate Pno", d.pnoOffN.length&&d.pnoOffN.length+" ore riattivate (non più Pno)" ].filter(Boolean);
+    const avvisi=[ d.noDoc.length&&"Docenti non riconosciuti: "+d.noDoc.join(", "), d.noClasse.length&&"Classi non riconosciute (saltate): "+d.noClasse.join("; "), d.salt.length&&d.salt.length+" celle in ore che non sono di potenziamento (saltate)" ].filter(Boolean);
+    if(!confirm("Da «"+etichetta+"»:\n• "+righe.join("\n• ")+(avvisi.length?"\n\nAttenzione:\n"+avvisi.join("\n"):"")+"\n\nApplico queste scelte?")) return;
+  }
+  S.potUndo={potAssign:Object.assign({}, S.potAssign||{}), pnoOn:(S.pnoOn||[]).slice(), quando:new Date().toISOString(), file:etichetta};
+  S.potAssign=d.pa; S.pnoOn=d.pno; S.prospetto=null; S.potSel=""; S.potForm=null;
+  save(); toast("Applicato «"+etichetta+"»: "+d.tot+" modifiche"); render();
+}
+function usaProspettoPot(id){ const m=prospettoSalvato(id); if(m) applicaModelloPot(m, m.nome, false); }
 function importaProspettoPot(inp){
   const f=inp.files&&inp.files[0]; inp.value=""; if(!f || !S.orario) return;
   leggiProspettoXlsx(f,(err,m)=>{
     if(err){ toast("File non valido: "+(err.message||err)); return; }
-    const o=S.orario, classi=new Set(tutteLeClassi(o));
-    const pa=Object.assign({}, S.potAssign||{}), pno=new Set(S.pnoOn||[]);
-    const nuoviPa={}, canc=[], camb=[], pnoOnN=[], pnoOffN=[], salt=[], noDoc=[], noClasse=[]; let uguali=0;
-    m.righe.forEach(r=>{
-      const d=o.docenti.find(x=>x.nome.toLowerCase()===r.nome.toLowerCase());
-      if(!d){ noDoc.push(r.nome); return; }
-      const slot=new Set(slotPot(d).map(x=>x.g+"|"+x.h));
-      m.gg.forEach((gname,gi)=>m.oo.forEach((h,hi)=>{
-        const c=r.celle[gi][hi], k=gname+"|"+h, key=d.nome+"|"+k;
-        if(c.t==="off" || c.t==="sosp") return;
-        if(!slot.has(k)){ salt.push(d.nome+" "+gname+" "+h+"ª"); return; }
-        if(c.t==="pno"){ if(!pno.has(key)){ pno.add(key); pnoOnN.push(key); } else uguali++; return; }
-        if(c.t==="cl" && !classi.has(c.c)){ noClasse.push(d.nome+" "+gname+" "+h+"ª: "+c.c); return; }
-        const nuova = c.t==="cl" ? c.c : "", vecchia=pa[key]||"";
-        if(pno.has(key)){ pno.delete(key); pnoOffN.push(key); }
-        if(nuova===vecchia){ uguali++; return; }
-        if(nuova){ pa[key]=nuova; camb.push(d.nome+" "+gname+" "+h+"ª: "+(vecchia||"—")+" → "+nuova); }
-        else { delete pa[key]; canc.push(d.nome+" "+gname+" "+h+"ª: "+vecchia+" → —"); }
-      }));
-    });
-    const tot=camb.length+canc.length+pnoOnN.length+pnoOffN.length;
-    if(!tot){ toast("Il file non cambia nulla: le scelte sono già queste"+(noDoc.length||noClasse.length?" (alcune righe non riconosciute)":"")); return; }
-    const righe=[ camb.length&&camb.length+" classi assegnate o cambiate", canc.length&&canc.length+" assegnazioni tolte (P)", pnoOnN.length&&pnoOnN.length+" ore marcate Pno", pnoOffN.length&&pnoOffN.length+" ore riattivate (non più Pno)" ].filter(Boolean);
-    const avvisi=[ noDoc.length&&"Docenti non riconosciuti: "+noDoc.join(", "), noClasse.length&&"Classi non riconosciute (saltate): "+noClasse.join("; "), salt.length&&salt.length+" celle in ore che non sono di potenziamento (saltate)" ].filter(Boolean);
-    if(!confirm("Dal file «"+f.name+"»:\n• "+righe.join("\n• ")+(avvisi.length?"\n\nAttenzione:\n"+avvisi.join("\n"):"")+"\n\nApplico queste scelte?")) return;
-    S.potUndo={potAssign:Object.assign({}, S.potAssign||{}), pnoOn:(S.pnoOn||[]).slice(), quando:new Date().toISOString(), file:f.name};
-    S.potAssign=pa; S.pnoOn=[...pno]; S.prospetto=null; S.potSel=""; S.potForm=null;
-    save(); toast("Importato: "+tot+" modifiche"); render();
+    applicaModelloPot(m, f.name, true);
   });
 }
 function annullaImportoPot(){
@@ -1953,7 +1966,7 @@ function htmlProspettiSalvati(){
   const lista=(S.potProspetti||[]).slice().sort((a,b)=>(b.dal||"").localeCompare(a.dal||"") || (b.salvato||"").localeCompare(a.salvato||""));
   const mod=modelloPotenziamento();
   let out=`<h3 class="sub-sec">Prospetti salvati${lista.length?" ("+lista.length+")":""}</h3>
-    <p class="hint" style="margin-top:0">Salva il prospetto della settimana mostrata per ritrovarlo e ristamparlo dopo, anche quando le modifiche temporanee sono cambiate. Per un'altra settimana cambia la data in Sostituzioni.</p>
+    <p class="hint" style="margin-top:0">Salva le scelte di adesso (assegnazioni a classe e Pno) con un nome. Con <b>Usa questo</b> un prospetto salvato torna ad essere quello in vigore: cambiano le assegnazioni nel motore, e quindi coperture e sostituzioni. PDF ed Excel sono solo la stampa.</p>
     <div style="display:flex; gap:8px; align-items:center">
       <input type="text" id="potProspNome" value="${esc(S.potProspNome||"")}" placeholder="${esc(nomePropostoProspetto(mod))}" oninput="S.potProspNome=this.value"
         style="flex:1; min-width:0; padding:9px 10px; border-radius:10px; border:1px solid var(--rule); background:transparent; color:inherit; font:inherit; font-size:14px; box-sizing:border-box">
@@ -1966,6 +1979,9 @@ function htmlProspettiSalvati(){
       </div>
       <div class="regsub">${esc(fmtDMY(m.dal))} – ${esc(fmtDMY(m.al))}${m.modAttive?" · con modifiche temporanee":""} · ${m.righe.length} docenti · salvato il ${esc(new Date(m.salvato).toLocaleDateString("it-IT"))}</div>
       <div style="display:flex; gap:8px; margin-top:8px">
+        ${diffModelloPot(m).tot===0
+          ? `<div style="flex:1.3; padding:7px 10px; font-size:13px; font-weight:700; text-align:center; border-radius:10px; color:var(--ok-tx); background:var(--ok-bg2)">✓ in uso</div>`
+          : `<button class="btn" style="flex:1.3; padding:7px 10px; font-size:13px" onclick="usaProspettoPot('${esc(m.id)}')">Usa questo</button>`}
         <button class="btn ghost" style="flex:1; padding:7px 10px; font-size:13px" onclick="stampaPotenziamento(prospettoSalvato('${esc(m.id)}'))">PDF</button>
         <button class="btn ghost" style="flex:1; padding:7px 10px; font-size:13px" onclick="scaricaPotenziamentoExcel(prospettoSalvato('${esc(m.id)}'))">Excel</button>
       </div></div>`).join("");
@@ -3424,8 +3440,8 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "06.11.2026d";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
-const NUMERO_VERSIONE = 112;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
+const VERSIONE = "06.11.2026e";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const NUMERO_VERSIONE = 113;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
