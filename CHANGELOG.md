@@ -5,6 +5,10 @@ Si legge in alto nell'app, sotto il titolo. Da qui in avanti si aggiorna a ogni 
 
 ## Da qui in avanti (dettaglio certo)
 
+### 06.11.2026b — n. 110
+- **Potenziamento: si può annullare una sospensione (o uno spostamento) direttamente dall'ora.** Toccando un'ora sospesa o spostata compare, sotto «Modifiche temporanee», la modifica con il periodo e il pulsante «↩ Annulla la sospensione» / «↩ Annulla lo spostamento» (prima si poteva solo dall'elenco «Modifiche registrate» in alto).
+- **Prospetti del potenziamento salvati.** Sotto i pulsanti PDF/Excel: scrivi un nome (se lo lasci vuoto propone «Settimana 09/11 – 14/11») e premi «Salva»: si conserva il prospetto della settimana mostrata, com'è in quel momento (classi, Pno, sospensioni, spostamenti). Dall'elenco «Prospetti salvati» ogni prospetto si ristampa in PDF o si scarica in Excel, e si elimina. Per un'altra settimana si cambia la data in Sostituzioni. Salvati con i dati: viaggiano con la condivisione e il backup.
+
 ### 06.11.2026a — n. 109
 - **Potenziamento: prospetto anche in Excel.** Accanto a «Prospetto in PDF» c'è «Prospetto in Excel»: stesso contenuto della griglia da affiggere (docente × giorni × ore, con classe assegnata, P, Pno, Sosp., ↔), in un file .xlsx modificabile. Serve la connessione (lettore Excel).
 

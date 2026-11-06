@@ -580,6 +580,7 @@ function save(){ try{
   localStorage.setItem("sostituto_incompat", JSON.stringify(S.incompatibili||[]));
   localStorage.setItem("sostituto_potauto", JSON.stringify(S.potAuto||[]));
   localStorage.setItem("sostituto_ricpdf", JSON.stringify(S.ricPdf||null));
+  localStorage.setItem("sostituto_potprosp", JSON.stringify(S.potProspetti||[]));
   localStorage.setItem("sostituto_ruolo", S.ruolo||"completo");
 }catch(e){} }
 function load(){ try{
@@ -612,6 +613,7 @@ function load(){ try{
   const inc=localStorage.getItem("sostituto_incompat"); if(inc) S.incompatibili=JSON.parse(inc);
   const pau=localStorage.getItem("sostituto_potauto"); if(pau) S.potAuto=JSON.parse(pau);
   const rpd=localStorage.getItem("sostituto_ricpdf"); if(rpd){ const v=JSON.parse(rpd); if(v) S.ricPdf=v; }
+  const ppr=localStorage.getItem("sostituto_potprosp"); if(ppr){ const v=JSON.parse(ppr); if(Array.isArray(v)) S.potProspetti=v; }
   const ru=localStorage.getItem("sostituto_ruolo"); if(ru) S.ruolo=ru;
 }catch(e){} }
 
@@ -1757,38 +1759,47 @@ function stampaRegistro(soloGiorno){
   lanciaStampa(html, "portrait", nomeFile);
 }
 
-/* ---- PROSPETTO POTENZIAMENTO: griglia settimanale da affiggere ---- */
-function stampaPotenziamento(){
-  const o = S.orario;
-  const elenco = orePotenziamento(o);
-  if(!elenco.length){ toast("Nessun docente con ore di potenziamento"); return; }
-  const gg = o.giorni, oo = o.ore;
-  const modAttive = (S.potMod||[]).some(m=>statoPotMod(m)==="inCorso");
-  const periodo = fmtDMY(dataDelGiorno("LUN"))+" – "+fmtDMY(dataDelGiorno(gg[gg.length-1]||"SAB"));
-
-  const intest1 = gg.map(g=>`<th colspan="${oo.length}" class="pg-day">${esc(g)}</th>`).join("");
-  const intest2 = gg.map(()=> oo.map(h=>`<th class="pg-h">${h}</th>`).join("")).join("");
-
-  const righe = elenco.map(({doc,slot})=>{
-    const mp = new Map(slot.map(s=>[s.g+"|"+s.h, s]));
-    const celle = gg.map(g=> oo.map(h=>{
-      const s = mp.get(g+"|"+h);
-      if(!s) return `<td class="pg-off"></td>`;
-      const key = doc.nome+"|"+g+"|"+h;
-      if((S.pnoOn||[]).includes(key)) return `<td class="pg-pno">Pno</td>`;
-      if(sospesaIn(doc,g,h)) return `<td class="pg-pno">Sosp.</td>`;
-      const cls = potAssEff(doc,g,h);
-      const mark = s.spostata ? " ↔" : "";
-      return cls ? `<td class="pg-cl"><b>${esc(cls)}</b>${mark}</td>` : `<td class="pg-p">P${mark}</td>`;
-    }).join("")).join("");
-    return `<tr><td class="pg-nome">${esc(doc.nome)}</td>${celle}</tr>`;
-  }).join("");
-
-  const html = `
+/* ---- PROSPETTO POTENZIAMENTO: griglia settimanale da affiggere ----
+   Il prospetto si costruisce prima come «modello» (docenti × giorni × ore, già risolto: classe, P, Pno, Sosp.):
+   dal modello escono il PDF e l'Excel, e lo stesso modello si può salvare per rivederlo o ristamparlo in seguito. */
+function modelloPotenziamento(){
+  const o=S.orario, elenco=orePotenziamento(o), gg=o.giorni, oo=o.ore;
+  const modAttive=(S.potMod||[]).some(m=>statoPotMod(m)==="inCorso");
+  const dal=dataDelGiorno("LUN"), al=dataDelGiorno(gg[gg.length-1]||"SAB");
+  return { gg, oo, dal, al, modAttive, istituto:ISTITUTO,
+    righe: elenco.map(({doc,slot})=>{
+      const mp=new Map(slot.map(x=>[x.g+"|"+x.h, x]));
+      return { nome:doc.nome, celle: gg.map(g=>oo.map(h=>{
+        const x=mp.get(g+"|"+h); if(!x) return {t:"off"};
+        if((S.pnoOn||[]).includes(doc.nome+"|"+g+"|"+h)) return {t:"pno"};
+        if(sospesaIn(doc,g,h)) return {t:"sosp"};
+        const cls=potAssEff(doc,g,h);
+        return cls ? {t:"cl", c:cls, sp:!!x.spostata} : {t:"p", sp:!!x.spostata};
+      })) };
+    }) };
+}
+function sottotitoloPot(m){
+  return "Ore a disposizione e classi assegnate — "+(m.modAttive||m.nome ? "settimana "+fmtDMY(m.dal)+" – "+fmtDMY(m.al)+(m.modAttive?", con modifiche temporanee":"") : "anno scolastico in corso");
+}
+function stampaPotenziamento(m){
+  if(!m) m=modelloPotenziamento();
+  if(!m.righe.length){ toast("Nessun docente con ore di potenziamento"); return; }
+  const gg=m.gg, oo=m.oo;
+  const intest1=gg.map(g=>`<th colspan="${oo.length}" class="pg-day">${esc(g)}</th>`).join("");
+  const intest2=gg.map(()=> oo.map(h=>`<th class="pg-h">${h}</th>`).join("")).join("");
+  const righe=m.righe.map(r=>`<tr><td class="pg-nome">${esc(r.nome)}</td>${
+    r.celle.map(gi=>gi.map(c=>{
+      if(c.t==="off") return `<td class="pg-off"></td>`;
+      if(c.t==="pno") return `<td class="pg-pno">Pno</td>`;
+      if(c.t==="sosp") return `<td class="pg-pno">Sosp.</td>`;
+      const mark=c.sp?" ↔":"";
+      return c.t==="cl" ? `<td class="pg-cl"><b>${esc(c.c)}</b>${mark}</td>` : `<td class="pg-p">P${mark}</td>`;
+    }).join("")).join("")}</tr>`).join("");
+  const html=`
     <div class="pr-head">
-      <div class="pr-ist">${esc(ISTITUTO)}</div>
-      <div class="pr-tit">Prospetto del potenziamento</div>
-      <div class="pr-sub">Ore a disposizione e classi assegnate — ${modAttive ? "settimana "+esc(periodo)+", con modifiche temporanee" : "anno scolastico in corso"}</div>
+      <div class="pr-ist">${esc(m.istituto||ISTITUTO)}</div>
+      <div class="pr-tit">Prospetto del potenziamento${m.nome?" — "+esc(m.nome):""}</div>
+      <div class="pr-sub">${esc(sottotitoloPot(m))}</div>
     </div>
     <table class="pr-tab pr-pot">
       <thead>
@@ -1805,34 +1816,24 @@ function stampaPotenziamento(){
       <b>classe</b> = potenziamento assegnato a quella classe
     </div>
     <div class="pr-firma-box">Il responsabile di plesso<br><br>______________________________</div>`;
-  lanciaStampa(html, "landscape", "Prospetto potenziamento");
+  lanciaStampa(html, "landscape", "Prospetto potenziamento"+(m.nome?" "+m.nome:""));
 }
 /* stesso prospetto in Excel: una riga per docente, giorni × ore; dentro la classe assegnata, «P» se libera,
    «Pno», «Sosp.»; «↔» se l'ora è stata spostata */
-function scaricaPotenziamentoExcel(){
-  const o=S.orario; if(!o) return;
-  const elenco=orePotenziamento(o);
-  if(!elenco.length){ toast("Nessun docente con ore di potenziamento"); return; }
+function scaricaPotenziamentoExcel(m){
+  if(!S.orario) return;
+  if(!m) m=modelloPotenziamento();
+  if(!m.righe.length){ toast("Nessun docente con ore di potenziamento"); return; }
   if(typeof XLSX==="undefined"){ toast("Il lettore Excel non è caricato: serve la connessione a internet"); return; }
-  const gg=o.giorni, oo=o.ore, oggi=isoOggi();
-  const modAttive=(S.potMod||[]).some(m=>statoPotMod(m)==="inCorso");
-  const periodo=fmtDMY(dataDelGiorno("LUN"))+" – "+fmtDMY(dataDelGiorno(gg[gg.length-1]||"SAB"));
+  const gg=m.gg, oo=m.oo;
   const righe=[];
-  righe.push([ISTITUTO]);
-  righe.push(["Prospetto del potenziamento — ore a disposizione e classi assegnate ("+(modAttive?"settimana "+periodo+", con modifiche temporanee":"anno scolastico in corso")+")"]);
+  righe.push([m.istituto||ISTITUTO]);
+  righe.push(["Prospetto del potenziamento"+(m.nome?" — "+m.nome:"")+" — "+sottotitoloPot(m)]);
   righe.push([]);
   righe.push(["DOCENTE"].concat(...gg.map(g=>[g].concat(oo.slice(1).map(()=>"")))));
   righe.push([""].concat(...gg.map(()=>oo.slice())));
-  elenco.forEach(({doc,slot})=>{
-    const mp=new Map(slot.map(x=>[x.g+"|"+x.h, x]));
-    righe.push([doc.nome].concat(...gg.map(g=>oo.map(h=>{
-      const x=mp.get(g+"|"+h); if(!x) return "";
-      if((S.pnoOn||[]).includes(doc.nome+"|"+g+"|"+h)) return "Pno";
-      if(sospesaIn(doc,g,h)) return "Sosp.";
-      const cls=potAssEff(doc,g,h);
-      return (cls||"P")+(x.spostata?" ↔":"");
-    }))));
-  });
+  m.righe.forEach(r=>righe.push([r.nome].concat(...r.celle.map(gi=>gi.map(c=>
+    c.t==="off" ? "" : c.t==="pno" ? "Pno" : c.t==="sosp" ? "Sosp." : (c.t==="cl" ? c.c : "P")+(c.sp?" ↔":""))))));
   righe.push([]);
   righe.push(["P = ora di potenziamento a disposizione · Pno = docente impegnato in altra attività, non disponibile · Sosp. = ora sospesa temporaneamente · ↔ = ora spostata in questa settimana · classe = potenziamento assegnato a quella classe"]);
   const ws=XLSX.utils.aoa_to_sheet(righe);
@@ -1840,7 +1841,7 @@ function scaricaPotenziamentoExcel(){
   ws["!cols"]=[{wch:26}].concat(...gg.map(()=>oo.map(()=>({wch:6}))));
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "potenziamento");
-  const nome="SOStituto-potenziamento-"+oggi+".xlsx";
+  const nome="SOStituto-potenziamento-"+(m.nome?m.nome.replace(/[^\wÀ-ÿ -]+/g,"").trim().replace(/\s+/g,"-")+"-":"")+isoOggi()+".xlsx";
   try{
     const buf=XLSX.write(wb,{bookType:"xlsx", type:"array"});
     const blob=new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
@@ -1849,6 +1850,49 @@ function scaricaPotenziamentoExcel(){
     setTimeout(()=>URL.revokeObjectURL(url), 4000);
     toast("Prospetto scaricato: "+nome);
   }catch(e){ toast("Scarico non riuscito: "+e.message); }
+}
+
+/* ---- prospetti del potenziamento salvati (uno per settimana) ---- */
+function nomePropostoProspetto(m){ return "Settimana "+fmtDM(m.dal)+" – "+fmtDM(m.al); }
+function salvaProspettoPot(){
+  if(!S.orario) return;
+  const m=modelloPotenziamento(); if(!m.righe.length){ toast("Nessun docente con ore di potenziamento"); return; }
+  const inp=document.getElementById("potProspNome");
+  const nome=((inp&&inp.value)||"").trim() || nomePropostoProspetto(m);
+  const lista=S.potProspetti=S.potProspetti||[];
+  const gia=lista.find(x=>x.nome.toLowerCase()===nome.toLowerCase());
+  if(gia && !confirm("Esiste già un prospetto «"+nome+"». Lo sostituisco con quello di adesso?")) return;
+  const rec=Object.assign(m,{ id:gia?gia.id:"pp"+Date.now()+Math.floor(Math.random()*1000), nome, salvato:new Date().toISOString() });
+  if(gia) lista[lista.indexOf(gia)]=rec; else lista.push(rec);
+  S.potProspNome=""; save(); toast("Prospetto salvato: "+nome); render();
+}
+function prospettoSalvato(id){ return (S.potProspetti||[]).find(x=>x.id===id); }
+function eliminaProspettoPot(id){
+  const m=prospettoSalvato(id); if(!m) return;
+  if(!confirm("Eliminare il prospetto «"+m.nome+"»?")) return;
+  S.potProspetti=S.potProspetti.filter(x=>x.id!==id); save(); render();
+}
+function htmlProspettiSalvati(){
+  const lista=(S.potProspetti||[]).slice().sort((a,b)=>(b.dal||"").localeCompare(a.dal||"") || (b.salvato||"").localeCompare(a.salvato||""));
+  const mod=modelloPotenziamento();
+  let out=`<h3 class="sub-sec">Prospetti salvati${lista.length?" ("+lista.length+")":""}</h3>
+    <p class="hint" style="margin-top:0">Salva il prospetto della settimana mostrata per ritrovarlo e ristamparlo dopo, anche quando le modifiche temporanee sono cambiate. Per un'altra settimana cambia la data in Sostituzioni.</p>
+    <div style="display:flex; gap:8px; align-items:center">
+      <input type="text" id="potProspNome" value="${esc(S.potProspNome||"")}" placeholder="${esc(nomePropostoProspetto(mod))}" oninput="S.potProspNome=this.value"
+        style="flex:1; min-width:0; padding:9px 10px; border-radius:10px; border:1px solid var(--rule); background:transparent; color:inherit; font:inherit; font-size:14px; box-sizing:border-box">
+      <button class="btn" style="flex:0 0 auto; padding:9px 14px; font-size:14px" onclick="salvaProspettoPot()">Salva</button>
+    </div>`;
+  out+=lista.map(m=>`<div class="regcard" style="padding:11px 13px; margin-top:8px">
+      <div style="display:flex; justify-content:space-between; align-items:baseline; gap:8px">
+        <b>${esc(m.nome)}</b>
+        <span style="color:var(--red); cursor:pointer; font-weight:700" onclick="eliminaProspettoPot('${esc(m.id)}')" aria-label="Elimina">✕</span>
+      </div>
+      <div class="regsub">${esc(fmtDMY(m.dal))} – ${esc(fmtDMY(m.al))}${m.modAttive?" · con modifiche temporanee":""} · ${m.righe.length} docenti · salvato il ${esc(new Date(m.salvato).toLocaleDateString("it-IT"))}</div>
+      <div style="display:flex; gap:8px; margin-top:8px">
+        <button class="btn ghost" style="flex:1; padding:7px 10px; font-size:13px" onclick="stampaPotenziamento(prospettoSalvato('${esc(m.id)}'))">PDF</button>
+        <button class="btn ghost" style="flex:1; padding:7px 10px; font-size:13px" onclick="scaricaPotenziamentoExcel(prospettoSalvato('${esc(m.id)}'))">Excel</button>
+      </div></div>`).join("");
+  return out;
 }
 
 /* ================= CONDIVISIONE (foglio Google) ================= */
@@ -1861,7 +1905,7 @@ function statoDaCondividere(){
     pnoOn:S.pnoOn||[], potAssign:S.potAssign||{}, potMod:S.potMod||[], recuperi:S.recuperi||[], bancaOre:S.bancaOre||[],
     /* da tenere allineati con datiBackup(): tutto ciò che un altro dispositivo
        deve ritrovare, non solo l'orario e il registro */
-    assistenti:S.assistenti||[], configCriteri:S.configCriteri||null, potAuto:S.potAuto||[], ricPdf:S.ricPdf||null,
+    assistenti:S.assistenti||[], configCriteri:S.configCriteri||null, potAuto:S.potAuto||[], ricPdf:S.ricPdf||null, potProspetti:S.potProspetti||[],
     /* il prospetto generato ma non ancora eliminato: senza questo, ogni Scarica
        lo cancellava sul dispositivo che riceveva, anche se era ancora lì su chi
        l'aveva fatto */
@@ -1891,6 +1935,7 @@ function applicaStato(d){
   if(d.assistenti) S.assistenti = d.assistenti;
   if(d.potAuto) S.potAuto = d.potAuto;
   if(d.ricPdf) S.ricPdf = d.ricPdf;
+  if(Array.isArray(d.potProspetti)) S.potProspetti = d.potProspetti;
   if(d.prospettoOggi){
     /* uno stato arrivato da un altro dispositivo (o da un backup): il prospetto
        generato lì vale anche qui, come se l'avessi fatto io */
@@ -3132,6 +3177,7 @@ function renderPotenziamento(){
   out += `<div style="display:flex; gap:8px; margin:14px 0">
     <button class="btn" style="flex:1; padding:10px; font-size:14px" onclick="stampaPotenziamento()">Prospetto in PDF</button>
     <button class="btn" style="flex:1; padding:10px; font-size:14px" onclick="scaricaPotenziamentoExcel()">Prospetto in Excel</button></div>`;
+  out += htmlProspettiSalvati();
 
   out += elenco.map(({doc,slot,vac})=>{
     const btns = slot.map(s=>{
@@ -3167,6 +3213,7 @@ function renderPotenziamento(){
           </div>
           <div class="poted-sep"></div>
           <div class="poted-lbl">Modifiche temporanee</div>
+          ${modsDellOra(doc,sel.g,sel.h)}
           <div class="orebtns">
             <div class="oreb" onclick="apriFormPot('sospesa','${esc(key)}')">⏸ Sospendi…</div>
             <div class="oreb" onclick="apriFormPot('spostata','${esc(key)}')">↔ Sposta…</div>
@@ -3194,6 +3241,22 @@ function renderPotenziamento(){
   }).join("");
 
   el("main").innerHTML = out;
+}
+
+/* sospensioni e spostamenti che riguardano questa ora, con il pulsante per annullarli lì dove si è toccata l'ora */
+function modsDellOra(doc,g,h){
+  const lista=(S.potMod||[]).filter(m=>m.docente===doc.nome && !(m.al && m.al<dataDelGiorno("LUN")) &&
+    ((m.g===g&&m.h===h) || (m.tipo==="spostata" && m.a && m.a.g===g && m.a.h===h)));
+  if(!lista.length) return "";
+  return lista.map(m=>{
+    const st=statoPotMod(m);
+    const per=m.al ? (m.dal===m.al ? fmtDMY(m.dal) : `dal ${fmtDM(m.dal)} al ${fmtDM(m.al)}`) : `dal ${fmtDM(m.dal)}, fino a revoca`;
+    const desc=m.tipo==="sospesa" ? "⏸ Sospesa" : `↔ Spostata ${m.g} ${m.h}ª → ${m.a.g} ${m.a.h}ª`;
+    return `<div class="promemo" style="margin:0 0 8px; padding:8px 10px; ${st==="inCorso"?"":"opacity:.85"}">
+      <b>${desc}</b> · ${esc(per)}${st==="inCorso"?" · <b>in corso questa settimana</b>":st==="altra"?" · in un'altra settimana":""}
+      ${m.nota?`<div class="regsub">${esc(m.nota)}</div>`:""}
+      <div style="margin-top:6px"><button class="btn ghost" style="padding:6px 12px; font-size:13px; color:var(--red); border-color:var(--red)" onclick="revocaPotMod('${esc(m.id)}')">↩ Annulla ${m.tipo==="sospesa"?"la sospensione":"lo spostamento"}</button></div></div>`;
+  }).join("");
 }
 
 /* modulo per sospendere o spostare un'ora */
@@ -3281,8 +3344,8 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "06.11.2026a";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
-const NUMERO_VERSIONE = 109;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
+const VERSIONE = "06.11.2026b";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const NUMERO_VERSIONE = 110;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -3303,6 +3366,7 @@ function datiBackup(){
     assistenti: S.assistenti || [],
     potAuto: S.potAuto || [],
     ricPdf: S.ricPdf || null,
+    potProspetti: S.potProspetti || [],
     linguaSostegno: S.linguaSostegno || {},
     incompatibili: S.incompatibili || [],
     prospettoOggi: { dataOggi:S.dataOggi||null, prospetto:S.prospetto||null, assentiOggi:S.assentiOggi||{},
