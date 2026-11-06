@@ -1866,6 +1866,58 @@ function salvaProspettoPot(){
   if(gia) lista[lista.indexOf(gia)]=rec; else lista.push(rec);
   S.potProspNome=""; save(); toast("Prospetto salvato: "+nome); render();
 }
+/* il file Excel del prospetto (quello scaricato da «Prospetto in Excel») si può riportare qui: diventa un prospetto salvato,
+   che si ristampa in PDF o si riscarica. Si riconosce l'intestazione: riga «DOCENTE» con i giorni, riga sotto con le ore. */
+function importaProspettoPot(inp){
+  const f=inp.files&&inp.files[0]; inp.value=""; if(!f) return;
+  if(typeof XLSX==="undefined"){ toast("Il lettore Excel non è caricato: serve la connessione a internet"); return; }
+  const rd=new FileReader();
+  rd.onerror=()=>toast("Non riesco a leggere il file");
+  rd.onload=e=>{
+    try{
+      const wb=XLSX.read(new Uint8Array(e.target.result),{type:"array"});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const g=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:""}).map(r=>r.map(c=>String(c==null?"":c).trim()));
+      const ih=g.findIndex(r=>r[0].toUpperCase()==="DOCENTE");
+      if(ih<0 || !g[ih+1]) throw new Error("non è un prospetto del potenziamento (manca la riga «DOCENTE»)");
+      /* giorni: celle non vuote della riga DOCENTE; ore: numeri della riga sotto */
+      const gg=[], inizi=[];
+      g[ih].forEach((c,i)=>{ if(i>0 && c){ gg.push(c); inizi.push(i); } });
+      const nOre=inizi.length>1 ? inizi[1]-inizi[0] : g[ih+1].slice(1).filter(Boolean).length;
+      const oo=g[ih+1].slice(1,1+nOre).map(Number).filter(n=>n>0);
+      if(!gg.length || !oo.length || oo.length!==nOre) throw new Error("giorni o ore non riconosciuti");
+      const righe=[];
+      for(let r=ih+2;r<g.length;r++){
+        const row=g[r]; if(!row[0]) break;
+        const celle=gg.map((_,gi)=>oo.map((_,hi)=>{
+          const v=(row[inizi[gi]+hi]||"").replace(/\s*↔\s*$/,"").trim(), sp=/↔/.test(row[inizi[gi]+hi]||"");
+          if(!v) return {t:"off"};
+          if(/^pno$/i.test(v)) return {t:"pno"};
+          if(/^sosp\.?$/i.test(v)) return {t:"sosp"};
+          if(/^p$/i.test(v)) return {t:"p", sp};
+          return {t:"cl", c:v, sp};
+        }));
+        righe.push({nome:row[0], celle});
+      }
+      if(!righe.length) throw new Error("nessun docente nella tabella");
+      /* nome e settimana dalle righe del titolo, se ci sono */
+      const tit=(g[1]&&g[1][0])||"", parti=tit.split(" — ");
+      let nome=(parti.length>=4 && !/^Ore a disposizione/.test(parti[1])) ? parti[1] : "";
+      const mp=/(\d\d)\/(\d\d)\/(\d{4})\s*[–-]\s*(\d\d)\/(\d\d)\/(\d{4})/.exec(tit);
+      const cur=modelloPotenziamento();
+      const dal=mp ? mp[3]+"-"+mp[2]+"-"+mp[1] : cur.dal, al=mp ? mp[6]+"-"+mp[5]+"-"+mp[4] : cur.al;
+      if(!nome) nome=f.name.replace(/\.[^.]+$/,"").replace(/^SOStituto-potenziamento-?/i,"").replace(/-?\d{4}-\d\d-\d\d$/,"").replace(/-/g," ").trim() || ("Settimana "+fmtDM(dal)+" – "+fmtDM(al));
+      const lista=S.potProspetti=S.potProspetti||[];
+      const gia=lista.find(x=>x.nome.toLowerCase()===nome.toLowerCase());
+      if(gia && !confirm("Esiste già un prospetto «"+nome+"». Lo sostituisco con quello del file?")) return;
+      const rec={ id:gia?gia.id:"pp"+Date.now()+Math.floor(Math.random()*1000), nome, salvato:new Date().toISOString(),
+        gg, oo, dal, al, modAttive:/con modifiche temporanee/.test(tit), istituto:(g[0]&&g[0][0])||ISTITUTO, righe, daExcel:true };
+      if(gia) lista[lista.indexOf(gia)]=rec; else lista.push(rec);
+      save(); toast("Importato: "+nome+" ("+righe.length+" docenti)"); render();
+    }catch(err){ toast("File non valido: "+(err&&err.message||err)); }
+  };
+  rd.readAsArrayBuffer(f);
+}
 function prospettoSalvato(id){ return (S.potProspetti||[]).find(x=>x.id===id); }
 function eliminaProspettoPot(id){
   const m=prospettoSalvato(id); if(!m) return;
@@ -1881,7 +1933,9 @@ function htmlProspettiSalvati(){
       <input type="text" id="potProspNome" value="${esc(S.potProspNome||"")}" placeholder="${esc(nomePropostoProspetto(mod))}" oninput="S.potProspNome=this.value"
         style="flex:1; min-width:0; padding:9px 10px; border-radius:10px; border:1px solid var(--rule); background:transparent; color:inherit; font:inherit; font-size:14px; box-sizing:border-box">
       <button class="btn" style="flex:0 0 auto; padding:9px 14px; font-size:14px" onclick="salvaProspettoPot()">Salva</button>
-    </div>`;
+    </div>
+    <input type="file" id="potProspFile" accept=".xlsx,.xls" style="display:none" onchange="importaProspettoPot(this)">
+    <button class="btn ghost" style="width:100%; margin-top:8px; padding:8px; font-size:13.5px" onclick="document.getElementById('potProspFile').click()">⬆ Importa un prospetto da Excel</button>`;
   out+=lista.map(m=>`<div class="regcard" style="padding:11px 13px; margin-top:8px">
       <div style="display:flex; justify-content:space-between; align-items:baseline; gap:8px">
         <b>${esc(m.nome)}</b>
@@ -3344,8 +3398,8 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "06.11.2026b";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
-const NUMERO_VERSIONE = 110;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
+const VERSIONE = "06.11.2026c";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const NUMERO_VERSIONE = 111;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
