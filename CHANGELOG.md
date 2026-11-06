@@ -5,6 +5,9 @@ Si legge in alto nell'app, sotto il titolo. Da qui in avanti si aggiorna a ogni 
 
 ## Da qui in avanti (dettaglio certo)
 
+### 06.11.2026a — n. 109
+- **Potenziamento: prospetto anche in Excel.** Accanto a «Prospetto in PDF» c'è «Prospetto in Excel»: stesso contenuto della griglia da affiggere (docente × giorni × ore, con classe assegnata, P, Pno, Sosp., ↔), in un file .xlsx modificabile. Serve la connessione (lettore Excel).
+
 ### 05.11.2026a — n. 108
 - **Ricevimento dei maestri di strumento musicale associato al docente.** In Altro → Cambio e aggiunta docente → «Docente senza orario del mattino» ogni docente ha ora i campi del ricevimento: giorno, ora (un numero come «6», un intervallo «3-4» oppure un orario scritto «12:05 - 13:05»), materia e classi. Sono i dati che finiscono nel PDF dei ricevimenti per la segreteria, che li legge da qui; sparisce l'elenco dei maestri nella schermata del PDF. Arima, Nardi, Organtini e Sette sono già precompilati (ricevimenti concordati), modificabili. I dati restano nell'orario e viaggiano con la condivisione e il backup.
 
