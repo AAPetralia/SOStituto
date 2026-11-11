@@ -3440,8 +3440,8 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "06.11.2026e";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
-const NUMERO_VERSIONE = 113;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
+const VERSIONE = "11.11.2026a";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const NUMERO_VERSIONE = 114;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -5693,11 +5693,13 @@ const RIC_ELENCO_DEFAULT = [["Curzi Suzy", "Arte e Immagine"], ["Eleuteri Bianca
 const RIC_EXTRA_DEFAULT = [{"nome": "Arima Kahoru", "materia": "Strumento musicale: Pianoforte", "classi": "1A - 1C - 1D - 2A - 2B - 2C - 2D - 3A - 3B - 3C - 3D", "giorno": "Martedì", "orario": "6"}, {"nome": "Nardi Ilaria", "materia": "Strumento musicale: Fisarmonica", "classi": "1A - 1B - 1C - 1D - 2A - 2B - 2C - 2D - 3A - 3B - 3C - 3D", "giorno": "Venerdì", "orario": "2"}, {"nome": "Organtini Giorgio", "materia": "Strumento musicale: Saxofono", "classi": "1A - 1B - 1C - 1D - 2A - 2B - 2C - 2D - 3A - 3B - 3C - 3D", "giorno": "Martedì", "orario": "6"}, {"nome": "Sette Alfredo", "materia": "Strumento musicale: Tromba", "classi": "1A - 1B - 1C - 2A - 2B - 2C - 2D - 3A - 3B - 3C - 3D", "giorno": "Venerdì", "orario": "12:05 - 13:05"}];
 /* supplenti temporanei: nel PDF figura il titolare della cattedra */
 const RIC_ALIAS_DEFAULT = {"PUCCI Erika":"Pacetti Elisa"};
+/* docenti che fanno anche AIRC (religione): classi dove la fanno; nel PDF dei ricevimenti si aggiunge «, AIRC» alla materia e le classi si sommano a quelle dell'orario. Chiave = nome come nell'orario. Si corregge in «Correzioni a mano». */
+const RIC_AIRC_DEFAULT = {"Mayerle":"2A 3C 2B","Croceri":"1C","Galiano":"3A 3D","Sabatini":"1D 3B","Melatini":"1A","Sgariglia A.":"2C"};
 const RIC_GIORNI = {LUN:"Lunedì", MAR:"Martedì", MER:"Mercoledì", GIO:"Giovedì", VEN:"Venerdì", SAB:"Sabato"};
 
 function ricCfg(){
   const r = S.ricPdf = S.ricPdf || {};
-  r.nomi = r.nomi || {}; r.materie = r.materie || {};
+  r.nomi = r.nomi || {}; r.materie = r.materie || {}; r.airc = r.airc || {};
   if(!Array.isArray(r.extra)) r.extra = RIC_EXTRA_DEFAULT.map(e=>Object.assign({},e));
   r.orari = Object.assign({}, RIC_ORARI_DEFAULT, r.orari || {});
   if(!Array.isArray(r.intestazione) || !r.intestazione.length) r.intestazione = RIC_INTESTAZIONE_DEFAULT.slice();
@@ -5758,6 +5760,11 @@ function ricNomeDi(d, cfg){
   /* non nell'elenco della scuola: «PUCCI Erika» → «Pucci Erika» */
   return d.nome.replace(/\b[A-ZÀ-Ý]{3,}\b/g, w=>w.charAt(0)+w.slice(1).toLowerCase());
 }
+function ricAircDi(doc, cfg){   /* classi AIRC del docente, già ordinate: ["2A","2B","3C"] */
+  const c=(cfg.airc||{}), k=doc.nome;
+  const v = Object.prototype.hasOwnProperty.call(c,k) ? c[k] : (RIC_AIRC_DEFAULT[k]||"");
+  return [...new Set(String(v).toUpperCase().split(/[\s,;\-–]+/).filter(Boolean))].sort();
+}
 function ricMateriaDi(doc, cfg){
   const m = (cfg.materie[doc.nome]||"").trim();
   if(m) return m;
@@ -5769,8 +5776,11 @@ function ricRighe(){
   const o=S.orario, cfg=ricCfg(), righe=[];
   o.docenti.forEach(d=>{
     const voci=ricVoci(d,cfg); if(!voci.length) return;
-    const classi=[...classiDi(d)].filter(Boolean).sort().join(" - ");
-    righe.push({chiave:d.nome, nome:ricNomeDi(d, cfg), materia:ricMateriaDi(d,cfg), classi, voci});
+    const airc=ricAircDi(d,cfg);
+    const classi=[...new Set([...classiDi(d), ...airc])].filter(Boolean).sort().join(" - ");
+    let materia=ricMateriaDi(d,cfg);
+    if(airc.length && !/AIRC/i.test(materia)) materia = materia ? materia+", AIRC" : "AIRC";
+    righe.push({chiave:d.nome, nome:ricNomeDi(d, cfg), materia, classi, voci});
   });
   /* docenti senza orario del mattino (maestri di strumento): il ricevimento si scrive in Altro → Cambio e aggiunta docente */
   ricSeminaExtra();
@@ -5893,6 +5903,7 @@ function renderRicPdf(){
         <div class="hint" style="margin:0 0 4px">${esc(d.nome)} · ${voci.map(v=>esc(v.g+" "+v.orario)).join(" · ")} · ${esc([...classiDi(d)].sort().join(" "))}</div>
         <input ${inp(`data-k="${esc(d.nome)}" value="${esc(cfg.nomi[d.nome]||"")}" placeholder="${esc(ricNomeDi(d,{nomi:{}}))}" oninput="ricSet('nomi',this)"`)}>
         <input ${inp(`data-k="${esc(d.nome)}" value="${esc(cfg.materie[d.nome]||"")}" placeholder="Materia: ${esc(ricMateriaDi(d,{materie:{}}))}" oninput="ricSet('materie',this)" `).replace('style="','style="margin-top:6px; ')}>
+        <input ${inp(`data-k="${esc(d.nome)}" value="${esc(Object.prototype.hasOwnProperty.call(cfg.airc,d.nome)?cfg.airc[d.nome]:"")}" placeholder="Classi AIRC (aggiunge «, AIRC»): ${esc(RIC_AIRC_DEFAULT[d.nome]||"nessuna")}" oninput="ricSet('airc',this)" `).replace('style="','style="margin-top:6px; ')}>
       </div>`; }).join("") : `<p class="hint">Nessuna R nell'orario: importa i ricevimenti (scheda Orario → Importa ricevimenti).</p>`}
 
     <details style="margin-top:6px"${esito?" open":""}><summary style="cursor:pointer; font-weight:600">Incolla l'elenco: cognome e nome + materia</summary>

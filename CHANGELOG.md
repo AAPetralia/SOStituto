@@ -5,6 +5,9 @@ Si legge in alto nell'app, sotto il titolo. Da qui in avanti si aggiorna a ogni 
 
 ## Da qui in avanti (dettaglio certo)
 
+### 11.11.2026a — n. 114
+- **PDF dei ricevimenti: AIRC.** Per i docenti che fanno anche AIRC (Mayerle 2A 3C 2B, Croceri 1C, Galiano 3A 3D, Sabatini 1D 3B, Melatini 1A, Sgariglia A. 2C) il PDF aggiunge «, AIRC» alla materia e somma le classi AIRC a quelle dell'orario. In «Correzioni a mano» ogni docente ha il campo «Classi AIRC» (precompilato di default, si può cambiare o svuotare). Per chi non ha orario del mattino (es. Giannini Gioia, AIRC, 1B - 2D) si scrivono materia e classi nella scheda del docente.
+
 ### 06.11.2026e — n. 113
 - **Prospetti del potenziamento: ogni prospetto salvato si può «usare».** Il pulsante «Usa questo» sotto un prospetto salvato applica le sue scelte al motore: le assegnazioni a classe e le ore Pno diventano quelle del prospetto (ricalcolando così coperture e sostituzioni). Un prospetto che coincide già con le scelte attuali mostra «✓ in uso». «↩ Annulla» riporta alle scelte di prima. Stesso meccanismo dell'importazione da Excel, che è un modo per entrare nel motore; PDF ed Excel restano la stampa.
 
