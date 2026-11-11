@@ -1393,11 +1393,20 @@ function applicaAssenzeNote(){
   if(S.noteApplicate === iso) return;
   S.noteApplicate = iso;
   S.daNote = [];
+  /* più assenze annotate per lo stesso docente nello stesso giorno (es. un permesso breve per ogni ora: 2ª, 3ª, 4ª)
+     si sommano: prima si caricava solo la prima e le altre ore sparivano */
+  const perDoc={};
   for(const a of assenzeNoteAttive(iso)){
-    if(a.docente in S.assentiOggi) continue;
-    S.assentiOggi[a.docente] = (a.tipo==="breve" && a.ore && a.ore.length) ? a.ore.slice() : null;
-    S.breveOggi[a.docente] = (a.tipo==="breve");   /* deciso in Assenze note, non si richiede */
-    S.daNote.push(a.docente);
+    const g=perDoc[a.docente]=perDoc[a.docente]||{ore:new Set(), intera:false, breve:true};
+    if(a.tipo==="breve" && a.ore && a.ore.length) a.ore.forEach(h=>g.ore.add(h)); else g.intera=true;
+    if(a.tipo!=="breve") g.breve=false;
+  }
+  for(const nome in perDoc){
+    if(nome in S.assentiOggi) continue;
+    const g=perDoc[nome];
+    S.assentiOggi[nome] = (!g.intera && g.ore.size) ? [...g.ore].sort((x,y)=>x-y) : null;
+    S.breveOggi[nome] = g.breve;   /* deciso in Assenze note, non si richiede */
+    S.daNote.push(nome);
   }
 }
 /* prossime assenze note nei giorni successivi (per il promemoria) */
@@ -3440,8 +3449,8 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "11.11.2026b";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
-const NUMERO_VERSIONE = 115;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
+const VERSIONE = "11.11.2026c";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const NUMERO_VERSIONE = 116;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,

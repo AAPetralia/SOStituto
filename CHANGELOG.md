@@ -5,6 +5,9 @@ Si legge in alto nell'app, sotto il titolo. Da qui in avanti si aggiorna a ogni 
 
 ## Da qui in avanti (dettaglio certo)
 
+### 11.11.2026c — n. 116
+- **Assenze note: più annotazioni dello stesso docente nello stesso giorno ora si sommano.** Se per lo stesso giorno avevi annotato un permesso breve per ogni ora (es. Croceri 2ª, poi 3ª, poi 4ª), Sostituzioni caricava solo la prima e le altre ore sparivano. Ora le ore si uniscono (Croceri 2ª 3ª 4ª); se una delle annotazioni è «intera giornata» vale tutta la giornata.
+
 ### 11.11.2026b — n. 115
 - **PDF dei ricevimenti: asterisco sull'AIRC.** La materia diventa «AIRC*» e le classi in cui il docente fa AIRC hanno l'asterisco (es. «2A* - 2B* - 3C*»); sotto la tabella compare la nota «* Nelle classi contrassegnate dall'asterisco il docente svolge AIRC». Per un docente senza orario del mattino con materia «AIRC» (Giannini) tutte le classi sono marcate in automatico.
 
