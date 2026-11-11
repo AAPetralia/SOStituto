@@ -3440,8 +3440,8 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "11.11.2026a";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
-const NUMERO_VERSIONE = 114;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
+const VERSIONE = "11.11.2026b";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const NUMERO_VERSIONE = 115;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -5777,9 +5777,10 @@ function ricRighe(){
   o.docenti.forEach(d=>{
     const voci=ricVoci(d,cfg); if(!voci.length) return;
     const airc=ricAircDi(d,cfg);
-    const classi=[...new Set([...classiDi(d), ...airc])].filter(Boolean).sort().join(" - ");
+    /* le classi dove il docente fa AIRC hanno l'asterisco, come «AIRC*» nella materia */
+    const classi=[...new Set([...classiDi(d), ...airc])].filter(Boolean).sort().map(c=>airc.includes(c)?c+"*":c).join(" - ");
     let materia=ricMateriaDi(d,cfg);
-    if(airc.length && !/AIRC/i.test(materia)) materia = materia ? materia+", AIRC" : "AIRC";
+    if(airc.length && !/AIRC/i.test(materia)) materia = materia ? materia+", AIRC*" : "AIRC*";
     righe.push({chiave:d.nome, nome:ricNomeDi(d, cfg), materia, classi, voci});
   });
   /* docenti senza orario del mattino (maestri di strumento): il ricevimento si scrive in Altro → Cambio e aggiunta docente */
@@ -5790,7 +5791,9 @@ function ricRighe(){
     const voce={g:ricGiornoExtra(r.giorno), orario:ricOrarioExtra(r.orario,cfg)};
     const gia=righe.find(x=>x.nome.toLowerCase()===nome.toLowerCase());
     if(gia){ gia.voci.push(voce); return; }
-    righe.push({chiave:"", nome, materia:String(r.materia||"").trim(), classi:String(r.classi||"").trim(), voci:[voce]});
+    let materia=String(r.materia||"").trim(), classi=String(r.classi||"").trim();
+    if(/^AIRC$/i.test(materia)){ materia="AIRC*"; classi=classi.split(/\s*-\s*/).filter(Boolean).map(c=>c.replace(/\*?$/,"*")).join(" - "); }   /* docente solo AIRC: tutte le classi con l'asterisco */
+    righe.push({chiave:"", nome, materia, classi, voci:[voce]});
   });
   righe.sort((a,b)=>a.nome.localeCompare(b.nome,"it"));
   return righe;
@@ -5866,6 +5869,12 @@ function ricCostruisciPdf(righe, cfg){
       headStyles:{fillColor:[189,189,189], textColor:20, fontStyle:"bold"},
       columnStyles:{0:{cellWidth:56}, 1:{cellWidth:62}, 3:{cellWidth:30}, 4:{cellWidth:34}} });
     riuscito = doc.getNumberOfPages()===1;
+    if(riuscito && righe.some(r=>/\*/.test(r.classi+r.materia))){
+      const yN=doc.lastAutoTable.finalY+6;
+      if(yN > doc.internal.pageSize.getHeight()-M) riuscito=false;
+      else { doc.setFont("helvetica","normal"); doc.setFontSize(Math.min(fs,10)); doc.setTextColor(20);
+        doc.text("* Nelle classi contrassegnate dall'asterisco il docente svolge AIRC.", M, yN); }
+    }
   }
   return doc;
 }

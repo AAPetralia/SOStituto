@@ -5,6 +5,9 @@ Si legge in alto nell'app, sotto il titolo. Da qui in avanti si aggiorna a ogni 
 
 ## Da qui in avanti (dettaglio certo)
 
+### 11.11.2026b — n. 115
+- **PDF dei ricevimenti: asterisco sull'AIRC.** La materia diventa «AIRC*» e le classi in cui il docente fa AIRC hanno l'asterisco (es. «2A* - 2B* - 3C*»); sotto la tabella compare la nota «* Nelle classi contrassegnate dall'asterisco il docente svolge AIRC». Per un docente senza orario del mattino con materia «AIRC» (Giannini) tutte le classi sono marcate in automatico.
+
 ### 11.11.2026a — n. 114
 - **PDF dei ricevimenti: AIRC.** Per i docenti che fanno anche AIRC (Mayerle 2A 3C 2B, Croceri 1C, Galiano 3A 3D, Sabatini 1D 3B, Melatini 1A, Sgariglia A. 2C) il PDF aggiunge «, AIRC» alla materia e somma le classi AIRC a quelle dell'orario. In «Correzioni a mano» ogni docente ha il campo «Classi AIRC» (precompilato di default, si può cambiare o svuotare). Per chi non ha orario del mattino (es. Giannini Gioia, AIRC, 1B - 2D) si scrivono materia e classi nella scheda del docente.
 
