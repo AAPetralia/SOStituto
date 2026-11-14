@@ -5,6 +5,9 @@ Si legge in alto nell'app, sotto il titolo. Da qui in avanti si aggiorna a ogni 
 
 ## Da qui in avanti (dettaglio certo)
 
+### 14.11.2026a — n. 117
+- **Assenze note: un permesso in un giorno senza servizio qui non genera più debito.** Se il docente nell'orario non ha nessuna presenza nel giorno (o nel periodo) dell'assenza — per esempio un permesso che arriva in segreteria ma riguarda l'altra scuola — il debito di recupero non nasce, e quelli già nati da assenze così spariscono da soli. Nel modulo compare l'avviso appena scegli docente e data, al salvataggio chiede conferma (si può salvare lo stesso per tenere traccia del protocollo), e nell'elenco l'assenza è segnata «non genera sostituzioni né debito di recupero».
+
 ### 11.11.2026c — n. 116
 - **Assenze note: più annotazioni dello stesso docente nello stesso giorno ora si sommano.** Se per lo stesso giorno avevi annotato un permesso breve per ogni ora (es. Croceri 2ª, poi 3ª, poi 4ª), Sostituzioni caricava solo la prima e le altre ore sparivano. Ora le ore si uniscono (Croceri 2ª 3ª 4ª); se una delle annotazioni è «intera giornata» vale tutta la giornata.
 

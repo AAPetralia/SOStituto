@@ -1244,6 +1244,7 @@ function sincronizzaRecuperi(){
   for(const a of (S.assenzeNote||[])){
     if(a.tipo !== "breve" || !a.ore || !a.ore.length) continue;
     if(a.recuperabile===false) continue;   /* segnato a mano come non da recuperare */
+    if(assenzaFuoriServizio(a)) continue;  /* quel giorno non ha servizio qui: nessuna ora da recuperare */
     const chiave = "an:" + a.id;
     if(esistenti.has(chiave)) continue;
     S.recuperi.push({
@@ -1265,7 +1266,7 @@ function sincronizzaRecuperi(){
   S.recuperi = S.recuperi.filter(r=>{
     if(!r.origine || !r.origine.startsWith("an:")) return true;
     const nota = noteById[r.origine];
-    return !!nota && nota.recuperabile!==false;
+    return !!nota && nota.recuperabile!==false && !assenzaFuoriServizio(nota);
   });
   /* lo stesso permesso breve non deve pesare due volte: se per quel docente e quel giorno
      esiste il debito nato dalle Assenze note, quello creato dalla scheda Sostituzioni
@@ -1374,6 +1375,14 @@ function giorniNelPeriodo(dal, al){
   if(differenza>=6){ (S.orario?S.orario.giorni:["LUN","MAR","MER","GIO","VEN","SAB"]).forEach(g=>gg.add(g)); return gg; }
   for(let d=new Date(d0); d<=d1; d.setDate(d.getDate()+1)){ const g=SETT[d.getDay()]; if(g!=="DOM") gg.add(g); }
   return gg;
+}
+/* vero se il docente è nell'orario ma in nessuno dei giorni del periodo ha servizio qui (es. il permesso riguarda l'altra scuola):
+   l'assenza non genera sostituzioni né debiti */
+function assenzaFuoriServizio(a){
+  const o=S.orario; if(!o || !a || !a.docente || !a.dal) return false;
+  const doc=o.docenti.find(d=>d.nome===a.docente); if(!doc) return false;
+  const serv=giorniServizio(doc);
+  return ![...giorniNelPeriodo(a.dal, a.al||a.dal)].some(g=>serv.has(g));
 }
 function assenzeNoteAttive(iso){
   if(!iso) return [];
@@ -3449,8 +3458,8 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "11.11.2026c";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
-const NUMERO_VERSIONE = 116;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
+const VERSIONE = "14.11.2026a";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const NUMERO_VERSIONE = 117;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -5081,7 +5090,7 @@ function renderAssenze(){
           const tocca = giorniNelPeriodo(a.dal, a.al);
           const attivi = [...tocca].filter(g=>giorniServizio(docObj).has(g));
           if(attivi.length===0){
-            servizioHint = `<div class="regsub" style="color:var(--red)">⚠ in questo periodo non risulta mai in servizio qui: non genera sostituzioni</div>`;
+            servizioHint = `<div class="regsub" style="color:var(--red)">⚠ in questo periodo non risulta mai in servizio qui: non genera sostituzioni${a.tipo==="breve"?" né debito di recupero":""}</div>`;
           } else if(attivi.length < tocca.size){
             const ord=["LUN","MAR","MER","GIO","VEN","SAB"];
             servizioHint = `<div class="regsub">qui in servizio solo ${attivi.sort((x,y)=>ord.indexOf(x)-ord.indexOf(y)).join(", ")} — negli altri giorni del periodo non serve sostituzione</div>`;
@@ -5093,7 +5102,7 @@ function renderAssenze(){
             <div class="regsub">${esc(periodo)}</div>
             <div class="regsub">${a.tipo==="breve"?"⏱ ":"📅 "}${esc(tx)}${a.nota?" · "+esc(a.nota):""}</div>
             ${servizioHint}
-            ${a.tipo==="breve" ? `<div style="margin-top:6px">
+            ${a.tipo==="breve" && !assenzaFuoriServizio(a) ? `<div style="margin-top:6px">
               <span class="achip" style="cursor:pointer; ${nonRec?'':'background:var(--ok-bg2); border-color:var(--ok-bd2); color:var(--ok-tx)'}"
                 onclick="toggleRecuperabile('${a.id}')">${nonRec?"✕ non da recuperare":"↩ da recuperare"}</span>
             </div>` : ``}
@@ -5116,6 +5125,9 @@ function renderAssenze(){
       <input type="date" value="${f.dal}" onchange="S.assenzaForm.dal=this.value; if(S.assenzaForm.al<this.value) S.assenzaForm.al=this.value; render()"></div>
     <div class="field"><label>Al giorno</label>
       <input type="date" value="${f.al}" onchange="S.assenzaForm.al=this.value; render()"></div>`;
+  if(f.docente && assenzaFuoriServizio(f)){
+    out += `<p class="hint" style="color:var(--red); margin:-4px 0 10px">⚠ <b>${esc(f.docente)}</b> non ha servizio qui nel periodo scelto (${[...giorniNelPeriodo(f.dal, f.al||f.dal)].join(", ")}): l'assenza non genererà sostituzioni${f.tipo==="breve"?" né debiti":""}.</p>`;
+  }
 
   const piuGiorni = f.dal !== f.al;
   out += `<div class="field"><label>Tipo di assenza</label>
@@ -5168,6 +5180,10 @@ function salvaAssenza(){
   if(!f.docente){ toast("Scegli il docente"); return; }
   if(f.tipo==="breve" && !f.ore.length){ toast("Indica le ore del permesso"); return; }
   if(f.tipo==="giornata") f.ore=[];
+  if(assenzaFuoriServizio(f)){
+    const gg=[...giorniNelPeriodo(f.dal, f.al||f.dal)].join(", ");
+    if(!confirm(f.docente+" non ha servizio qui nel periodo indicato ("+gg+").\n\nL'assenza non genera sostituzioni"+(f.tipo==="breve"?" e non apre nessun debito di recupero":"")+".\n\nLa salvo lo stesso (ad esempio per tenere traccia del protocollo)?")) return;
+  }
   S.assenzeNote = S.assenzeNote || [];
   const i=S.assenzeNote.findIndex(a=>a.id===f.id);
   if(i>=0) S.assenzeNote[i]=f; else S.assenzeNote.push(f);
