@@ -5,6 +5,9 @@ Si legge in alto nell'app, sotto il titolo. Da qui in avanti si aggiorna a ogni 
 
 ## Da qui in avanti (dettaglio certo)
 
+### 14.11.2026b — n. 118
+- **Permessi brevi: il debito di recupero conta solo le ore in cui il docente ha servizio qui.** Il controllo ora è per ora, non solo per giorno: una volta scelto il docente e le ore, il modulo avvisa quali ore non hanno servizio («Basso non ha servizio alla 3ª… Da recuperare: 1 ora») e il debito è creato solo per quelle (ricevimento e ore vuote non contano; lezione, potenziamento e ore a disposizione sì). Se nessuna delle ore indicate è di servizio, nessun debito. I debiti già creati si adeguano da soli (se non sono già stati restituiti o chiusi a mano oltre il nuovo valore).
+
 ### 14.11.2026a — n. 117
 - **Assenze note: un permesso in un giorno senza servizio qui non genera più debito.** Se il docente nell'orario non ha nessuna presenza nel giorno (o nel periodo) dell'assenza — per esempio un permesso che arriva in segreteria ma riguarda l'altra scuola — il debito di recupero non nasce, e quelli già nati da assenze così spariscono da soli. Nel modulo compare l'avviso appena scegli docente e data, al salvataggio chiede conferma (si può salvare lo stesso per tenere traccia del protocollo), e nell'elenco l'assenza è segnata «non genera sostituzioni né debito di recupero».
 

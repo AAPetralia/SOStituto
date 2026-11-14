@@ -1246,11 +1246,16 @@ function sincronizzaRecuperi(){
     if(a.recuperabile===false) continue;   /* segnato a mano come non da recuperare */
     if(assenzaFuoriServizio(a)) continue;  /* quel giorno non ha servizio qui: nessuna ora da recuperare */
     const chiave = "an:" + a.id;
-    if(esistenti.has(chiave)) continue;
+    const hs=oreServizioPermesso(a), nOre = hs ? hs.length : a.ore.length;   /* solo le ore in cui ha servizio qui */
+    if(esistenti.has(chiave)){
+      const r=S.recuperi.find(x=>x.origine===chiave);
+      if(r && r.ore!==nOre && nOre >= (r.restituite||0)+(r.chiuseManuale||0)) r.ore=nOre;
+      continue;
+    }
     S.recuperi.push({
       id: "r" + Date.now() + Math.floor(Math.random()*1000),
       docente: a.docente,
-      ore: a.ore.length,
+      ore: nOre,
       data: a.dal,
       scadenza: isoPiuGiorni(a.dal, GG_SCADENZA),
       restituite: 0,        // scalate dal motore (sostituzioni in recupero effettivamente generate)
@@ -1378,11 +1383,21 @@ function giorniNelPeriodo(dal, al){
 }
 /* vero se il docente è nell'orario ma in nessuno dei giorni del periodo ha servizio qui (es. il permesso riguarda l'altra scuola):
    l'assenza non genera sostituzioni né debiti */
+/* ore di un permesso breve in cui il docente ha davvero servizio qui (lezione, potenziamento, disposizione: non il ricevimento
+   né le ore vuote). null = non determinabile (docente non nell'orario o ore non indicate). */
+function oreServizioPermesso(a){
+  const o=S.orario; if(!o || !a || a.tipo!=="breve" || !(a.ore||[]).length || !a.dal) return null;
+  const doc=o.docenti.find(d=>d.nome===a.docente); if(!doc) return null;
+  const g=giornoDaData(a.dal);
+  return a.ore.filter(h=>{ const c=cellaEff(doc,g,h)||{t:"VUOTA"}; return c.t!=="VUOTA" && c.t!=="RICE" && !c.vacante; });
+}
 function assenzaFuoriServizio(a){
   const o=S.orario; if(!o || !a || !a.docente || !a.dal) return false;
   const doc=o.docenti.find(d=>d.nome===a.docente); if(!doc) return false;
   const serv=giorniServizio(doc);
-  return ![...giorniNelPeriodo(a.dal, a.al||a.dal)].some(g=>serv.has(g));
+  if(![...giorniNelPeriodo(a.dal, a.al||a.dal)].some(g=>serv.has(g))) return true;
+  const hs=oreServizioPermesso(a);          /* permesso breve: conta solo se almeno un'ora cade in un'ora di servizio */
+  return !!hs && hs.length===0;
 }
 function assenzeNoteAttive(iso){
   if(!iso) return [];
@@ -3458,8 +3473,8 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "14.11.2026a";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
-const NUMERO_VERSIONE = 117;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
+const VERSIONE = "14.11.2026b";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const NUMERO_VERSIONE = 118;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -5081,6 +5096,7 @@ function renderAssenze(){
         const periodo = (a.dal===(a.al||a.dal)) ? dataLeggibile(a.dal) : dataLeggibile(a.dal)+" → "+dataLeggibile(a.al);
         const tx = a.tipo==="breve"
           ? "permesso breve · "+((a.ore||[]).map(h=>h+"ª").join(", ")||"ore da indicare")
+            + (()=>{ const hs=oreServizioPermesso(a); return (hs && hs.length && hs.length<a.ore.length) ? " · in servizio qui solo "+hs.map(h=>h+"ª").join(", ") : ""; })()
           : "intera giornata";
         const passata = (a.al||a.dal) < oggi;
         const nonRec = a.tipo==="breve" && a.recuperabile===false;
@@ -5126,7 +5142,7 @@ function renderAssenze(){
     <div class="field"><label>Al giorno</label>
       <input type="date" value="${f.al}" onchange="S.assenzaForm.al=this.value; render()"></div>`;
   if(f.docente && assenzaFuoriServizio(f)){
-    out += `<p class="hint" style="color:var(--red); margin:-4px 0 10px">⚠ <b>${esc(f.docente)}</b> non ha servizio qui nel periodo scelto (${[...giorniNelPeriodo(f.dal, f.al||f.dal)].join(", ")}): l'assenza non genererà sostituzioni${f.tipo==="breve"?" né debiti":""}.</p>`;
+    out += `<p class="hint" style="color:var(--red); margin:-4px 0 10px">⚠ <b>${esc(f.docente)}</b> non ha servizio qui nel periodo scelto (${[...giorniNelPeriodo(f.dal, f.al||f.dal)].join(", ")}${f.tipo==="breve"&&f.ore.length&&oreServizioPermesso(f)&&oreServizioPermesso(f).length===0&&[...giorniNelPeriodo(f.dal,f.al||f.dal)].some(g=>giorniServizio(S.orario.docenti.find(d=>d.nome===f.docente)).has(g))?": nelle ore indicate":""}): l'assenza non genererà sostituzioni${f.tipo==="breve"?" né debiti":""}.</p>`;
   }
 
   const piuGiorni = f.dal !== f.al;
@@ -5143,6 +5159,11 @@ function renderAssenze(){
   if(f.tipo==='breve'){
     out += `<div class="field"><label>Ore di assenza</label>
       <div class="orebtns">${o.ore.map(h=>`<div class="oreb ${f.ore.includes(h)?'on':''}" onclick="toggleOraAssenza(${h})">${h}ª</div>`).join("")}</div></div>`;
+    { const hs=oreServizioPermesso(f);
+      if(hs && f.docente && !assenzaFuoriServizio(f) && hs.length<f.ore.length){
+        const fuori=f.ore.filter(h=>!hs.includes(h));
+        out += `<p class="hint" style="color:var(--red); margin:-4px 0 10px">⚠ <b>${esc(f.docente)}</b> non ha servizio qui alla ${fuori.map(h=>h+"ª").join(", ")}: ${fuori.length>1?"quelle ore non contano":"quell'ora non conta"} per il recupero. Da recuperare: <b>${hs.length} ${hs.length===1?"ora":"ore"}</b> (${hs.map(h=>h+"ª").join(", ")}).</p>`;
+      } }
     out += `<div class="field"><label>Va recuperato?</label>
       <div class="pickgrid">
         <div class="pick ${f.recuperabile!==false?'on':''}" onclick="S.assenzaForm.recuperabile=true; render()">Sì, apre un debito</div>
@@ -5182,7 +5203,7 @@ function salvaAssenza(){
   if(f.tipo==="giornata") f.ore=[];
   if(assenzaFuoriServizio(f)){
     const gg=[...giorniNelPeriodo(f.dal, f.al||f.dal)].join(", ");
-    if(!confirm(f.docente+" non ha servizio qui nel periodo indicato ("+gg+").\n\nL'assenza non genera sostituzioni"+(f.tipo==="breve"?" e non apre nessun debito di recupero":"")+".\n\nLa salvo lo stesso (ad esempio per tenere traccia del protocollo)?")) return;
+    if(!confirm(f.docente+" non ha servizio qui"+(f.tipo==="breve"?" nelle ore indicate":" nel periodo indicato")+" ("+gg+").\n\nL'assenza non genera sostituzioni"+(f.tipo==="breve"?" e non apre nessun debito di recupero":"")+".\n\nLa salvo lo stesso (ad esempio per tenere traccia del protocollo)?")) return;
   }
   S.assenzeNote = S.assenzeNote || [];
   const i=S.assenzeNote.findIndex(a=>a.id===f.id);
