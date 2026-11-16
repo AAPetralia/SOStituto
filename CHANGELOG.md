@@ -5,6 +5,9 @@ Si legge in alto nell'app, sotto il titolo. Da qui in avanti si aggiorna a ogni 
 
 ## Da qui in avanti (dettaglio certo)
 
+### 16.11.2026b — n. 120
+- **AIRC nei menu dell'orario.** In «Modifica l'orario di un docente» ora c'è l'opzione **AIRC** (con scelta della classe), accanto a «In una classe», «Libera», «Ricevimento» e «Potenziamento». Nel «Nuovo docente con orario del mattino» i suggerimenti di ogni cella comprendono anche le sigle AIRC (AR1A, AR2B…).
+
 ### 16.11.2026a — n. 119
 - **Nuovo docente con orario del mattino, dall'app.** In Altro → Cambio e aggiunta docente, sezione «Nuovo docente con orario del mattino»: nome, materia e l'orario cella per cella con le stesse sigle dell'Excel (1A, 1A-2B, 1AF, P, P2A, AR2A, R). Si può partire dall'orario di un altro docente. Il docente vale subito per Orario, Sostituzioni e Potenziamento; compare nell'elenco «Docenti aggiunti dall'app» (con ✕ per toglierlo) e sopravvive a un nuovo import dell'orario se il file non lo contiene ancora.
 

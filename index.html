@@ -3473,8 +3473,8 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "16.11.2026a";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
-const NUMERO_VERSIONE = 119;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
+const VERSIONE = "16.11.2026b";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const NUMERO_VERSIONE = 120;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -6531,7 +6531,7 @@ function renderCambioDocente(){
 /* ---- modifica a mano di UNA cella dell'orario di un docente (scambio d'ora, cambio di classe) ----
    Si lavora sull'orario in memoria, senza reimportare. Ogni modifica è registrata in
    S.orario.modifiche: si può annullare e, dopo un nuovo import dell'orario, riapplicare. */
-const MO_TIPI = [["CLASSE","In una classe"],["VUOTA","Libera"],["RICE","Ricevimento"],["DISP","Potenziamento"]];
+const MO_TIPI = [["CLASSE","In una classe"],["AR","AIRC"],["VUOTA","Libera"],["RICE","Ricevimento"],["DISP","Potenziamento"]];
 function classiOrario(){
   const set=new Set();
   ((S.orario&&S.orario.docenti)||[]).forEach(d=>{ for(const k in d.cells){ const c=d.cells[k];
@@ -6577,10 +6577,10 @@ function renderModificaOrario(){
         <span style="color:var(--ink-soft)">Ora: ${esc(moDescr(att))}</span>
         <div class="field" style="margin-top:10px"><label>Diventa</label>
           <div class="pickgrid">${MO_TIPI.map(([t,l])=>`<div class="pick${m.tipo===t?' on':''}" onclick="S.mo.tipo='${t}'; render()">${l}</div>`).join("")}</div></div>`;
-      if(m.tipo==="CLASSE" || m.tipo==="DISP"){
-        out+=`<div class="field"><label>${m.tipo==="CLASSE"?"Classe":"Classe assegnata (facoltativa)"}</label>
+      if(m.tipo==="CLASSE" || m.tipo==="AR" || m.tipo==="DISP"){
+        out+=`<div class="field"><label>${m.tipo==="CLASSE"?"Classe":m.tipo==="AR"?"Classe dell'AIRC":"Classe assegnata (facoltativa)"}</label>
           <select onchange="S.mo.classe=this.value">
-            <option value="">${m.tipo==="CLASSE"?"— scegli la classe —":"— nessuna: la scegli dopo in Potenziamento —"}</option>
+            <option value="">${m.tipo!=="DISP"?"— scegli la classe —":"— nessuna: la scegli dopo in Potenziamento —"}</option>
             ${classi.map(c=>`<option value="${esc(c)}"${c===m.classe?" selected":""}>${esc(fmtCl(c))}</option>`).join("")}
           </select></div>`;
       }
@@ -6611,8 +6611,8 @@ function moScegli(g,h){
   const m=S.mo, d=S.orario.docenti.find(x=>x.nome===m.docente); if(!d) return;
   const c=d.cells[g+"|"+h]||{t:"VUOTA"};
   m.g=g; m.h=h;
-  m.tipo = ({CLASSE:"CLASSE",RICE:"RICE",DISP:"DISP"})[c.t] || "VUOTA";
-  m.classe = c.t==="CLASSE" ? c.det : c.t==="DISP" && c.det && c.det.indexOf("P·")===0 ? c.det.slice(2) : "";
+  m.tipo = ({CLASSE:"CLASSE",AR:"AR",RICE:"RICE",DISP:"DISP"})[c.t] || "VUOTA";
+  m.classe = (c.t==="CLASSE"||c.t==="AR") ? c.det : c.t==="DISP" && c.det && c.det.indexOf("P·")===0 ? c.det.slice(2) : "";
   render();
 }
 /* scrive la cella nell'orario (e tiene allineate le assegnazioni del potenziamento) */
@@ -6625,13 +6625,14 @@ function moScrivi(d, g, h, cella){
 }
 function moCella(m){
   if(m.tipo==="CLASSE") return {t:"CLASSE", det:m.classe};
+  if(m.tipo==="AR") return {t:"AR", det:m.classe};
   if(m.tipo==="RICE") return {t:"RICE"};
   if(m.tipo==="DISP") return {t:"DISP", det:m.classe?"P·"+m.classe:"P"};
   return {t:"VUOTA"};
 }
 function moApplica(){
   const m=S.mo, o=S.orario, d=o&&o.docenti.find(x=>x.nome===m.docente); if(!d||!m.g||!m.h) return;
-  if(m.tipo==="CLASSE" && !m.classe){ toast("Scegli la classe"); return; }
+  if((m.tipo==="CLASSE"||m.tipo==="AR") && !m.classe){ toast("Scegli la classe"); return; }
   const k=m.g+"|"+m.h, prima=d.cells[k]||{t:"VUOTA"}, dopo=moCella(m);
   if(JSON.stringify(prima)===JSON.stringify(dopo)){ toast("È già così"); return; }
   if(["ARTIC","LINGUA","AR"].includes(prima.t) && !confirm("Questa ora è "+moDescr(prima)+": cambiarla toglie il docente da quel gruppo. Procedo?")) return;
@@ -6688,7 +6689,7 @@ function renderNuovoDocente(){
       o.ore.map(h=>`<input type="text" list="ndcl" data-k="${g}|${h}" value="${esc(f.cells[g+"|"+h]||"")}" autocomplete="off" autocapitalize="characters"
         oninput="S.nd.cells[this.dataset.k]=this.value" style="flex:1; min-width:0; width:0; padding:8px 2px; text-align:center; font-size:14px">`).join("")+`</div>`;
   });
-  out+=`<datalist id="ndcl">${classiOrario().map(c=>`<option value="${esc(c)}">`).join("")}<option value="P"><option value="R"><option value="PNO"></datalist>
+  out+=`<datalist id="ndcl">${classiOrario().map(c=>`<option value="${esc(c)}">`).join("")}<option value="P"><option value="R"><option value="PNO">${classiOrario().map(c=>`<option value="AR${esc(c)}">`).join("")}</datalist>
     <button class="btn" style="width:100%; margin-top:12px" onclick="ndAggiungi()">+ Aggiungi docente all'orario</button>`;
   const agg=(o.docenti||[]).filter(d=>d.aggiunto);
   if(agg.length){
