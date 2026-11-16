@@ -5,6 +5,9 @@ Si legge in alto nell'app, sotto il titolo. Da qui in avanti si aggiorna a ogni 
 
 ## Da qui in avanti (dettaglio certo)
 
+### 16.11.2026d — n. 122
+- **Orario in PDF (A3 a colori) e orario AIRC.** Nella scheda Orario due nuovi pulsanti. «Orario in PDF» produce un foglio A3 in orizzontale con tutti i docenti (sostegno compreso, raggruppati per materia) e i cinque giorni: celle colorate per tipo (classe, sostegno, 2ª lingua articolata, sostegno francese/spagnolo, AIRC, potenziamento con la classe assegnata, ricevimento, non disponibile, VP/CV) e legenda con tutte le simbologie. «Orario AIRC» produce il manifesto A3 «AULA AIRC» con le classi in aula ora per ora e l'elenco classe per classe, ricavato dalle ore di religione dell'orario.
+
 ### 16.11.2026c — n. 121
 - **Banca ore dal registro.** Un'ora a pagamento di un giorno già archiviato (e non più aperto in Sostituzioni) si può ora segnare «a credito» direttamente dal Registro: tocca la giornata, sulla riga a pagamento c'è «🏦 segna a credito» (e «↩ togli dalla banca ore» per annullare). Prima il credito si poteva segnare solo dal prospetto del giorno stesso, quindi cambiando data l'ora restava a pagamento senza rimedio.
 

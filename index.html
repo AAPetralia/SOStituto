@@ -3473,8 +3473,8 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "16.11.2026c";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
-const NUMERO_VERSIONE = 121;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
+const VERSIONE = "16.11.2026d";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const NUMERO_VERSIONE = 122;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -5747,11 +5747,184 @@ function renderOrario(){
       <span><b style="background:var(--tint-warm3)"></b>non disp.</span>
       <span><b style="background:var(--tint-red)"></b>da correggere</span>
     </div>
-    <button class="btn ghost" style="width:100%; margin-top:14px" onclick="scaricaOrario()">⬇ Scarica l'orario (Excel)</button>
+    <button class="btn" style="width:100%; margin-top:14px" onclick="scaricaOrarioPdf(this)">📄 Orario in PDF (A3 a colori, con sostegno)</button>
+    <button class="btn ghost" style="width:100%; margin-top:8px" onclick="scaricaAircPdf(this)">🖨 Orario AIRC (A3, aula AIRC)</button>
+    <button class="btn ghost" style="width:100%; margin-top:8px" onclick="scaricaOrario()">⬇ Scarica l'orario (Excel)</button>
     <input type="file" id="fileRic" accept=".json,.xlsx,.xls" style="display:none" onchange="importaRicevimenti(this)">
     <button class="btn ghost" style="width:100%; margin-top:8px" onclick="document.getElementById('fileRic').click()">⬆ Importa ricevimenti (R)</button>
     <button class="btn ghost" style="width:100%; margin-top:8px" onclick="S.tab='ricpdf'; render()">📄 Ricevimenti per la segreteria (PDF)</button>
     <p class="hint" style="margin-top:6px">Il file ha lo stesso formato di quello che importi, con le modifiche fatte a mano${(o.modifiche||[]).length?` (${o.modifiche.length})`:""}: si può ripubblicare e reimportare. «Importa ricevimenti» legge il file della webapp dei ricevimenti (.json) o il suo foglio (.xlsx) e aggiorna <b>solo</b> le ore di ricevimento: il resto dell'orario non cambia.</p>`;
+}
+
+/* ================= ORARIO IN PDF (A3) E ORARIO AIRC =================
+   Si disegnano sempre dall'orario di adesso (con le modifiche fatte a mano): per ristampare dopo un cambio basta ripremere. */
+const OR_COL = {            /* colori delle celle: stessi nel foglio e nella legenda */
+  classe:[207,227,247], sost:[250,214,226], artic:[226,214,243], lingua:[240,184,206],
+  airc:[251,224,184], pot:[205,236,207], rice:[255,242,168], pno:[244,201,201], emerg:[207,216,220], ignota:[255,160,160] };
+function orCella(d, g, h){
+  const c=d.cells[g+"|"+h] || {t:"VUOTA"}, so=isSost(d);
+  switch(c.t){
+    case "CLASSE": return {txt:c.det, fill:so?OR_COL.sost:OR_COL.classe, bold:true};
+    case "ARTIC":  return {txt:c.a+"-"+c.b, fill:OR_COL.artic, bold:true};
+    case "LINGUA": return {txt:c.classe+" "+(c.lingua==="FR"?"F":"S"), fill:OR_COL.lingua, bold:true};
+    case "AR":     return {txt:"AR"+c.det, fill:OR_COL.airc, bold:true};
+    case "DISP": { let cl=""; try{ cl=potAssEff(d,g,h)||""; }catch(e){} if(!cl && c.det && c.det.indexOf("P·")===0) cl=c.det.slice(2);
+                   return {txt:"P"+(cl?" "+cl:""), fill:OR_COL.pot, bold:false}; }
+    case "NOND":   return {txt:"Pno", fill:OR_COL.pno, bold:false};
+    case "EMERG":  return {txt:c.det, fill:OR_COL.emerg, bold:false};
+    case "RICE":   return {txt:"R", fill:OR_COL.rice, bold:true};
+    case "IGNOTA": return {txt:"?", fill:OR_COL.ignota, bold:true};
+    default:       return {txt:"", fill:null, bold:false};
+  }
+}
+function orScarica(doc, nome){
+  const a=document.createElement("a"); a.href=URL.createObjectURL(doc.output("blob")); a.download=nome;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+function orLegenda(doc, x, y, W){
+  const voci=[[OR_COL.classe,"1A","in classe"],[OR_COL.sost,"1A","sostegno in classe"],[OR_COL.artic,"1A-2B","2ª lingua, classi articolate"],
+    [OR_COL.lingua,"1A F / 1A S","sostegno in gruppo francese / spagnolo"],[OR_COL.airc,"AR1A","AIRC (attività alternativa)"],
+    [OR_COL.pot,"P / P 2A","potenziamento (con la classe assegnata)"],[OR_COL.rice,"R","ricevimento genitori"],
+    [OR_COL.pno,"Pno","potenziamento non disponibile"],[OR_COL.emerg,"VP / CV","vicepresidenza / commissione viaggi (solo emergenza)"]];
+  doc.setFont("helvetica","bold"); doc.setFontSize(9); doc.setTextColor(20); doc.text("LEGENDA", x, y+3.2);
+  let cx=x+20; const w=(W-20)/5;
+  voci.forEach((v,i)=>{
+    const col=i%5, riga=Math.floor(i/5), px=cx+col*w, py=y+riga*7;
+    doc.setFillColor(...v[0]); doc.setDrawColor(110); doc.setLineWidth(0.2); doc.rect(px, py, 17, 5.4, "FD");
+    doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.setTextColor(20); doc.text(v[1], px+8.5, py+3.8, {align:"center"});
+    doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.text(v[2], px+19.5, py+3.9);
+  });
+}
+function orarioPdfCostruisci(){
+  const o=S.orario, J=window.jspdf, cfg=ricCfg(), M=8, W=420, H=297;
+  const gg=o.giorni, oo=o.ore, nO=oo.length;
+  const NG={LUN:"LUNEDÌ",MAR:"MARTEDÌ",MER:"MERCOLEDÌ",GIO:"GIOVEDÌ",VEN:"VENERDÌ",SAB:"SABATO"};
+  const orari=cfg.orari||RIC_ORARI_DEFAULT, inizio=h=>String((orari[h]||"").split(" - ")[0]||"");
+  /* gruppi per materia, nell'ordine dell'orario */
+  const gruppi=[]; o.docenti.forEach(d=>{ const m=(d.materia||"—"); const u=gruppi[gruppi.length-1]; if(u && u.m===m) u.d.push(d); else gruppi.push({m, d:[d]}); });
+  const wMat=24, wDoc=44, wC=(W-2*M-wMat-wDoc)/(gg.length*nO);
+  const nRighe=o.docenti.length, hRiga=Math.min(7.5, (H-M-17-(M+16)-12)/Math.max(1,nRighe));   /* le righe si allargano fino a riempire il foglio */
+  let doc=null, riuscito=false;
+  for(let fs=12; fs>=4.5 && !riuscito; fs-=0.5){
+    doc=new J.jsPDF({orientation:"landscape", unit:"mm", format:"a3"});
+    /* il testo più largo deve stare nella sua colonna: altrimenti si rimpicciolisce il corpo */
+    doc.setFont("helvetica","bold"); doc.setFontSize(fs);
+    let largo=0, largoNome=0;
+    gruppi.forEach(gr=>gr.d.forEach(d=>{ largoNome=Math.max(largoNome, doc.getTextWidth(d.nome)); gg.forEach(g=>oo.forEach(h=>{ largo=Math.max(largo, doc.getTextWidth(orCella(d,g,h).txt)); })); }));
+    if(largo>wC-0.9 || largoNome>wDoc-1.2) continue;
+    doc.setFont("helvetica","bold"); doc.setTextColor(20); doc.setFontSize(16);
+    doc.text(cfg.intestazione[0]||ISTITUTO, W/2, M+5.5, {align:"center"});
+    doc.setFontSize(13);
+    doc.text("ORARIO DEI DOCENTI  ·  A.S. "+ricAnno()+"  ·  aggiornato al "+isoOggi().split("-").reverse().join("/"), W/2, M+12, {align:"center"});
+    const head1=[{content:"MATERIA",rowSpan:2,styles:{halign:"center"}},{content:"DOCENTE",rowSpan:2,styles:{halign:"center"}}]
+      .concat(gg.map(g=>({content:NG[g]||g, colSpan:nO, styles:{halign:"center", fillColor:[43,43,43], textColor:255}})));
+    const head2=[].concat(...gg.map(()=>oo.map(h=>({content:h+"ª"+(inizio(h)?"\n"+inizio(h):""), styles:{halign:"center", fontSize:Math.max(4,fs-2.5), fillColor:[90,90,90], textColor:255}}))));
+    const body=[];
+    gruppi.forEach(gr=>gr.d.forEach((d,i)=>{
+      const riga=[];
+      if(i===0) riga.push({content:gr.m, rowSpan:gr.d.length, styles:{fontStyle:"bold", halign:"center", valign:"middle", fillColor:/sosteg/i.test(gr.m)?OR_COL.sost:[225,225,225]}});
+      riga.push({content:d.nome, styles:{fontStyle:"bold", halign:"left"}});
+      gg.forEach(g=>oo.forEach(h=>{ const c=orCella(d,g,h); const st={halign:"center", fontStyle:c.bold?"bold":"normal"}; if(c.fill) st.fillColor=c.fill; riga.push({content:c.txt, styles:st}); }));
+      body.push(riga);
+    }));
+    const cs={0:{cellWidth:wMat, overflow:"linebreak"}, 1:{cellWidth:wDoc}}; for(let i=0;i<gg.length*nO;i++) cs[i+2]={cellWidth:wC};
+    doc.autoTable({ startY:M+16, margin:{left:M,right:M,top:M,bottom:M+17}, head:[head1,head2], body, theme:"grid",
+      styles:{font:"helvetica", fontSize:fs, cellPadding:{top:Math.max(0.45,fs*0.07),bottom:Math.max(0.45,fs*0.07),left:0.3,right:0.3}, valign:"middle", lineColor:[130,130,130], lineWidth:0.15, textColor:20, overflow:"hidden"},
+      headStyles:{fillColor:[43,43,43], textColor:255, fontStyle:"bold", lineColor:[130,130,130]}, bodyStyles:{minCellHeight:hRiga}, columnStyles:cs,
+      didDrawCell:(dt)=>{ if(dt.column.index>=2 && (dt.column.index-2)%nO===0){ doc.setDrawColor(20); doc.setLineWidth(0.5); doc.line(dt.cell.x, dt.cell.y, dt.cell.x, dt.cell.y+dt.cell.height); } } });
+    riuscito = doc.getNumberOfPages()===1;
+  }
+  if(!riuscito){ /* non ci sta in una pagina nemmeno al minimo: lo lascio su più pagine, con la legenda in fondo */ }
+  const pag=doc.getNumberOfPages(); doc.setPage(pag);
+  orLegenda(doc, M, H-M-14, W-2*M);
+  return doc;
+}
+function scaricaOrarioPdf(b){
+  const o=S.orario; if(!o||!o.docenti.length) return toast("Nessun orario importato");
+  const testo=b?b.textContent:""; if(b){ b.disabled=true; b.textContent="Preparo il PDF…"; }
+  const fine=()=>{ if(b){ b.disabled=false; b.textContent=testo; } };
+  ricCaricaLib().then(()=>{
+    const doc=orarioPdfCostruisci(), nome="orario-docenti-"+isoOggi()+".pdf";
+    orScarica(doc, nome); fine(); toast("Scaricato: "+nome);
+  }).catch(e=>{ fine(); toast("Servono le librerie PDF (serve internet): "+(e&&e.message||e)); });
+}
+/* aula AIRC: in ogni ora di religione di una classe, chi non se ne avvale va in aula AIRC.
+   Il foglio mostra per ogni ora quali classi sono in aula, più l'elenco classe per classe. */
+function aircDati(){
+  const o=S.orario, cella={};
+  o.docenti.filter(d=>String(d.materia||"").toUpperCase()==="RELIGIONE").forEach(d=>{
+    for(const k in d.cells){ const c=d.cells[k]; if(c && (c.t==="CLASSE"||c.t==="AR")){ const [g,h]=k.split("|"); (cella[g+"|"+h]=cella[g+"|"+h]||[]).push(c.det); } }
+  });
+  for(const k in cella) cella[k].sort();
+  const perClasse=[]; for(const k in cella){ const [g,h]=k.split("|"); cella[k].forEach(c=>perClasse.push({c,g,h:parseInt(h)})); }
+  perClasse.sort((a,b)=>a.c.localeCompare(b.c)||o.giorni.indexOf(a.g)-o.giorni.indexOf(b.g)||a.h-b.h);
+  const giorni=o.giorni.filter(g=>o.ore.some(h=>cella[g+"|"+h]));
+  return {cella, perClasse, giorni};
+}
+function aircPdfCostruisci(){
+  const o=S.orario, J=window.jspdf, cfg=ricCfg(), {cella, perClasse, giorni}=aircDati(), oo=o.ore;
+  const GN={LUN:"LUNEDÌ",MAR:"MARTEDÌ",MER:"MERCOLEDÌ",GIO:"GIOVEDÌ",VEN:"VENERDÌ",SAB:"SABATO"}, GNe={LUN:"Lunedì",MAR:"Martedì",MER:"Mercoledì",GIO:"Giovedì",VEN:"Venerdì",SAB:"Sabato"};
+  const orari=cfg.orari||RIC_ORARI_DEFAULT;
+  const doc=new J.jsPDF({orientation:"landscape", unit:"mm", format:"a3"});
+  const W=420, H=297, M=14, VERDE=[29,110,106], GR=[230,230,230], GRS=[244,244,244], SC=[43,43,43], LN=[119,119,119];
+  doc.setProperties({title:"Aula AIRC - orario per classe"});
+  doc.setTextColor(0); doc.setFont("helvetica","bold"); doc.setFontSize(20);
+  doc.text(cfg.intestazione[0]||ISTITUTO, W/2, M+7, {align:"center"});
+  const top=M+12, bh=50;
+  doc.setFillColor(...VERDE); doc.roundedRect(M, top, W-2*M, bh, 3, 3, "F");
+  doc.setTextColor(255); doc.setFontSize(100); doc.text("AULA AIRC", W/2, top+34, {align:"center"});
+  doc.setFont("helvetica","normal"); doc.setFontSize(17);
+  doc.text("Attività alternativa all'insegnamento della religione cattolica  -  ORARIO PER CLASSE  -  A.S. "+ricAnno(), W/2, top+45, {align:"center"});
+  const y2=top+bh+8, gw=252, x0=M, wo=34, wc=(gw-wo)/Math.max(1,giorni.length), hh=12, nr=oo.length, rh=(H-M-6-y2-hh)/nr;
+  doc.setFillColor(...SC); doc.rect(x0, y2, gw, hh, "F");
+  doc.setTextColor(255); doc.setFont("helvetica","bold"); doc.setFontSize(16);
+  doc.text("ORA", x0+wo/2, y2+hh-4, {align:"center"});
+  giorni.forEach((g,i)=>doc.text(GN[g]||g, x0+wo+wc*(i+.5), y2+hh-4, {align:"center"}));
+  const ty0=y2+hh;
+  oo.forEach((h,r)=>{
+    const yt=ty0+rh*r;
+    doc.setFillColor(...(r%2?GRS:[255,255,255])); doc.rect(x0, yt, gw, rh, "F");
+    doc.setFillColor(...GR); doc.rect(x0, yt, wo, rh, "F");
+    doc.setTextColor(0); doc.setFont("helvetica","bold"); doc.setFontSize(22); doc.text(h+"ª", x0+wo/2, yt+rh/2-1, {align:"center"});
+    doc.setFont("helvetica","normal"); doc.setFontSize(11); doc.text(orari[h]||"", x0+wo/2, yt+rh/2+6, {align:"center"});
+    giorni.forEach((g,i)=>{ const cl=cella[g+"|"+h]; if(cl){ doc.setTextColor(...VERDE); doc.setFont("helvetica","bold"); doc.setFontSize(cl.length===1?48:30);
+      doc.text(cl.join(" - "), x0+wo+wc*(i+.5), yt+rh/2+5.5, {align:"center"}); } });
+  });
+  doc.setDrawColor(...LN); doc.setLineWidth(0.3);
+  for(let r=0;r<=nr;r++) doc.line(x0, ty0+rh*r, x0+gw, ty0+rh*r);
+  doc.line(x0, y2, x0+gw, y2);
+  for(let i=0;i<=giorni.length;i++) doc.line(x0+wo+wc*i, y2, x0+wo+wc*i, ty0+rh*nr);
+  doc.line(x0, y2, x0, ty0+rh*nr); doc.line(x0+wo, y2, x0+wo, ty0+rh*nr);
+  /* elenco classe per classe */
+  const tx=M+gw+9, tw=W-M-tx, n=perClasse.length;
+  doc.setTextColor(0); doc.setFont("helvetica","bold"); doc.setFontSize(16); doc.text("Ogni classe in aula AIRC (ora di religione)", tx, y2+4);
+  const ly=y2+9, lh=Math.min(14,(H-M-6-ly)/(n+1));
+  doc.setFillColor(...SC); doc.rect(tx, ly, tw, lh, "F");
+  doc.setTextColor(255); doc.setFontSize(13);
+  [["CLASSE",.04],["GIORNO",.22],["ORA",.54],["ORARIO",.68]].forEach(([l,off])=>doc.text(l, tx+tw*off, ly+lh*.66));
+  perClasse.forEach((r,i)=>{
+    const ry=ly+lh*(i+1);
+    doc.setFillColor(...(i%2?GRS:[255,255,255])); doc.rect(tx, ry, tw, lh, "F");
+    doc.setTextColor(...VERDE); doc.setFont("helvetica","bold"); doc.setFontSize(Math.min(21,lh*1.6)); doc.text(r.c, tx+tw*.04, ry+lh*.7);
+    doc.setTextColor(0); doc.setFont("helvetica","normal"); doc.setFontSize(Math.min(15,lh*1.15));
+    doc.text(GNe[r.g]||r.g, tx+tw*.22, ry+lh*.68); doc.text(r.h+"ª", tx+tw*.54, ry+lh*.68); doc.text(orari[r.h]||"", tx+tw*.68, ry+lh*.68);
+  });
+  doc.setDrawColor(...LN); doc.setLineWidth(0.25);
+  for(let i=0;i<=n+1;i++) doc.line(tx, ly+lh*i, tx+tw, ly+lh*i);
+  doc.line(tx, ly, tx, ly+lh*(n+1)); doc.line(tx+tw, ly, tx+tw, ly+lh*(n+1));
+  doc.setTextColor(85); doc.setFont("helvetica","normal"); doc.setFontSize(10);
+  doc.text("L'orario segue le ore di religione di ciascuna classe: in quell'ora gli alunni che non se ne avvalgono sono in aula AIRC.", W/2, H-M+5, {align:"center"});
+  return doc;
+}
+function scaricaAircPdf(b){
+  const o=S.orario; if(!o) return toast("Nessun orario importato");
+  if(!aircDati().perClasse.length) return toast("Nell'orario non ci sono ore di religione (materia RELIGIONE)");
+  const testo=b?b.textContent:""; if(b){ b.disabled=true; b.textContent="Preparo il PDF…"; }
+  const fine=()=>{ if(b){ b.disabled=false; b.textContent=testo; } };
+  ricCaricaLib().then(()=>{
+    const doc=aircPdfCostruisci(), nome="aula-AIRC-orario-"+isoOggi()+".pdf";
+    orScarica(doc, nome); fine(); toast("Scaricato: "+nome);
+  }).catch(e=>{ fine(); toast("Servono le librerie PDF (serve internet): "+(e&&e.message||e)); });
 }
 
 /* ================= RICEVIMENTI PER LA SEGRETERIA (PDF A3) =================
