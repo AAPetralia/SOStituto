@@ -3473,8 +3473,8 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "14.11.2026b";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
-const NUMERO_VERSIONE = 118;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
+const VERSIONE = "16.11.2026a";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const NUMERO_VERSIONE = 119;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -6522,6 +6522,7 @@ function renderCambioDocente(){
   }
   out+=renderSupplenze();
   out+=renderModificaOrario();
+  out+=renderNuovoDocente();
   out+=renderDocentiExtra();
   el("main").innerHTML=out;
   if(c.vecchio) aggiornaAnteprimaCD();
@@ -6658,6 +6659,86 @@ function moRiapplica(id){
   if(S.prospetto && Object.keys(S.assentiOggi||{}).length) lanciaProspetto(); else render();
 }
 function moScarta(id){ const o=S.orario; o.modifiche=(o.modifiche||[]).filter(z=>z.id!==id); save(); render(); }
+
+/* ---- nuovo docente con orario del mattino, aggiunto dall'app ----
+   Si scrive l'orario cella per cella con le stesse sigle del file Excel (1A, 1A-2B, 1AF, P, P2A, AR2A, R…).
+   Il docente è segnato «aggiunto» e sopravvive a un nuovo import dell'orario se il file non lo contiene ancora. */
+function ndForm(){ return S.nd = S.nd || {nome:"", materia:"", cells:{}, copia:""}; }
+function renderNuovoDocente(){
+  const o=S.orario; if(!o) return "";
+  const f=ndForm(), docs=(o.docenti||[]).slice().sort((a,b)=>a.nome.localeCompare(b.nome,"it"));
+  const materie=[...new Set((o.docenti||[]).map(d=>d.materia).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"it"));
+  let out=`<h2 class="sec" style="margin-top:26px">Nuovo docente con orario del mattino</h2>
+    <p class="hint" style="margin-top:0">Per chi non è nel file dell'orario (nuova nomina, orario mancante): lo aggiungi qui con le sue ore e vale subito per le sostituzioni, senza reimportare nulla. Se lo cerchi per <b>sostituire</b> un collega, usa invece «Cambio docente» qui sopra.</p>
+    <div class="field"><label>Nome</label>
+      <input type="text" value="${esc(f.nome)}" placeholder="es. ROSSI Maria" autocomplete="off" oninput="S.nd.nome=this.value">
+      <p class="hint" style="margin:5px 0 0">Cognome in MAIUSCOLO e poi il nome, come gli altri nell'orario.</p></div>
+    <div class="field"><label>Materia</label>
+      <input type="text" list="ndmat" value="${esc(f.materia)}" autocomplete="off" oninput="S.nd.materia=this.value">
+      <datalist id="ndmat">${materie.map(m=>`<option value="${esc(m)}">`).join("")}</datalist></div>
+    <div class="field"><label>Parti dall'orario di (facoltativo)</label>
+      <select onchange="ndCopia(this.value)">
+        <option value="">— orario vuoto —</option>
+        ${docs.map(d=>`<option value="${esc(d.nome)}"${d.nome===f.copia?" selected":""}>${esc(d.nome)} · ${esc(d.materia||"")}</option>`).join("")}
+      </select></div>
+    <p class="hint" style="margin:0 0 6px">Scrivi in ogni ora: <b>1A</b> classe · <b>1A-2B</b> articolata · <b>1AF</b> / <b>1AS</b> gruppo francese / spagnolo · <b>P</b> potenziamento (<b>P2A</b> con la classe) · <b>AR2A</b> AIRC · <b>R</b> ricevimento · vuoto = libera.</p>
+    <div class="cellhead" style="padding:4px 0 6px"><span style="flex:0 0 40px"></span>${o.ore.map(h=>`<span>${h}ª</span>`).join("")}</div>`;
+  o.giorni.forEach(g=>{
+    out+=`<div style="display:flex; align-items:center; gap:4px; padding:3px 0"><div style="flex:0 0 36px; font-weight:700; font-size:13px">${g}</div>`+
+      o.ore.map(h=>`<input type="text" list="ndcl" data-k="${g}|${h}" value="${esc(f.cells[g+"|"+h]||"")}" autocomplete="off" autocapitalize="characters"
+        oninput="S.nd.cells[this.dataset.k]=this.value" style="flex:1; min-width:0; width:0; padding:8px 2px; text-align:center; font-size:14px">`).join("")+`</div>`;
+  });
+  out+=`<datalist id="ndcl">${classiOrario().map(c=>`<option value="${esc(c)}">`).join("")}<option value="P"><option value="R"><option value="PNO"></datalist>
+    <button class="btn" style="width:100%; margin-top:12px" onclick="ndAggiungi()">+ Aggiungi docente all'orario</button>`;
+  const agg=(o.docenti||[]).filter(d=>d.aggiunto);
+  if(agg.length){
+    out+=`<h3 class="sub-sec" style="margin-top:16px">Docenti aggiunti dall'app · ${agg.length}</h3>`+agg.map(d=>{
+      let n=0; for(const k in d.cells){ if(d.cells[k] && d.cells[k].t!=="VUOTA") n++; }
+      return `<div class="regcard"><div class="reghead" style="cursor:default"><div style="flex:1"><b>${esc(d.nome)}</b>
+        <div class="regsub">${esc(d.materia||"—")} · ${n} ${n===1?"ora":"ore"} · classi: ${esc([...classiDi(d)].sort().join(" ")||"—")}</div></div>
+        <b class="chev" style="color:var(--red); cursor:pointer" onclick="ndTogli(decodeURIComponent('${encodeURIComponent(d.nome)}'))" aria-label="Rimuovi">✕</b></div></div>`;
+    }).join("")+`<p class="hint">Se importi di nuovo l'orario e il file non li contiene ancora, restano in elenco. Quando il docente entra nel file Excel, il suo orario del file prende il posto di questo.</p>`;
+  }
+  return out;
+}
+function ndCopia(nome){
+  const f=ndForm(), o=S.orario, d=o.docenti.find(x=>x.nome===nome);
+  f.copia=nome; f.cells={};
+  if(d){ o.giorni.forEach(g=>o.ore.forEach(h=>{ const v=cellaPerExcel(d.cells[g+"|"+h]); if(v) f.cells[g+"|"+h]=v; })); if(!f.materia) f.materia=d.materia||""; }
+  render();
+}
+function ndAggiungi(){
+  const f=ndForm(), o=S.orario, nome=String(f.nome||"").trim().replace(/\s+/g," ");
+  if(!nome){ toast("Scrivi il nome del docente"); return; }
+  const gia=n=>n.toLowerCase()===nome.toLowerCase();
+  if(o.docenti.some(d=>gia(d.nome)) || docentiExtra().some(e=>gia(e.nome))){ toast(nome+" c'è già"); return; }
+  const cells={}; let n=0;
+  for(const g of o.giorni) for(const h of o.ore){
+    const raw=String(f.cells[g+"|"+h]||"").trim(), c=classifica(raw);
+    if(c.t==="IGNOTA"){ toast("Non capisco «"+raw+"» ("+g+" "+h+"ª). Esempi: 1A · 1A-2B · 1AF · P · P2A · AR2A · R"); return; }
+    cells[g+"|"+h]=c; if(c.t!=="VUOTA") n++;
+  }
+  if(!n){ toast("Inserisci almeno un'ora"); return; }
+  const materia=String(f.materia||"").trim();
+  salvaPreSync(statoDaCondividere());
+  const d={nome, materia, cells:{}, aggiunto:{quando:new Date().toISOString()}};
+  /* l'ordine non conta per i calcoli: lo metto dopo i colleghi della stessa materia */
+  let idx=-1; if(materia) o.docenti.forEach((x,i)=>{ if(String(x.materia||"").toLowerCase()===materia.toLowerCase()) idx=i; });
+  if(idx>=0) o.docenti.splice(idx+1,0,d); else o.docenti.push(d);
+  for(const k in cells){ const [g,h]=k.split("|"); moScrivi(d, g, parseInt(h), cells[k]); }
+  S.nd={nome:"", materia:"", cells:{}, copia:""};
+  S.prospetto=null; S.noteApplicate=null;
+  save(); toast(nome+" aggiunto all'orario ("+n+(n===1?" ora":" ore")+")"); render();
+}
+function ndTogli(nome){
+  const o=S.orario, i=o.docenti.findIndex(d=>d.nome===nome&&d.aggiunto); if(i<0) return;
+  if(!confirm("Tolgo "+nome+" dall'orario?\n\nLe sue ore spariscono da Orario e Sostituzioni. Le assenze già annotate restano nell'elenco.")) return;
+  salvaPreSync(statoDaCondividere());
+  o.docenti.splice(i,1);
+  for(const k in (S.potAssign||{})) if(k.indexOf(nome+"|")===0) delete S.potAssign[k];
+  S.prospetto=null; S.noteApplicate=null;
+  save(); toast(nome+" tolto dall'orario"); render();
+}
 
 /* ---- docenti senza orario del mattino ---- */
 const NOTA_EXTRA="Strumento musicale · pomeriggio";
@@ -6841,7 +6922,7 @@ function onFile(ev){
       }
       html += `<button class="btn" style="margin-top:12px" id="confirm">Salva questo orario</button>`;
       el("report").innerHTML=html;
-      el("confirm").addEventListener("click", ()=>{ const ex=docentiExtra().filter(e=>!parsed.docenti.some(d=>d.nome===e.nome)); if(ex.length) parsed.docentiExtra=ex; const mod=(S.orario&&S.orario.modifiche)||[]; if(mod.length) parsed.modifiche=mod; const sup=supplenzeDi().map(x=>Object.assign({},x,{attiva:false})); if(sup.length) parsed.supplenze=sup; S.orario=parsed; save(); S.tab="orario"; S.day=parsed.giorni[0]; S.selDoc=""; S.selClasse=""; render(); });
+      el("confirm").addEventListener("click", ()=>{ const ex=docentiExtra().filter(e=>!parsed.docenti.some(d=>d.nome===e.nome)); if(ex.length) parsed.docentiExtra=ex; const agg=((S.orario&&S.orario.docenti)||[]).filter(d=>d.aggiunto && !parsed.docenti.some(x=>x.nome===d.nome)); if(agg.length) parsed.docenti=parsed.docenti.concat(agg); const mod=(S.orario&&S.orario.modifiche)||[]; if(mod.length) parsed.modifiche=mod; const sup=supplenzeDi().map(x=>Object.assign({},x,{attiva:false})); if(sup.length) parsed.supplenze=sup; S.orario=parsed; save(); S.tab="orario"; S.day=parsed.giorni[0]; S.selDoc=""; S.selClasse=""; render(); });
     }catch(err){
       el("report").innerHTML=`<div class="flag" style="white-space:pre-wrap; line-height:1.5">Non riesco a leggere il file: ${esc(err.message)}</div>`;
     }

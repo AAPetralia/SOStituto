@@ -5,6 +5,9 @@ Si legge in alto nell'app, sotto il titolo. Da qui in avanti si aggiorna a ogni 
 
 ## Da qui in avanti (dettaglio certo)
 
+### 16.11.2026a — n. 119
+- **Nuovo docente con orario del mattino, dall'app.** In Altro → Cambio e aggiunta docente, sezione «Nuovo docente con orario del mattino»: nome, materia e l'orario cella per cella con le stesse sigle dell'Excel (1A, 1A-2B, 1AF, P, P2A, AR2A, R). Si può partire dall'orario di un altro docente. Il docente vale subito per Orario, Sostituzioni e Potenziamento; compare nell'elenco «Docenti aggiunti dall'app» (con ✕ per toglierlo) e sopravvive a un nuovo import dell'orario se il file non lo contiene ancora.
+
 ### 14.11.2026b — n. 118
 - **Permessi brevi: il debito di recupero conta solo le ore in cui il docente ha servizio qui.** Il controllo ora è per ora, non solo per giorno: una volta scelto il docente e le ore, il modulo avvisa quali ore non hanno servizio («Basso non ha servizio alla 3ª… Da recuperare: 1 ora») e il debito è creato solo per quelle (ricevimento e ore vuote non contano; lezione, potenziamento e ore a disposizione sì). Se nessuna delle ore indicate è di servizio, nessun debito. I debiti già creati si adeguano da soli (se non sono già stati restituiti o chiusi a mano oltre il nuovo valore).
 
