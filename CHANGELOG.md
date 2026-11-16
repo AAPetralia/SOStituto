@@ -5,6 +5,9 @@ Si legge in alto nell'app, sotto il titolo. Da qui in avanti si aggiorna a ogni 
 
 ## Da qui in avanti (dettaglio certo)
 
+### 16.11.2026c — n. 121
+- **Banca ore dal registro.** Un'ora a pagamento di un giorno già archiviato (e non più aperto in Sostituzioni) si può ora segnare «a credito» direttamente dal Registro: tocca la giornata, sulla riga a pagamento c'è «🏦 segna a credito» (e «↩ togli dalla banca ore» per annullare). Prima il credito si poteva segnare solo dal prospetto del giorno stesso, quindi cambiando data l'ora restava a pagamento senza rimedio.
+
 ### 16.11.2026b — n. 120
 - **AIRC nei menu dell'orario.** In «Modifica l'orario di un docente» ora c'è l'opzione **AIRC** (con scelta della classe), accanto a «In una classe», «Libera», «Ricevimento» e «Potenziamento». Nel «Nuovo docente con orario del mattino» i suggerimenti di ogni cella comprendono anche le sigle AIRC (AR1A, AR2B…).
 

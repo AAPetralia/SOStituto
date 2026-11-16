@@ -3473,8 +3473,8 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "16.11.2026b";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
-const NUMERO_VERSIONE = 120;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
+const VERSIONE = "16.11.2026c";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const NUMERO_VERSIONE = 121;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -5375,7 +5375,7 @@ function renderRegistro(){
               <div style="padding:0 12px 8px; text-align:right"><span class="achip" style="cursor:pointer" onclick="ripristinaRigaRegistro('${iso}',${r.h},'${esc(ass).replace(/'/g,"\\'")}')">↺ ripristina</span></div>`;
           } else if(r.scelto){
             out += `<div class="regrow"><span class="ph">${r.h}ª</span><span class="pcl">${esc(fmtCl(r.classe))}</span><span class="pto">${esc(r.scelto)}</span><span class="pmot">${esc(r.motivo)}</span></div>
-              <div style="padding:0 12px 8px; text-align:right"><span class="achip" style="cursor:pointer; color:var(--red); border-color:var(--red)" onclick="annullaRigaRegistro('${iso}',${r.h},'${esc(ass).replace(/'/g,"\\'")}')">✕ segna come non avvenuta</span></div>`;
+              <div style="padding:0 12px 8px; text-align:right">${chipCreditoRegistro(iso,r,ass)}<span class="achip" style="cursor:pointer; color:var(--red); border-color:var(--red)" onclick="annullaRigaRegistro('${iso}',${r.h},'${esc(ass).replace(/'/g,"\\'")}')">✕ segna come non avvenuta</span></div>`;
           } else if(r.motivo==="scoperta"){
             out += `<div class="regrow scoperta"><span class="ph">${r.h}ª</span><span class="pcl">${esc(fmtCl(r.classe))}</span><span class="pto" style="color:var(--red)">scoperta</span></div>`;
           }
@@ -5435,6 +5435,35 @@ function eliminaGiorno(iso){
    cancella la riga (resta la traccia di cosa era previsto) ma la esclude dai
    conteggi, dai documenti stampati/condivisi e dal calcolo dei recuperi — un
    debito pagato con quella sostituzione torna aperto. */
+/* banca ore dal registro: si può segnare «a credito» (o togliere) anche un'ora a pagamento di un giorno passato,
+   senza riaprire la giornata in Sostituzioni */
+function chipCreditoRegistro(iso, r, ass){
+  const q=String(ass).replace(/\\/g,"\\\\").replace(/'/g,"\\'");
+  if(/banca ore/.test(r.motivo||""))
+    return `<span class="achip" style="cursor:pointer; color:var(--teal); border-color:var(--teal); margin-right:6px" onclick="creditoRegistro('${iso}',${r.h},'${esc(q)}')">↩ togli dalla banca ore</span>`;
+  if(/pagamento/.test(r.motivo||""))
+    return `<span class="achip" style="cursor:pointer; color:var(--teal); border-color:var(--teal); margin-right:6px" onclick="creditoRegistro('${iso}',${r.h},'${esc(q)}')">🏦 segna a credito</span>`;
+  return "";
+}
+function creditoRegistro(iso, h, assente){
+  const rec=S.registro && S.registro[iso]; if(!rec) return;
+  const r=rec.righe.find(x=>x.h===h && x.assente===assente); if(!r || !r.scelto || r.annullata) return;
+  S.bancaOre = S.bancaOre || [];
+  const i=S.bancaOre.findIndex(c=>c.data===iso && c.docente===r.scelto && c.h===h);
+  if(i>=0){
+    if(S.bancaOre[i].usata){ toast("Questa ora è già stata usata in un recupero: annullalo prima da Recuperi"); return; }
+    S.bancaOre.splice(i,1);
+    r.motivo=(r.motivo||"").replace("banca ore","⚠ pagamento"); rec.pagamento=(rec.pagamento||0)+1;
+    toast("Tolta dalla banca ore: torna a pagamento");
+  } else {
+    if(!/pagamento/.test(r.motivo||"")) return;
+    S.bancaOre.push({id:"b"+Date.now()+h, docente:r.scelto, data:iso, h, classe:r.classe, assente, usata:false, usataIl:null, debitoId:null});
+    r.motivo=r.motivo.replace("⚠ pagamento","banca ore"); rec.pagamento=Math.max(0,(rec.pagamento||0)-1);
+    toast("Segnata a credito: "+cognomeBreve(r.scelto)+" "+h+"ª del "+dataLeggibile(iso).replace(/ \d{4}$/,""));
+  }
+  saveRegistro(); save();
+  if(iso===S.dataOggi && S.prospetto) lanciaProspetto(); else render();
+}
 function annullaRigaRegistro(iso, h, assente){
   const rec = S.registro && S.registro[iso]; if(!rec) return;
   const r = rec.righe.find(x=>x.h===h && x.assente===assente); if(!r || !r.scelto) return;
