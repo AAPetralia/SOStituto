@@ -549,7 +549,7 @@ let S = { orario:null, tab:"oggi", day:"LUN",
           dataOggi:null, registro:{}, regApertoGiorno:"",
           alunnoAssenteOggi:[], alunnoSel:"", alunnoPanel:false,
           uscite:[], uscitaForm:null,
-          assenzeNote:[], assenzaForm:null, noteApplicate:null, daNote:[],
+          assenzeNote:[], assenzaForm:null, noteApplicate:null, daNote:[], alunniAssenti:[], aaForm:null,
           pnoOn:[], potAssign:{}, potSel:"", potMod:[], potForm:null,
           sync:{url:"",token:"",utente:"",soloLettura:false,ultimoPull:null,info:null}, syncAttivo:false,
           bancaOre:[],   /* banca ore: ore fatte a pagamento ma segnate a credito {id, docente, data, h, classe, assente, usata:false, usataIl, debitoId} */
@@ -567,6 +567,7 @@ function save(){ try{
   localStorage.setItem("sostituto_alunno", JSON.stringify({data:S.dataOggi, lista:S.alunnoAssenteOggi}));
   localStorage.setItem("sostituto_uscite", JSON.stringify(S.uscite||[]));
   localStorage.setItem("sostituto_assenze", JSON.stringify(S.assenzeNote||[]));
+  localStorage.setItem("sostituto_alunniass", JSON.stringify(S.alunniAssenti||[]));
   localStorage.setItem("sostituto_pno", JSON.stringify(S.pnoOn||[]));
   localStorage.setItem("sostituto_potmod", JSON.stringify(S.potMod||[]));
   localStorage.setItem("sostituto_potass", JSON.stringify(S.potAssign||{}));
@@ -591,6 +592,7 @@ function load(){ try{
   const aa=localStorage.getItem("sostituto_alunno"); if(aa){ const o=JSON.parse(aa); if(o && o.data===S.dataOggi) S.alunnoAssenteOggi=o.lista||[]; }
   const us=localStorage.getItem("sostituto_uscite"); if(us) S.uscite=JSON.parse(us);
   const an=localStorage.getItem("sostituto_assenze"); if(an) S.assenzeNote=JSON.parse(an);
+  const aal=localStorage.getItem("sostituto_alunniass"); if(aal) S.alunniAssenti=JSON.parse(aal);
   const og=localStorage.getItem("sostituto_oggi");
   if(og){ try{
     const o=JSON.parse(og);
@@ -1432,6 +1434,72 @@ function applicaAssenzeNote(){
     S.breveOggi[nome] = g.breve;   /* deciso in Assenze note, non si richiede */
     S.daNote.push(nome);
   }
+  /* alunni assenti programmati dal–al: il sostegno è libero per le sostituzioni (criterio f) */
+  S.alunnoAssenteOggi = S.alunnoAssenteOggi || [];
+  alunniAssentiDel(iso).forEach(n=>{ if(!S.alunnoAssenteOggi.includes(n)) S.alunnoAssenteOggi.push(n); });
+}
+/* sostegni il cui alunno risulta assente nel giorno (assenze programmate «dal – al») */
+function alunniAssentiDel(iso){
+  if(!iso) return [];
+  const o=S.orario, g=giornoDaData(iso), out=new Set();
+  (S.alunniAssenti||[]).forEach(a=>{
+    if(iso < a.dal || iso > (a.al||a.dal)) return;
+    const doc=o && o.docenti.find(d=>d.nome===a.docente);
+    if(o && doc && !giorniServizio(doc).has(g)) return;      /* quel giorno il sostegno non c'è comunque */
+    out.add(a.docente);
+  });
+  return [...out];
+}
+/* pannello «Alunno assente»: programmazione dal – al */
+function aaFormGet(){ return S.aaForm = S.aaForm || {docente:"", dal:S.dataOggi||"", al:S.dataOggi||"", nota:""}; }
+function aaSet(campo, v){
+  const f=aaFormGet(); f[campo]=v;
+  if(campo==="dal" && (!f.al || f.al<v)) f.al=v;
+  render();
+}
+function aaAggiungi(){
+  const f=aaFormGet();
+  if(!f.docente){ toast("Scegli il docente di sostegno"); return; }
+  if(!f.dal){ toast("Scrivi da quando"); return; }
+  const al=f.al||f.dal; if(al<f.dal){ toast("La data «al» è prima di «dal»"); return; }
+  S.alunniAssenti = S.alunniAssenti || [];
+  S.alunniAssenti.push({id:"aa"+Date.now(), docente:f.docente, dal:f.dal, al, nota:String(f.nota||"").trim()});
+  S.aaForm=null; S.noteApplicate=null; S.prospetto=null;
+  save(); toast("Alunno assente di "+f.docente+": dal "+f.dal.split("-").reverse().join("/")+" al "+al.split("-").reverse().join("/"));
+  render();
+}
+function aaTogli(id){
+  const a=(S.alunniAssenti||[]).find(x=>x.id===id); if(!a) return;
+  if(!confirm("Tolgo l'assenza dell'alunno di "+a.docente+" ("+a.dal.split("-").reverse().join("/")+" – "+(a.al||a.dal).split("-").reverse().join("/")+")?\n\nIl sostegno torna in classe con lui.")) return;
+  S.alunniAssenti=S.alunniAssenti.filter(x=>x.id!==id);
+  if(!alunniAssentiDel(S.dataOggi).includes(a.docente)){
+    S.alunnoAssenteOggi=(S.alunnoAssenteOggi||[]).filter(n=>n!==a.docente);
+  }
+  S.prospetto=null; save(); render();
+}
+function renderAlunniProgrammati(sostegni){
+  const f=aaFormGet(), gg=iso=>iso.split("-").reverse().join("/"), oggi=S.dataOggi;
+  let out=`<div class="aapanel-lbl" style="margin-top:14px"><b>Assenza lunga, dal – al.</b> Se l'alunno manca più giorni, programmala una volta: ogni giorno compreso il sostegno risulta libero da solo (criterio f), senza segnarlo a mano.</div>
+    <div class="field"><label>Sostegno</label>
+      <select onchange="aaSet('docente',this.value)"><option value="">— scegli —</option>
+        ${sostegni.map(d=>`<option value="${esc(d.nome)}"${d.nome===f.docente?" selected":""}>${esc(d.nome)}</option>`).join("")}</select></div>
+    <div style="display:flex; gap:8px">
+      <div class="field" style="flex:1"><label>Dal</label><input type="date" value="${f.dal}" onchange="aaSet('dal',this.value)"></div>
+      <div class="field" style="flex:1"><label>Al (compreso)</label><input type="date" value="${f.al}" min="${f.dal}" onchange="aaSet('al',this.value)"></div>
+    </div>
+    <div class="field"><label>Nota (facoltativa)</label>
+      <input type="text" value="${esc(f.nota||"")}" placeholder="es. alunno in ospedale, malattia…" oninput="S.aaForm.nota=this.value"></div>
+    <button class="btn" style="width:100%" onclick="aaAggiungi()">+ Programma l'assenza</button>`;
+  const lista=(S.alunniAssenti||[]).slice().sort((a,b)=>a.dal.localeCompare(b.dal));
+  if(lista.length){
+    out+=`<div style="margin-top:12px">`+lista.map(a=>{
+      const att=oggi>=a.dal && oggi<=(a.al||a.dal), passata=(a.al||a.dal)<oggi;
+      return `<div class="regcard" style="${passata?"opacity:.55":""}"><div class="reghead" style="cursor:default"><div style="flex:1"><b>${esc(a.docente)}</b>
+        <div class="regsub">dal ${gg(a.dal)} al ${gg(a.al||a.dal)}${att?" · <b>in corso oggi</b>":passata?" · finita":""}${a.nota?" · "+esc(a.nota):""}</div></div>
+        <b class="chev" style="color:var(--red); cursor:pointer" onclick="aaTogli('${esc(a.id)}')" aria-label="Togli">✕</b></div></div>`;
+    }).join("")+`</div>`;
+  }
+  return out;
 }
 /* prossime assenze note nei giorni successivi (per il promemoria) */
 function assenzeProssime(iso, giorni){
@@ -2027,7 +2095,7 @@ function saveSync(){ try{ localStorage.setItem("sostituto_sync", JSON.stringify(
 
 function statoDaCondividere(){
   return { orario:S.orario||null, lingue:S.lingue||{}, flagOggi:S.flagOggi||[], linguaSostegno:S.linguaSostegno||{}, incompatibili:S.incompatibili||[],
-    registro:S.registro||{}, uscite:S.uscite||[], uscFoglioCfg:{url:(S.uscFoglio&&S.uscFoglio.url)||"", token:(S.uscFoglio&&S.uscFoglio.token)||""}, assenzeNote:S.assenzeNote||[],
+    registro:S.registro||{}, uscite:S.uscite||[], uscFoglioCfg:{url:(S.uscFoglio&&S.uscFoglio.url)||"", token:(S.uscFoglio&&S.uscFoglio.token)||""}, assenzeNote:S.assenzeNote||[], alunniAssenti:S.alunniAssenti||[],
     pnoOn:S.pnoOn||[], potAssign:S.potAssign||{}, potMod:S.potMod||[], recuperi:S.recuperi||[], bancaOre:S.bancaOre||[],
     /* da tenere allineati con datiBackup(): tutto ciò che un altro dispositivo
        deve ritrovare, non solo l'orario e il registro */
@@ -2052,6 +2120,7 @@ function applicaStato(d){
   S.uscite      = d.uscite || [];
   S._uscDiff    = tracciaUscite(S._fonteStato||"Stato ricevuto (Scarica, backup o ripristino)", _uscPrima, S.uscite);
   S.assenzeNote = d.assenzeNote || [];
+  S.alunniAssenti = d.alunniAssenti || [];
   S.pnoOn       = d.pnoOn || [];
   S.potAssign   = d.potAssign || {};
   if(d.potMod) S.potMod = d.potMod;
@@ -2641,6 +2710,7 @@ function renderOggi(){
       return `<div class="aarow ${on?'on':''}" onclick="toggleAlunnoAssente('${esc(d.nome)}')">
         <span>${esc(d.nome)}</span><b>${on?'✓ assente':'presente'}</b></div>`;
     }).join("");
+    out += renderAlunniProgrammati(sostegni);
     out += `</div>`;
   }
   if(nAA){
@@ -3473,8 +3543,8 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "16.11.2026d";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
-const NUMERO_VERSIONE = 122;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
+const VERSIONE = "18.11.2026a";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const NUMERO_VERSIONE = 123;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -3486,6 +3556,7 @@ function datiBackup(){
     uscite: S.uscite || [],
     uscFoglioCfg: { url:(S.uscFoglio&&S.uscFoglio.url)||"", token:(S.uscFoglio&&S.uscFoglio.token)||"" },
     assenzeNote: S.assenzeNote || [],
+    alunniAssenti: S.alunniAssenti || [],
     pnoOn: S.pnoOn || [],
     potMod: S.potMod || [],
     potAssign: S.potAssign || {},
@@ -4645,7 +4716,7 @@ function previsioneGiorno(iso, uscExtra, rec, opz){
     applicaAssenzeNote();                                 /* le assenze già comunicate per quel giorno */
     const assenti=Object.keys(S.assentiOggi).map(n=>({nome:n, ore:S.assentiOggi[n]}));
     const us=usciteAttive(iso).concat((uscExtra||[]).filter(u=>iso>=u.dal && iso<=(u.al||u.dal)));
-    const p=generaProspetto(o, g, assenti, { flag:S.flagOggi, override:{}, alunnoAssente:[], uscite:us, recuperi:rec });
+    const p=generaProspetto(o, g, assenti, { flag:S.flagOggi, override:{}, alunnoAssente:(S.alunnoAssenteOggi||[]).slice(), uscite:us, recuperi:rec });
     const scop=p.esiti.filter(e=>!e.scelto && e.motivo==="scoperta");
     const per={}; (p.note||[]).forEach(n=>{ (per[n.nome]=per[n.nome]||{h:[],cl:new Set()}); per[n.nome].h.push(n.h); per[n.nome].cl.add(n.classe); });
     const testo=testoWhatsAppData(p, iso).split("\n").slice(2).join("\n").trim();   /* tolgo il titolo: la data è già nel riquadro */
@@ -4950,6 +5021,7 @@ function renderUscFoglio(){
 const RESET_ANNO = [
   { k:"registro",   tit:"Registro delle sostituzioni", n:()=>Object.keys(S.registro||{}).length, um:"giornate" },
   { k:"assenzeNote",tit:"Assenze note",                n:()=>(S.assenzeNote||[]).length,        um:"annotate" },
+  { k:"alunniAssenti",tit:"Alunni assenti programmati", n:()=>(S.alunniAssenti||[]).length,      um:"programmate" },
   { k:"uscite",     tit:"Uscite didattiche",           n:()=>(S.uscite||[]).length,             um:"registrate" },
   { k:"recuperi",   tit:"Recuperi da permesso breve",  n:()=>(S.recuperi||[]).length,           um:"posizioni" },
   { k:"bancaOre",   tit:"Banca ore (ore a credito)",   n:()=>(S.bancaOre||[]).length,           um:"ore" },
@@ -5024,7 +5096,7 @@ function confermaNuovoAnno(){
   if(!confirm("Verranno svuotate queste voci:\n\n"+elenco+"\n\nL'operazione non è reversibile. Procedo?")) return;
   if(!confirm("Ultima conferma: azzero definitivamente?")) return;
 
-  const vuoto = { registro:{}, assenzeNote:[], uscite:[], recuperi:[], bancaOre:[], potAssign:{}, potMod:[], pnoOn:[],
+  const vuoto = { registro:{}, assenzeNote:[], alunniAssenti:[], uscite:[], recuperi:[], bancaOre:[], potAssign:{}, potMod:[], pnoOn:[],
                   orario:null, flagOggi:[], lingue:{} };
   sel.forEach(x=>{ S[x.k] = (Array.isArray(vuoto[x.k]) ? [] : vuoto[x.k]); });
   if(S.raSel.registro) localStorage.removeItem("sostituto_registro");
@@ -6432,6 +6504,7 @@ function trasformaCambioDocente(dati, v, n, opz){
   (dati.bancaOre||[]).forEach(c=>{ if(c.docente===v && tutto) c.docente=n; if(c.assente===v && tutto) c.assente=n; });
   (dati.assenzeNote||[]).forEach(a=>{ if(a.docente!==v) return;
     if(tutto) a.docente=n; else if((a.al||a.dal||"")>=dal) rep.assenze++; });
+  (dati.alunniAssenti||[]).forEach(a=>{ if(a.docente===v && tutto) a.docente=n; });
   (dati.uscite||[]).forEach(u=>{ const i=(u.accomp||[]).indexOf(v); const j=(u.riserve||[]).indexOf(v);
     if(i<0 && j<0) return;
     if(tutto){ if(i>=0) u.accomp[i]=n; if(j>=0) u.riserve[j]=n; } else if((u.al||u.dal||"")>=dal) rep.uscite++; });

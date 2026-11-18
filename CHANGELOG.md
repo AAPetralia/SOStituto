@@ -5,6 +5,9 @@ Si legge in alto nell'app, sotto il titolo. Da qui in avanti si aggiorna a ogni 
 
 ## Da qui in avanti (dettaglio certo)
 
+### 18.11.2026a — n. 123
+- **Alunno assente «dal – al».** Nel pannello «Alunno assente» di Sostituzioni c'è ora la sezione «Assenza lunga»: scegli il sostegno, la data di inizio e di fine (compresa) e una nota facoltativa. Per ogni giorno del periodo il sostegno risulta libero da solo e le sue ore diventano disponibili per le sostituzioni (criterio f), senza doverlo segnare ogni mattina; vale anche per la previsione dei giorni successivi. Le programmazioni compaiono in elenco (con «in corso oggi») e si tolgono con la ✕. Sono incluse in condivisione, backup e «Azzera dati dell'anno».
+
 ### 16.11.2026d — n. 122
 - **Orario in PDF (A3 a colori) e orario AIRC.** Nella scheda Orario due nuovi pulsanti. «Orario in PDF» produce un foglio A3 in orizzontale con tutti i docenti (sostegno compreso, raggruppati per materia) e i cinque giorni: celle colorate per tipo (classe, sostegno, 2ª lingua articolata, sostegno francese/spagnolo, AIRC, potenziamento con la classe assegnata, ricevimento, non disponibile, VP/CV) e legenda con tutte le simbologie. «Orario AIRC» produce il manifesto A3 «AULA AIRC» con le classi in aula ora per ora e l'elenco classe per classe, ricavato dalle ore di religione dell'orario.
 
