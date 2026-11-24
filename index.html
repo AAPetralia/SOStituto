@@ -300,6 +300,22 @@
   .rec-bar-fill{height:100%; background:var(--teal); border-radius:4px}
   .rec-bar-fill.vic{background:var(--amber)} .rec-bar-fill.sfor{background:var(--red)}
   .regcard{background:var(--paper2); border:1.5px solid var(--rule); border-radius:12px; margin-bottom:10px; overflow:hidden}
+  .mailbox{background:var(--tint-blue); border:1.5px solid var(--bd-blue); border-radius:12px; padding:12px; margin-bottom:16px}
+  .mailhead{display:flex; align-items:center; justify-content:space-between; gap:8px; color:var(--tx-blue); font-size:15.5px}
+  .mailsub{font-size:13px; color:var(--tx-blue); margin:4px 0 8px}
+  .mailwarn{color:var(--tx-red-dark); font-weight:600}
+  .mailvuota{margin:4px 0 0; font-size:14px; color:var(--tx-blue)}
+  .mailcard{background:var(--paper2); border:1px solid var(--bd-blue); border-radius:10px; padding:10px 12px; margin-top:8px}
+  .mailnome{font-weight:700; color:var(--ink)}
+  .mailprot{font-weight:400; font-size:12.5px; color:var(--ink-soft)}
+  .mailmotivi{margin:6px 0 0; padding-left:18px; font-size:13px; color:var(--tx-amber-dark)}
+  .mailazioni{display:flex; gap:8px; margin-top:8px; flex-wrap:wrap}
+  .btn.mailbtn{padding:7px 13px; font-size:14px; border-radius:9px}
+  .btn.mailign{color:var(--ink-soft); border-color:var(--ink-soft)}
+  .mailfuori{margin-top:10px; font-size:14px; color:var(--tx-blue)}
+  .mailfuori summary{cursor:pointer; font-weight:600}
+  .mailriga{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 0; border-top:1px solid var(--bd-blue); color:var(--ink)}
+  .mailtag{display:inline-block; font-weight:700; color:var(--tx-blue); background:var(--tint-blue); border:1px solid var(--bd-blue); border-radius:6px; padding:0 5px; font-size:13px}
   .reghead{display:flex; align-items:center; justify-content:space-between; padding:12px 14px; cursor:pointer}
   .reghead b{font-family:'Zilla Slab',serif; font-size:16px; text-transform:capitalize}
   .regsub{font-size:12.5px; color:var(--ink-soft); font-weight:500; margin-top:2px}
@@ -610,6 +626,8 @@ function load(){ try{
   if(cf){ const v=JSON.parse(cf); if(Array.isArray(v) && v.length) S.configCriteri=v; }
   const uf=localStorage.getItem("sostituto_uscfoglio"); if(uf) S.uscFoglio=JSON.parse(uf);
   const rs=localStorage.getItem("sostituto_recscartati"); if(rs) S.recScartati=JSON.parse(rs);
+  const cmq=localStorage.getItem("sostituto_codamail"); if(cmq) S.codaMail=JSON.parse(cmq);
+  const mig=localStorage.getItem("sostituto_mailign"); if(mig) S.mailIgnorate=JSON.parse(mig);
   const as=localStorage.getItem("sostituto_assistenti"); if(as) S.assistenti=JSON.parse(as);
   const lgs=localStorage.getItem("sostituto_linguasost"); if(lgs) S.linguaSostegno=JSON.parse(lgs);
   const inc=localStorage.getItem("sostituto_incompat"); if(inc) S.incompatibili=JSON.parse(inc);
@@ -2582,7 +2600,7 @@ function renderSync(){
 function renderAltro(){
   const nAss = (S.assenzeNote||[]).length, nUsc = (S.uscite||[]).length, nPno = (S.pnoOn||[]).length;
   const voci = [
-    { tab:"assenze", ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v4"/><path d="M9 3h6l-1 6 3 3v2H7v-2l3-3-1-6z"/></svg>`, tit:"Assenze note",       sub:nAss?`${nAss} annotate — si caricano da sole nel giorno giusto`:"Annota le assenze comunicate in anticipo" },
+    { tab:"assenze", ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v4"/><path d="M9 3h6l-1 6 3 3v2H7v-2l3-3-1-6z"/></svg>`, tit:"Assenze note",       sub:(()=>{ const nm=(S.sync&&S.sync.url) ? mailDaMostrare().length : 0; return (nm ? `✉ ${nm} ${nm===1?"nuova":"nuove"} dalla mail · ` : "") + (nAss?`${nAss} annotate — si caricano da sole nel giorno giusto`:"Annota le assenze comunicate in anticipo"); })() },
     { tab:"recuperi", ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 1.5"/><path d="M9 2.5h6"/></svg>`, tit:"Recuperi", sub:(()=>{const n=(S.recuperi||[]).filter(r=>Math.max(0,r.ore-(r.restituite||0)-(r.chiuseManuale||0))>0).length; return n?`${n} debit${n===1?'o':'i'} da recuperare`:"Debiti dei permessi brevi";})() },
     { tab:"uscita",  ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="11" rx="2"/><path d="M3 10.5h18M7 16v2M17 16v2"/><circle cx="7.5" cy="13" r=".9"/><circle cx="16.5" cy="13" r=".9"/></svg>`, tit:"Uscite didattiche",  sub:nUsc?`${nUsc} registrate`:"Classi in uscita e accompagnatori" },
     { tab:"flag",    ic:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.2l7 2.8v5.1c0 4-2.9 7.6-7 8.7-4.1-1.1-7-4.7-7-8.7V6l7-2.8z"/><path d="M9.3 12.1l1.9 1.9 3.5-3.9"/></svg>`, tit:"Sostegni non derogabili", sub:(S.flagOggi||[]).length?`${S.flagOggi.length} segnalati \u2014 non verranno mai spostati`:"Alunni gravi con assistenza continua" },
@@ -3566,8 +3584,8 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "24.11.2026a";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
-const NUMERO_VERSIONE = 124;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
+const VERSIONE = "24.11.2026b";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const NUMERO_VERSIONE = 125;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -5182,6 +5200,7 @@ function renderAssenze(){
 
   if(!S.assenzaForm){
     out += `<button class="btn" style="width:100%; margin-bottom:14px" onclick="nuovaAssenza()">+ Annota un'assenza</button>`;
+    out += htmlMail();
     const oggi = S.dataOggi || isoOggi();
     const lista = (S.assenzeNote||[]).slice().sort((a,b)=> a.dal.localeCompare(b.dal));
     if(!lista.length){
@@ -5209,8 +5228,8 @@ function renderAssenze(){
         }
         return `<div class="regcard" style="${passata?'opacity:.5':''}"><div class="reghead" style="cursor:default">
           <div style="flex:1">
-            <b>${esc(a.docente)}</b>
-            <div class="regsub">${esc(periodo)}</div>
+            ${a.origine==="mail" ? `<span class="mailtag" title="arrivata dalla mail">✉</span> ` : ""}<b>${esc(a.docente)}</b>
+            <div class="regsub">${esc(periodo)}${a.origine==="mail" && a.protocollo && !/^s\.p\./.test(a.protocollo) ? " · prot. "+esc(a.protocollo) : ""}</div>
             <div class="regsub">${a.tipo==="breve"?"⏱ ":"📅 "}${esc(tx)}${a.nota?" · "+esc(a.nota):""}</div>
             ${servizioHint}
             ${a.tipo==="breve" && !assenzaFuoriServizio(a) ? `<div style="margin-top:6px">
@@ -5317,6 +5336,259 @@ function toggleRecuperabile(id){
   const a=(S.assenzeNote||[]).find(x=>x.id===id); if(!a) return;
   a.recuperabile = (a.recuperabile===false) ? true : false;
   S.prospetto=null; save(); render();
+}
+
+/* ---- PERMESSI DALLA MAIL ----
+   Lo script «Permessi dalla mail» (account del responsabile) legge ogni 6 ore i moduli
+   dell'Ufficio Personale e li mette nel foglio «Coda»; lo script di condivisione li serve
+   con ?modo=coda e la stessa parola segreta. Qui ogni voce viene valutata con valutaVoce:
+   si propone con un tocco, si segna ✉, niente arretrati, niente doppioni con quelle a mano.
+   Privacy: dalla coda arrivano solo nome, date, ore e categoria (mai il tipo di assenza). */
+/**
+ * SOStituto — dalle richieste lette dalla mail alle proposte di "assenza nota".
+ * Funzioni pure (niente DOM, niente localStorage): andranno in index.html così come sono.
+ *
+ * Ingresso: elementi della coda prodotta da leggiModulo() lato Apps Script
+ *   {protocollo, docente, categoria:'giornata'|'breve', periodi:[{dal,al}], breve:{data,dalle,alle,totale}|null, dubbi:[], ok}
+ * Uscita: per ciascuno uno stato:
+ *   'proponi'     → pronto, un tocco per importare (record già costruito)
+ *   'controlla'   → da guardare (motivi in .motivi); se possibile il record è precompilato
+ *   'gia_inserita'→ c'è già un'assenza equivalente inserita a mano: non si propone
+ *   'importata'   → stesso protocollo già importato in passato: non si mostra
+ *   'trascorsa'   → tutte le date sono passate: non si propone (niente arretrati)
+ *   'esclusa'     → docente non gestito da SOStituto (indirizzo musicale): non si mostra
+ *   'non_in_orario'→ nome non presente nell'orario: solo in una sezione chiusa, senza record
+ */
+
+// campanelle confermate da Al il 2026-11-10 (valide per tutte le classi)
+const CAMPANELLE_MAIL = { 1: ['08:05', '09:05'], 2: ['09:05', '10:00'], 3: ['10:10', '11:05'], 4: ['11:05', '12:10'], 5: ['12:10', '13:05'], 6: ['13:05', '14:05'] };
+
+// docenti dell'indirizzo musicale (orario pomeridiano, non gestiti da SOStituto) — indicati da Al il 2026-11-10
+const ESCLUSI_MAIL = ['SETTE', 'ARIMA', 'ORGANTINI', 'NARDI'];
+
+const minuti_ = s => { const [h, m] = String(s).split(':').map(Number); return h * 60 + m; };
+const normNome_ = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
+  .toUpperCase().replace(/[’'`]/g, ' ').replace(/[^A-Z\s.]/g, ' ').replace(/\s+/g, ' ').trim();
+
+/**
+ * ore di lezione toccate dal permesso. Un'ora è "piena" se il permesso la copre tutta, con una
+ * tolleranza di 10 minuti (es. 10:10–12:05 copre la 4ª che finisce alle 12:10); altrimenti è "parziale".
+ */
+const TOLLERANZA_MIN = 10;
+function coperturaOre(dalle, alle, campanelle) {
+  const c = campanelle || CAMPANELLE_MAIL, a = minuti_(dalle), b = minuti_(alle), ore = [], parziali = [];
+  for (const h of Object.keys(c).map(Number).sort((x, y) => x - y)) {
+    const s = minuti_(c[h][0]), e = minuti_(c[h][1]);
+    const sovr = Math.max(0, Math.min(b, e) - Math.max(a, s));
+    if (sovr <= 0) continue;
+    ore.push(h);
+    if (sovr < (e - s) - TOLLERANZA_MIN) parziali.push(h);
+  }
+  return { ore, parziali };
+}
+const oreDaOrario = (dalle, alle, c) => coperturaOre(dalle, alle, c).ore;
+
+/**
+ * nome della mail ("CLAUDIA RIBUSTINI", "MARIA SILVINA MARTINELLI") → nome com'è nell'orario.
+ * Un docente dell'orario è candidato se ogni parola del suo nome compare nella mail
+ * (le iniziali puntate, es. "ROSSI M.", valgono come iniziale). Serve UN solo candidato.
+ */
+function abbinaDocente(nomeMail, nomiOrario) {
+  const seq = normNome_(nomeMail).replace(/\./g, ' ').split(' ').filter(Boolean);   // mail: NOME COGNOME
+  const parole = new Set(seq);
+  const iniziali = new Set([...parole].map(p => p[0]));
+  const simili = new Set();
+  const cand = nomiOrario.filter(n => {
+    // "GIUSTOZZI M.Vittoria" → GIUSTOZZI · M. · VITTORIA
+    const pz = normNome_(n).replace(/\.(?=\S)/g, '. ').split(' ').filter(Boolean);
+    if (!pz.length) return false;
+    // nell'orario c'è solo il cognome (es. "Gioia"): deve essere il COGNOME della mail, cioè in fondo,
+    // altrimenti "GIOIA ROSSI" (nome Gioia) verrebbe preso per la collega Gioia
+    if (pz.length === 1) return seq.length > 1 && seq[seq.length - 1] === pz[0];
+    let intere = 0;
+    const tutte = pz.every(p => {
+      const ini = p.replace(/\./g, '');
+      if (p.endsWith('.') || ini.length === 1) return iniziali.has(ini[0]);
+      if (parole.has(p)) { intere++; return true; }
+      // nome composto scritto attaccato nella mail ("MARIAVITTORIA" per "M.Vittoria"): vale, ma resta da controllare
+      if (p.length >= 3 && seq.some(w => w.length >= p.length + 3 && (w.endsWith(p) || w.startsWith(p)))) { simili.add(n); return true; }
+      return false;
+    });
+    return tutte && intere >= 1;
+  });
+  const esito = n => simili.has(n) ? { nome: n, incerto: true } : { nome: n };
+  if (cand.length === 1) return esito(cand[0]);
+  if (!cand.length) return { nome: null, motivo: 'nome non trovato nell\'orario' };
+  // più candidati: preferisco quello che usa più parole della mail (es. ROSSI MARIO vs ROSSI)
+  const punti = n => normNome_(n).split(' ').filter(p => parole.has(p)).length;
+  const max = Math.max(...cand.map(punti)), migliori = cand.filter(n => punti(n) === max);
+  if (migliori.length === 1) return esito(migliori[0]);
+  return { nome: null, motivo: 'più docenti possibili: ' + migliori.join(', ') };
+}
+
+const piuUno_ = iso => { const d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().slice(0, 10); };
+const domenica_ = iso => new Date(iso + 'T12:00:00Z').getUTCDay() === 0;
+
+/**
+ * @param voce      elemento della coda
+ * @param ctx       {oggi:'YYYY-MM-DD', nomiOrario:[...], assenzeNote:[...], registro?:{iso:{assenti:[{nome,ore}]}}, assentiOggi?:{nome:null|[h]}, campanelle?}
+ * @return {stato, motivi:[], record|null, voce}
+ */
+function valutaVoce(voce, ctx) {
+  const motivi = [...(voce.dubbi || [])];
+  const note = ctx.assenzeNote || [];
+  if (voce.protocollo && note.some(a => a.protocollo === voce.protocollo)) return { stato: 'importata', motivi: [], record: null, voce };
+
+  // niente arretrati: tolgo i giorni già passati; se non resta niente non propongo
+  let periodi = (voce.periodi || []).map(p => ({ ...p }));
+  const tagliati = periodi.some(p => p.dal < ctx.oggi && (p.al || p.dal) >= ctx.oggi);
+  periodi = periodi.filter(p => (p.al || p.dal) >= ctx.oggi).map(p => ({ dal: p.dal < ctx.oggi ? ctx.oggi : p.dal, al: p.al || p.dal }));
+  if (voce.periodi && voce.periodi.length && !periodi.length) return { stato: 'trascorsa', motivi: [], record: null, voce };
+  if (tagliati) motivi.push('periodo iniziato prima di oggi: proposto da oggi in poi');
+
+  const ab = abbinaDocente(voce.docente, ctx.nomiOrario || []);
+  if (!ab.nome && !/^più docenti/.test(ab.motivo || '')) {
+    // docenti non gestiti da SOStituto (indirizzo musicale, orario pomeridiano): si scartano senza mostrarli.
+    // Vale solo se il nome NON è nell'orario, così un omonimo in orario non viene mai scartato.
+    const seqM = normNome_(voce.docente).split(' ').filter(Boolean);
+    const esclusi = (ctx.esclusi || ESCLUSI_MAIL).map(normNome_);
+    if (esclusi.some(e => e === seqM.join(' ') || e === seqM[seqM.length - 1])) return { stato: 'esclusa', motivi: [], record: null, voce };
+    // altri nomi assenti dall'orario (es. titolare in assenza lunga sostituita da un supplente): sezione chiusa a parte
+    return { stato: 'non_in_orario', motivi: [ab.motivo], record: null, voce };
+  }
+  if (!ab.nome) motivi.push(ab.motivo);
+  else if (ab.incerto) motivi.push('nome abbinato per somiglianza (' + voce.docente + ' → ' + ab.nome + '): controlla');
+
+  let ore = [];
+  if (voce.categoria === 'breve' && voce.breve) {
+    const cop = coperturaOre(voce.breve.dalle, voce.breve.alle, ctx.campanelle);
+    ore = cop.ore;
+    if (cop.parziali.length) motivi.push('copre solo in parte la ' + cop.parziali.map(h => h + 'ª').join(' e la ') + ' ora');
+    if (ore.length !== voce.breve.totale) motivi.push('dalle ' + voce.breve.dalle + ' alle ' + voce.breve.alle + ' corrisponde a ' + ore.length + ' ore, il modulo ne dichiara ' + voce.breve.totale);
+  }
+
+  // doppioni: un giorno è "già coperto" se il docente risulta assente quel giorno in uno di questi posti:
+  //  - Assenze note (giornata, o breve con le stesse ore)
+  //  - registro delle giornate salvate (assenti: [{nome, ore:null|[h]}]) — assenze dell'ultimo minuto
+  //  - assenti di oggi non ancora salvati (S.assentiOggi: {nome: null|[h]})
+  if (ab.nome && periodi.length) {
+    const giorni = [];
+    for (const p of periodi) for (let d = p.dal; d <= p.al; d = piuUno_(d)) if (!domenica_(d)) giorni.push(d);
+    const oreSegnate = d => {           // null = giornata intera; [] = niente; [h…] = solo quelle ore
+      let tutto = false; const h = new Set();
+      for (const a of note) if (a.docente === ab.nome && d >= a.dal && d <= (a.al || a.dal)) {
+        if (a.tipo === 'giornata' || !(a.ore || []).length) tutto = true; else a.ore.forEach(x => h.add(x));
+      }
+      const reg = ctx.registro && ctx.registro[d];
+      for (const x of (reg && reg.assenti) || []) if (x.nome === ab.nome) { if (x.ore == null) tutto = true; else x.ore.forEach(y => h.add(y)); }
+      if (d === ctx.oggi && ctx.assentiOggi && ab.nome in ctx.assentiOggi) {
+        const o = ctx.assentiOggi[ab.nome]; if (o == null) tutto = true; else o.forEach(y => h.add(y));
+      }
+      return tutto ? null : [...h];
+    };
+    const coperto = d => { const o = oreSegnate(d); if (o === null) return true; return voce.categoria === 'breve' && ore.length > 0 && ore.every(x => o.includes(x)); };
+    const toccato = d => { const o = oreSegnate(d); return o === null || o.length > 0; };
+    if (giorni.length && giorni.every(coperto)) return { stato: 'gia_inserita', motivi: [], record: null, voce };
+    if (giorni.some(toccato)) motivi.push('per ' + ab.nome + ' c\'è già un\'assenza annotata in parte di questi giorni: controlla');
+  }
+
+  // un record per periodo (le L.104 a giorni sparsi diventano più assenze)
+  const record = ab.nome ? periodi.map((p, i) => ({
+    id: 'mail-' + String(voce.protocollo || 'x').replace(/\W/g, '') + '-' + i,
+    docente: ab.nome, dal: p.dal, al: p.al, tipo: voce.categoria === 'breve' ? 'breve' : 'giornata',
+    ore: voce.categoria === 'breve' ? ore : [], nota: '', origine: 'mail', protocollo: voce.protocollo || null
+  })) : null;
+  if (!periodi.length) motivi.push('nessun periodo da proporre');
+  return { stato: motivi.length ? 'controlla' : 'proponi', motivi, record, voce };
+}
+
+function codaMailCfg(){ S.codaMail = S.codaMail || {voci:[], quando:null, tentativo:null, errore:null}; return S.codaMail; }
+function saveCodaMail(){ try{ localStorage.setItem("sostituto_codamail", JSON.stringify(S.codaMail||{})); localStorage.setItem("sostituto_mailign", JSON.stringify(S.mailIgnorate||[])); }catch(e){} }
+const chiaveMail = v => v.protocollo || ("s.p. " + v.docente + " " + v.ricevuta);
+/* legge la coda: forza=true dal pulsante; altrimenti al massimo ogni 10 minuti */
+function controllaMail(forza){
+  const c=syncCfg(); if(!c.url || !c.token) return;
+  const cm=codaMailCfg();
+  if(S.codaMailInCorso) return;
+  if(!forza && cm.tentativo && Date.now()-cm.tentativo < 10*60*1000) return;
+  S.codaMailInCorso=true; cm.tentativo=Date.now();
+  if(forza) render();
+  fetch(c.url + "?modo=coda&token=" + encodeURIComponent(c.token))
+    .then(r=>r.json())
+    .then(d=>{
+      if(!d.ok) cm.errore = d.errore || "risposta non valida";
+      else if(!Array.isArray(d.voci)) cm.errore = "lo script di condivisione non è ancora aggiornato";
+      else { cm.voci=d.voci; cm.errore=null; cm.quando=Date.now(); }
+    })
+    .catch(err=>{ cm.errore=descriviErrore(err); })
+    .then(()=>{ S.codaMailInCorso=false; saveCodaMail(); if(S.tab==="assenze" && !S.assenzaForm) render(); if(forza) toast(cm.errore ? "Mail: "+cm.errore : "Mail controllate"); });
+}
+function valutaCodaMail(){
+  if(!S.orario) return [];
+  const cm=codaMailCfg(), ign=new Set(S.mailIgnorate||[]), oggi=isoOggi();
+  const ctx={ oggi, nomiOrario:S.orario.docenti.map(d=>d.nome), assenzeNote:S.assenzeNote||[],
+              registro:S.registro||{}, assentiOggi:(S.dataOggi===oggi ? (S.assentiOggi||{}) : {}) };
+  return (cm.voci||[]).filter(v=>!ign.has(chiaveMail(v)))
+    .map(v=>valutaVoce(Object.assign({}, v, {protocollo:chiaveMail(v)}), ctx));
+}
+function mailDaMostrare(){ return valutaCodaMail().filter(x=>x.stato==="proponi"||x.stato==="controlla"); }
+function trovaVoceMail(k){ return valutaCodaMail().find(x=>x.voce.protocollo===k); }
+function aggiungiDaMail(k){
+  const v=trovaVoceMail(k); if(!v || !v.record || !v.record.length) return;
+  S.assenzeNote=S.assenzeNote||[];
+  v.record.forEach(r=>S.assenzeNote.push(Object.assign({}, r, r.tipo==="breve" ? {recuperabile:true} : {})));
+  S.noteApplicate=null; S.prospetto=null; save();
+  toast("✉ Aggiunta: "+v.record[0].docente); render();
+}
+function modificaDaMail(k){
+  const v=trovaVoceMail(k); if(!v || !v.record || v.record.length!==1) return;
+  const r=v.record[0];
+  S.assenzaForm={ id:r.id, docente:r.docente, dal:r.dal, al:r.al, tipo:r.tipo, ore:(r.ore||[]).slice(), nota:"",
+                  recuperabile:true, origine:"mail", protocollo:r.protocollo };
+  render();
+}
+function ignoraMail(k){
+  S.mailIgnorate=S.mailIgnorate||[]; if(!S.mailIgnorate.includes(k)) S.mailIgnorate.push(k);
+  saveCodaMail(); render();
+}
+function htmlMail(){
+  const c=syncCfg(); if(!c.url || !c.token) return "";
+  controllaMail(false);
+  const cm=codaMailCfg(), tutte=valutaCodaMail();
+  const vis=tutte.filter(x=>x.stato==="proponi"||x.stato==="controlla");
+  const fuori=tutte.filter(x=>x.stato==="non_in_orario");
+  const ora = cm.quando ? new Date(cm.quando).toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit"}) : null;
+  const periodoMail = r => r.dal===r.al ? dataLeggibile(r.dal) : dataLeggibile(r.dal)+" → "+dataLeggibile(r.al);
+  const desc = x => {
+    if(x.record && x.record.length) return x.record.map(r=> periodoMail(r)+" · "+(r.tipo==="breve" ? "permesso breve "+((r.ore||[]).map(h=>h+"ª").join(", ")||"") : "intera giornata")).join("<br>");
+    return (x.voce.periodi||[]).map(periodoMail).join("<br>") || "date non lette";
+  };
+  let h = `<div class="mailbox">
+    <div class="mailhead"><b>✉ Nuove dalla mail</b>
+      <button class="btn ghost mailbtn" onclick="controllaMail(true)" ${S.codaMailInCorso?"disabled":""}>${S.codaMailInCorso?"Controllo…":"Controlla ora"}</button></div>
+    <div class="mailsub">${cm.errore ? `<span class="mailwarn">⚠ ${esc(cm.errore)}</span>` : (ora ? "ultimo controllo alle "+ora : "non ancora controllate")} · la casella viene letta ogni 6 ore</div>`;
+  if(!vis.length) h += `<p class="mailvuota">Nessuna richiesta nuova da inserire.</p>`;
+  vis.forEach(x=>{
+    const k=esc(x.voce.protocollo).replace(/'/g,"&#39;");
+    const nome = x.record && x.record.length ? x.record[0].docente : x.voce.docente;
+    h += `<div class="mailcard">
+      <div class="mailnome">${esc(nome)}${x.voce.protocollo && !/^s\.p\./.test(x.voce.protocollo) ? ` <span class="mailprot">prot. ${esc(x.voce.protocollo)}</span>` : ""}</div>
+      <div class="regsub">${desc(x)}</div>
+      ${x.motivi.length ? `<ul class="mailmotivi">${x.motivi.map(m=>`<li>${esc(m)}</li>`).join("")}</ul>` : ""}
+      <div class="mailazioni">
+        ${x.record && x.record.length ? `<button class="btn mailbtn" onclick="aggiungiDaMail('${k}')">${x.stato==="proponi" ? "Aggiungi" : "Aggiungi così"}</button>` : ""}
+        ${x.stato==="controlla" && x.record && x.record.length===1 ? `<button class="btn ghost mailbtn" onclick="modificaDaMail('${k}')">Modifica</button>` : ""}
+        <button class="btn ghost mailbtn mailign" onclick="ignoraMail('${k}')">Ignora</button>
+      </div></div>`;
+  });
+  if(fuori.length){
+    h += `<details class="mailfuori"><summary>Non in orario (${fuori.length})</summary>
+      <p class="hint" style="margin:6px 0">Nomi che non compaiono nell'orario (es. supplenti o titolari sostituiti): non si possono inserire da qui.</p>
+      ${fuori.map(x=>`<div class="mailriga"><span><b>${esc(x.voce.docente)}</b> · ${(x.voce.periodi||[]).map(periodoMail).join(", ")}</span>
+        <button class="btn ghost mailbtn mailign" onclick="ignoraMail('${esc(x.voce.protocollo).replace(/'/g,"&#39;")}')">Ignora</button></div>`).join("")}
+    </details>`;
+  }
+  return h + `</div>`;
 }
 
 /* ---- USCITE DIDATTICHE ---- */

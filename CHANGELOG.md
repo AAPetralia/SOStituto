@@ -5,6 +5,9 @@ Si legge in alto nell'app, sotto il titolo. Da qui in avanti si aggiorna a ogni 
 
 ## Da qui in avanti (dettaglio certo)
 
+### 24.11.2026b — n. 125
+- **Permessi dalla mail.** In Assenze note compare il riquadro «✉ Nuove dalla mail»: le richieste dell'Ufficio Personale (permesso breve, retribuito/non retribuito, malattia, congedo parentale, L.104, malattia del figlio) lette ogni 6 ore dallo script «Permessi dalla mail» e servite dallo script di condivisione (`?modo=coda`, stessa parola segreta). «Aggiungi» le inserisce con un tocco, segnate ✉ e con il protocollo; quelle dubbie mostrano il motivo e si possono aggiungere così, modificare o ignorare. Non si mostrano le richieste già inserite a mano o già importate, le date passate e i docenti dell'indirizzo musicale; i nomi fuori orario stanno nella sezione chiusa «Non in orario». «Controlla ora» rilegge la coda (altrimenti al massimo ogni 10 minuti, all'apertura della scheda). In Altro: «✉ N nuove dalla mail». Dalla coda arrivano solo nome, date, ore e categoria, mai il tipo di assenza. «Ignora» vale sul singolo dispositivo.
+
 ### 24.11.2026a — n. 124
 - **Alunno assente di una classe sola.** Un sostegno può seguire più alunni in più classi: ora si può indicare la classe dell'alunno assente, e si liberano solo le ore del sostegno in quella classe (le altre restano in servizio). Vale per l'assenza «dal – al» (nuovo menu «Classe dell'alunno») e per il segno del giorno (sotto il docente compaiono le sue classi, da toccare). Senza classe vale come prima: tutte le ore.
 
