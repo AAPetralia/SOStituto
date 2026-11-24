@@ -5,6 +5,9 @@ Si legge in alto nell'app, sotto il titolo. Da qui in avanti si aggiorna a ogni 
 
 ## Da qui in avanti (dettaglio certo)
 
+### 24.11.2026a — n. 124
+- **Alunno assente di una classe sola.** Un sostegno può seguire più alunni in più classi: ora si può indicare la classe dell'alunno assente, e si liberano solo le ore del sostegno in quella classe (le altre restano in servizio). Vale per l'assenza «dal – al» (nuovo menu «Classe dell'alunno») e per il segno del giorno (sotto il docente compaiono le sue classi, da toccare). Senza classe vale come prima: tutte le ore.
+
 ### 18.11.2026a — n. 123
 - **Alunno assente «dal – al».** Nel pannello «Alunno assente» di Sostituzioni c'è ora la sezione «Assenza lunga»: scegli il sostegno, la data di inizio e di fine (compresa) e una nota facoltativa. Per ogni giorno del periodo il sostegno risulta libero da solo e le sue ore diventano disponibili per le sostituzioni (criterio f), senza doverlo segnare ogni mattina; vale anche per la previsione dei giorni successivi. Le programmazioni compaiono in elenco (con «in corso oggi») e si tolgono con la ✕. Sono incluse in condivisione, backup e «Azzera dati dell'anno».
 

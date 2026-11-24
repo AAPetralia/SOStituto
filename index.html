@@ -983,7 +983,7 @@ function candidati(o, classe, g, h, assenteObj, ctx, lingua){
     // f) sostegno PRIVO DEL PROPRIO ALUNNO (assente oggi): risorsa libera.
     //    Vale nelle sue ore di sostegno (l'alunno non c'è, non lo sta seguendo).
     //    Supera l'intoccabilità: senza alunno, non c'è caso grave da presidiare.
-    if(PR.f!=null && isSost(d) && ctx.alunnoAssente.has(d.nome) && (st.t==="CLASSE"||st.t==="LINGUA")){
+    if(PR.f!=null && isSost(d) && (st.t==="CLASSE"||st.t==="LINGUA") && aaLibero(ctx.alunnoAssente, d.nome, st.t==="LINGUA"?st.classe:st.det)){
       pool.push([rango(PR.f),...tie,"alunno assente",d.nome]); continue;
     }
     // b) recupero piazzabile (permesso breve da restituire)
@@ -1438,7 +1438,17 @@ function applicaAssenzeNote(){
   S.alunnoAssenteOggi = S.alunnoAssenteOggi || [];
   alunniAssentiDel(iso).forEach(n=>{ if(!S.alunnoAssenteOggi.includes(n)) S.alunnoAssenteOggi.push(n); });
 }
-/* sostegni il cui alunno risulta assente nel giorno (assenze programmate «dal – al») */
+/* L'alunno assente può essere di UNA classe sola (un sostegno segue più alunni in più classi):
+   la voce è «Nome» (tutte le sue classi) oppure «Nome|Classe» (solo le ore in quella classe). */
+function aaChiave(nome, classe){ return classe ? nome+"|"+classe : nome; }
+function aaEtichetta(k){ const i=String(k).indexOf("|"); return i<0 ? k : k.slice(0,i)+" ("+k.slice(i+1)+")"; }
+function aaLibero(set, nome, classe){
+  const has = set && (set.has ? x=>set.has(x) : x=>set.includes(x));
+  if(!has) return false;
+  if(has(nome)) return true;
+  return String(classe||"").split(/[^0-9A-Za-z]+/).filter(Boolean).some(c=>has(nome+"|"+c));
+}
+/* chiavi (docente o docente|classe) il cui alunno risulta assente nel giorno (assenze programmate «dal – al») */
 function alunniAssentiDel(iso){
   if(!iso) return [];
   const o=S.orario, g=giornoDaData(iso), out=new Set();
@@ -1446,14 +1456,15 @@ function alunniAssentiDel(iso){
     if(iso < a.dal || iso > (a.al||a.dal)) return;
     const doc=o && o.docenti.find(d=>d.nome===a.docente);
     if(o && doc && !giorniServizio(doc).has(g)) return;      /* quel giorno il sostegno non c'è comunque */
-    out.add(a.docente);
+    out.add(aaChiave(a.docente, a.classe));
   });
   return [...out];
 }
 /* pannello «Alunno assente»: programmazione dal – al */
-function aaFormGet(){ return S.aaForm = S.aaForm || {docente:"", dal:S.dataOggi||"", al:S.dataOggi||"", nota:""}; }
+function aaFormGet(){ return S.aaForm = S.aaForm || {docente:"", classe:"", dal:S.dataOggi||"", al:S.dataOggi||"", nota:""}; }
 function aaSet(campo, v){
   const f=aaFormGet(); f[campo]=v;
+  if(campo==="docente") f.classe="";
   if(campo==="dal" && (!f.al || f.al<v)) f.al=v;
   render();
 }
@@ -1463,17 +1474,18 @@ function aaAggiungi(){
   if(!f.dal){ toast("Scrivi da quando"); return; }
   const al=f.al||f.dal; if(al<f.dal){ toast("La data «al» è prima di «dal»"); return; }
   S.alunniAssenti = S.alunniAssenti || [];
-  S.alunniAssenti.push({id:"aa"+Date.now(), docente:f.docente, dal:f.dal, al, nota:String(f.nota||"").trim()});
+  S.alunniAssenti.push({id:"aa"+Date.now(), docente:f.docente, classe:f.classe||"", dal:f.dal, al, nota:String(f.nota||"").trim()});
   S.aaForm=null; S.noteApplicate=null; S.prospetto=null;
-  save(); toast("Alunno assente di "+f.docente+": dal "+f.dal.split("-").reverse().join("/")+" al "+al.split("-").reverse().join("/"));
+  save(); toast("Alunno assente di "+aaEtichetta(aaChiave(f.docente,f.classe))+": dal "+f.dal.split("-").reverse().join("/")+" al "+al.split("-").reverse().join("/"));
   render();
 }
 function aaTogli(id){
   const a=(S.alunniAssenti||[]).find(x=>x.id===id); if(!a) return;
-  if(!confirm("Tolgo l'assenza dell'alunno di "+a.docente+" ("+a.dal.split("-").reverse().join("/")+" – "+(a.al||a.dal).split("-").reverse().join("/")+")?\n\nIl sostegno torna in classe con lui.")) return;
+  if(!confirm("Tolgo l'assenza dell'alunno di "+aaEtichetta(aaChiave(a.docente,a.classe))+" ("+a.dal.split("-").reverse().join("/")+" – "+(a.al||a.dal).split("-").reverse().join("/")+")?\n\nIl sostegno torna in classe con lui.")) return;
   S.alunniAssenti=S.alunniAssenti.filter(x=>x.id!==id);
-  if(!alunniAssentiDel(S.dataOggi).includes(a.docente)){
-    S.alunnoAssenteOggi=(S.alunnoAssenteOggi||[]).filter(n=>n!==a.docente);
+  const chiave=aaChiave(a.docente,a.classe);
+  if(!alunniAssentiDel(S.dataOggi).includes(chiave)){
+    S.alunnoAssenteOggi=(S.alunnoAssenteOggi||[]).filter(n=>n!==chiave);
   }
   S.prospetto=null; save(); render();
 }
@@ -1483,6 +1495,11 @@ function renderAlunniProgrammati(sostegni){
     <div class="field"><label>Sostegno</label>
       <select onchange="aaSet('docente',this.value)"><option value="">— scegli —</option>
         ${sostegni.map(d=>`<option value="${esc(d.nome)}"${d.nome===f.docente?" selected":""}>${esc(d.nome)}</option>`).join("")}</select></div>
+    ${(()=>{ const d=f.docente && sostegni.find(x=>x.nome===f.docente); if(!d) return "";
+      const cl=[...classiDi(d)].filter(Boolean).sort();
+      return `<div class="field"><label>Classe dell'alunno</label>
+        <select onchange="aaSet('classe',this.value)"><option value="">Tutte le classi di ${esc(cl.length>1?"questo docente":"questo docente")}</option>
+          ${cl.map(c=>`<option value="${esc(c)}"${c===f.classe?" selected":""}>${esc(c)} — libera solo le ore in questa classe</option>`).join("")}</select></div>`; })()}
     <div style="display:flex; gap:8px">
       <div class="field" style="flex:1"><label>Dal</label><input type="date" value="${f.dal}" onchange="aaSet('dal',this.value)"></div>
       <div class="field" style="flex:1"><label>Al (compreso)</label><input type="date" value="${f.al}" min="${f.dal}" onchange="aaSet('al',this.value)"></div>
@@ -1495,7 +1512,7 @@ function renderAlunniProgrammati(sostegni){
     out+=`<div style="margin-top:12px">`+lista.map(a=>{
       const att=oggi>=a.dal && oggi<=(a.al||a.dal), passata=(a.al||a.dal)<oggi;
       return `<div class="regcard" style="${passata?"opacity:.55":""}"><div class="reghead" style="cursor:default"><div style="flex:1"><b>${esc(a.docente)}</b>
-        <div class="regsub">dal ${gg(a.dal)} al ${gg(a.al||a.dal)}${att?" · <b>in corso oggi</b>":passata?" · finita":""}${a.nota?" · "+esc(a.nota):""}</div></div>
+        <div class="regsub">${a.classe?"classe "+esc(a.classe)+" · ":""}dal ${gg(a.dal)} al ${gg(a.al||a.dal)}${att?" · <b>in corso oggi</b>":passata?" · finita":""}${a.nota?" · "+esc(a.nota):""}</div></div>
         <b class="chev" style="color:var(--red); cursor:pointer" onclick="aaTogli('${esc(a.id)}')" aria-label="Togli">✕</b></div></div>`;
     }).join("")+`</div>`;
   }
@@ -2706,15 +2723,21 @@ function renderOggi(){
     out += `<div class="aapanel">
       <div class="aapanel-lbl">Segna i sostegni il cui alunno è assente oggi. Diventano disponibili secondo il criterio <b>f</b> della circolare (dopo il potenziamento, prima delle ore eccedenti).</div>`;
     out += sostegni.map(d=>{
-      const on=(S.alunnoAssenteOggi||[]).includes(d.nome);
-      return `<div class="aarow ${on?'on':''}" onclick="toggleAlunnoAssente('${esc(d.nome)}')">
-        <span>${esc(d.nome)}</span><b>${on?'✓ assente':'presente'}</b></div>`;
+      const lst=S.alunnoAssenteOggi||[], on=lst.includes(d.nome);
+      const cl=[...classiDi(d)].filter(Boolean).sort();
+      const parz=cl.filter(c=>lst.includes(d.nome+"|"+c));
+      const chips = cl.length>1 && !on ? `<div style="display:flex; gap:6px; flex-wrap:wrap; margin:2px 0 8px 10px">`
+        + cl.map(c=>{ const k=lst.includes(d.nome+"|"+c);
+            return `<span onclick="toggleAlunnoAssente('${esc(d.nome+"|"+c)}')" style="cursor:pointer; padding:3px 10px; border-radius:12px; font-size:13px; border:1px solid var(--teal); ${k?'background:var(--teal); color:#fff':'color:var(--teal)'}">${esc(c)}</span>`; }).join("")
+        + `<span style="font-size:12px; opacity:.7; align-self:center">solo la classe dell'alunno assente</span></div>` : "";
+      return `<div class="aarow ${on||parz.length?'on':''}" onclick="toggleAlunnoAssente('${esc(d.nome)}')">
+        <span>${esc(d.nome)}</span><b>${on?'✓ assente':parz.length?'✓ '+parz.map(esc).join(", "):'presente'}</b></div>${chips}`;
     }).join("");
     out += renderAlunniProgrammati(sostegni);
     out += `</div>`;
   }
   if(nAA){
-    out += `<p class="hint" style="margin-top:-4px; margin-bottom:12px">Alunno assente: ${S.alunnoAssenteOggi.map(esc).join(", ")} — disponibili come criterio f.</p>`;
+    out += `<p class="hint" style="margin-top:-4px; margin-bottom:12px">Alunno assente: ${S.alunnoAssenteOggi.map(aaEtichetta).map(esc).join(", ")} — disponibili come criterio f.</p>`;
   }
 
   // promemoria: assenze già comunicate nei prossimi giorni
@@ -3114,7 +3137,7 @@ function inClasseCella(e){
       if(assenteAllOra(ctx,n,h)){ via.push(n+" · sostegno · assente oggi"+(n===e.a.nome?" (è la cella da coprire)":"")); return; }
       if(fuoriAltrove(n)){ via.push(n+" · sostegno · già mandato in un'altra classe"); return; }
       const intoc=(S.flagOggi||[]).includes(n+"|"+cl);
-      const libero=(S.alunnoAssenteOggi||[]).includes(n);
+      const libero=aaLibero(S.alunnoAssenteOggi||[], n, cl);
       righe.push({ico:"🧑‍🏫", nome:n, ruolo:"sostegno", intoc, nota: libero?"alunno assente oggi":""});
     });
     potIn(cl,g,h).forEach(n=>{
@@ -3543,8 +3566,8 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "18.11.2026a";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
-const NUMERO_VERSIONE = 123;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
+const VERSIONE = "24.11.2026a";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const NUMERO_VERSIONE = 124;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -6517,7 +6540,7 @@ function trasformaCambioDocente(dati, v, n, opz){
     po.assentiOggi=re(po.assentiOggi); po.breveOggi=re(po.breveOggi);
     const ov={}; for(const k in (po.override||{})){ const r=nomeInChiave(k,v,n); let val=po.override[k]; if(r!==k) toccato=true; if(val===v){ val=n; toccato=true; } ov[r]=val; }
     po.override=ov;
-    po.alunnoAssenteOggi=(po.alunnoAssenteOggi||[]).map(x=>{ if(x===v){ toccato=true; return n; } return x; });
+    po.alunnoAssenteOggi=(po.alunnoAssenteOggi||[]).map(x=>{ if(x===v){ toccato=true; return n; } if(String(x).startsWith(v+"|")){ toccato=true; return n+x.slice(v.length); } return x; });
     if(toccato){ po.prospetto=null; rep.oggi=true; }
   }
   return {dati, rep};
