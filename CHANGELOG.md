@@ -5,6 +5,9 @@ Si legge in alto nell'app, sotto il titolo. Da qui in avanti si aggiorna a ogni 
 
 ## Da qui in avanti (dettaglio certo)
 
+### 25.11.2026a — n. 126
+- **Ora di AIRC non sostituita.** Se manca un docente nell'ora in cui fa AIRC (attività alternativa), tocca la riga nel prospetto e scegli «Non sostituire (AIRC): gli alunni restano col curricolare di religione». L'ora esce dal prospetto e compare in una nota («AIRC non sostituita») anche nella stampa e nel registro; toccandola si torna a sostituirla. La scelta vale per quella data (anche per i giorni successivi: la previsione ne tiene conto) ed è inclusa in backup, condivisione e «Azzera dati dell'anno».
+
 ### 24.11.2026b — n. 125
 - **Permessi dalla mail.** In Assenze note compare il riquadro «✉ Nuove dalla mail»: le richieste dell'Ufficio Personale (permesso breve, retribuito/non retribuito, malattia, congedo parentale, L.104, malattia del figlio) lette ogni 6 ore dallo script «Permessi dalla mail» e servite dallo script di condivisione (`?modo=coda`, stessa parola segreta). «Aggiungi» le inserisce con un tocco, segnate ✉ e con il protocollo; quelle dubbie mostrano il motivo e si possono aggiungere così, modificare o ignorare. Non si mostrano le richieste già inserite a mano o già importate, le date passate e i docenti dell'indirizzo musicale; i nomi fuori orario stanno nella sezione chiusa «Non in orario». «Controlla ora» rilegge la coda (altrimenti al massimo ogni 10 minuti, all'apertura della scheda). In Altro: «✉ N nuove dalla mail». Dalla coda arrivano solo nome, date, ore e categoria, mai il tipo di assenza. «Ignora» vale sul singolo dispositivo.
 

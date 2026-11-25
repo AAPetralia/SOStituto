@@ -565,7 +565,7 @@ let S = { orario:null, tab:"oggi", day:"LUN",
           dataOggi:null, registro:{}, regApertoGiorno:"",
           alunnoAssenteOggi:[], alunnoSel:"", alunnoPanel:false,
           uscite:[], uscitaForm:null,
-          assenzeNote:[], assenzaForm:null, noteApplicate:null, daNote:[], alunniAssenti:[], aaForm:null,
+          assenzeNote:[], assenzaForm:null, noteApplicate:null, daNote:[], alunniAssenti:[], aaForm:null, aircNoSost:{},
           pnoOn:[], potAssign:{}, potSel:"", potMod:[], potForm:null,
           sync:{url:"",token:"",utente:"",soloLettura:false,ultimoPull:null,info:null}, syncAttivo:false,
           bancaOre:[],   /* banca ore: ore fatte a pagamento ma segnate a credito {id, docente, data, h, classe, assente, usata:false, usataIl, debitoId} */
@@ -584,6 +584,7 @@ function save(){ try{
   localStorage.setItem("sostituto_uscite", JSON.stringify(S.uscite||[]));
   localStorage.setItem("sostituto_assenze", JSON.stringify(S.assenzeNote||[]));
   localStorage.setItem("sostituto_alunniass", JSON.stringify(S.alunniAssenti||[]));
+  localStorage.setItem("sostituto_aircnosost", JSON.stringify(S.aircNoSost||{}));
   localStorage.setItem("sostituto_pno", JSON.stringify(S.pnoOn||[]));
   localStorage.setItem("sostituto_potmod", JSON.stringify(S.potMod||[]));
   localStorage.setItem("sostituto_potass", JSON.stringify(S.potAssign||{}));
@@ -609,6 +610,7 @@ function load(){ try{
   const us=localStorage.getItem("sostituto_uscite"); if(us) S.uscite=JSON.parse(us);
   const an=localStorage.getItem("sostituto_assenze"); if(an) S.assenzeNote=JSON.parse(an);
   const aal=localStorage.getItem("sostituto_alunniass"); if(aal) S.alunniAssenti=JSON.parse(aal);
+  const anr=localStorage.getItem("sostituto_aircnosost"); if(anr) S.aircNoSost=JSON.parse(anr)||{};
   const og=localStorage.getItem("sostituto_oggi");
   if(og){ try{
     const o=JSON.parse(og);
@@ -1123,6 +1125,8 @@ function generaProspetto(o, giorno, assenti, opts){
   // costruisco gli slot da coprire
   const slot=[];
   const note=[];
+  const aircNote=[];      /* ore AIRC non sostituite per scelta: gli alunni restano col curricolare di religione */
+  const aircNo = new Set(((S.aircNoSost||{})[S.dataOggi])||[]);
   const coperte=[];       /* ore in cui il curricolare è assente ma la classe è già coperta dal potenziamento */
   const ovr = opts.override || {};
   const forzatiOra = {};  /* docenti scelti a mano, per ora: non vanno tolti per coprire una classe */
@@ -1156,6 +1160,7 @@ function generaProspetto(o, giorno, assenti, opts){
           const lingua = linguaDi(a.nome);          /* francese o spagnolo, dal docente assente */
           slot.push({h, a:doc, classe:st.a, tipo: lingua? (lingua==="FR"?"francese":"spagnolo") : "sostituzione", lingua, gruppo:st.a+"·"+st.b});
         } else if(st.t==="AR"){
+          if(aircNo.has(a.nome+"|"+h) && !((a.nome+"|"+h) in ovr)){ aircNote.push({h, nome:a.nome, classe:st.det}); continue; }
           slot.push({h, a:doc, classe:st.det, tipo:"AIRC", lingua:null});
         } else {
           /* una scelta manuale già fatta per questa cella vince sempre */
@@ -1222,7 +1227,7 @@ function generaProspetto(o, giorno, assenti, opts){
       ctx.pagamento--;
     }
   });
-  return { giorno, esiti, note, coperte, pagamento: ctx.pagamento };
+  return { giorno, esiti, note, aircNote, coperte, pagamento: ctx.pagamento };
 }
 
 /* tutte le classi presenti nell'orario, ordinate */
@@ -1803,6 +1808,9 @@ function stampaProspetto(){
   const nonSost = (p.note||[]).length
     ? `<div class="pr-note">Sostegni assenti non sostituiti (la classe ha il docente curricolare): ${
         p.note.map(n=>esc(n.nome)+" — "+n.h+"ª ora ("+esc(fmtCl(n.classe))+(n.gruppoL?"·"+esc(n.gruppoL):"")+")").join("; ")}</div>` : "";
+  const aircPr = (p.aircNote||[]).length
+    ? `<div class="pr-note">AIRC non sostituita (gli alunni restano col curricolare di religione): ${
+        p.aircNote.slice().sort((a,b)=>a.h-b.h).map(n=>n.h+"ª ora "+esc(fmtCl(n.classe))+" ("+esc(n.nome)+")").join("; ")}</div>` : "";
   const copPr = (p.coperte||[]).length
     ? `<div class="pr-note">Ore senza sostituzione perché la classe è già coperta dal potenziamento assegnato: ${
         p.coperte.slice().sort((a,b)=>a.h-b.h).map(c=>c.h+"ª ora "+esc(fmtCl(c.classe))+" ("+esc(c.a.nome)+") — "+esc(c.da)).join("; ")}</div>` : "";
@@ -1825,7 +1833,7 @@ function stampaProspetto(){
       </tr></thead>
       <tbody>${corpo}</tbody>
     </table>
-    ${usc}${nonSost}${copPr}
+    ${usc}${nonSost}${aircPr}${copPr}
     <div class="pr-foot">
       <div>Ore a pagamento: <b>${p.pagamento||0}</b> — Sostituzioni disposte: <b>${righe.filter(e=>e.scelto).length}</b></div>
       <div>Da allegare al registro delle presenze.</div>
@@ -2130,7 +2138,7 @@ function saveSync(){ try{ localStorage.setItem("sostituto_sync", JSON.stringify(
 
 function statoDaCondividere(){
   return { orario:S.orario||null, lingue:S.lingue||{}, flagOggi:S.flagOggi||[], linguaSostegno:S.linguaSostegno||{}, incompatibili:S.incompatibili||[],
-    registro:S.registro||{}, uscite:S.uscite||[], uscFoglioCfg:{url:(S.uscFoglio&&S.uscFoglio.url)||"", token:(S.uscFoglio&&S.uscFoglio.token)||""}, assenzeNote:S.assenzeNote||[], alunniAssenti:S.alunniAssenti||[],
+    registro:S.registro||{}, uscite:S.uscite||[], uscFoglioCfg:{url:(S.uscFoglio&&S.uscFoglio.url)||"", token:(S.uscFoglio&&S.uscFoglio.token)||""}, assenzeNote:S.assenzeNote||[], alunniAssenti:S.alunniAssenti||[], aircNoSost:S.aircNoSost||{},
     pnoOn:S.pnoOn||[], potAssign:S.potAssign||{}, potMod:S.potMod||[], recuperi:S.recuperi||[], bancaOre:S.bancaOre||[],
     /* da tenere allineati con datiBackup(): tutto ciò che un altro dispositivo
        deve ritrovare, non solo l'orario e il registro */
@@ -2156,6 +2164,7 @@ function applicaStato(d){
   S._uscDiff    = tracciaUscite(S._fonteStato||"Stato ricevuto (Scarica, backup o ripristino)", _uscPrima, S.uscite);
   S.assenzeNote = d.assenzeNote || [];
   S.alunniAssenti = d.alunniAssenti || [];
+  S.aircNoSost = d.aircNoSost || {};
   S.pnoOn       = d.pnoOn || [];
   S.potAssign   = d.potAssign || {};
   if(d.potMod) S.potMod = d.potMod;
@@ -3058,6 +3067,7 @@ function archiviaRegistro(){
       motivo:e.motivo, tipo:e.tipo||"", rice:!!e.rice, fuori:!!e.fuori, svuotata:!!e.svuotata, manuale:!!e.manuale,
       gruppo:e.gruppo||"", lingua:e.lingua||"" })),
     note: (p.note||[]).map(n=>({nome:n.nome, h:n.h, classe:n.classe})),
+    aircNote: (p.aircNote||[]).map(n=>({nome:n.nome, h:n.h, classe:n.classe})),
     coperte: (p.coperte||[]).map(c=>({h:c.h, assente:c.a.nome, classe:c.classe, da:c.da})),
     salvato: new Date().toISOString()
   };
@@ -3080,6 +3090,7 @@ function riapriInSostituzioni(iso){
       motivo:r.motivo, tipo:r.tipo||"", rice:!!r.rice, fuori:!!r.fuori, svuotata:!!r.svuotata, manuale:!!r.manuale,
       gruppo:r.gruppo||"", lingua:r.lingua||"", annullata:!!r.annullata })),
     note: (rec.note||[]).map(n=>({nome:n.nome, h:n.h, classe:n.classe})),
+    aircNote: (rec.aircNote||[]).map(n=>({nome:n.nome, h:n.h, classe:n.classe})),
     coperte: (rec.coperte||[]).map(c=>({h:c.h, a:{nome:c.assente}, classe:c.classe, da:c.da})),
     pagamento: rec.pagamento||0
   };
@@ -3259,6 +3270,15 @@ function alternativeNota(n){
   return alternativeCella({h:n.h, a:doc, classe:n.classe, lingua:null});
 }
 /* torna a "non sostituito": toglie la scelta fatta a mano su quella cella */
+/* AIRC (attività alternativa): l'ora può non essere sostituita, gli alunni restano col curricolare di religione.
+   La scelta vale per quella data (non si azzera cambiando giorno) e finisce nel registro. */
+function aircNonSostituire(nome,h,si){
+  S.aircNoSost = S.aircNoSost || {};
+  const iso=S.dataOggi, k=nome+"|"+h, l=(S.aircNoSost[iso]||[]).filter(x=>x!==k);
+  if(si){ l.push(k); delete (S.override||{})[k]; }
+  if(l.length) S.aircNoSost[iso]=l; else delete S.aircNoSost[iso];
+  S.apertoRiga=""; save(); lanciaProspetto();
+}
 function nonSostituireSostegno(nome,h){
   delete S.override[nome+"|"+h]; S.apertoRiga=""; lanciaProspetto();
 }
@@ -3584,8 +3604,8 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "24.11.2026b";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
-const NUMERO_VERSIONE = 125;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
+const VERSIONE = "25.11.2026a";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const NUMERO_VERSIONE = 126;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -3598,6 +3618,7 @@ function datiBackup(){
     uscFoglioCfg: { url:(S.uscFoglio&&S.uscFoglio.url)||"", token:(S.uscFoglio&&S.uscFoglio.token)||"" },
     assenzeNote: S.assenzeNote || [],
     alunniAssenti: S.alunniAssenti || [],
+    aircNoSost: S.aircNoSost || {},
     pnoOn: S.pnoOn || [],
     potMod: S.potMod || [],
     potAssign: S.potAssign || {},
@@ -5063,6 +5084,7 @@ const RESET_ANNO = [
   { k:"registro",   tit:"Registro delle sostituzioni", n:()=>Object.keys(S.registro||{}).length, um:"giornate" },
   { k:"assenzeNote",tit:"Assenze note",                n:()=>(S.assenzeNote||[]).length,        um:"annotate" },
   { k:"alunniAssenti",tit:"Alunni assenti programmati", n:()=>(S.alunniAssenti||[]).length,      um:"programmate" },
+  { k:"aircNoSost",tit:"Ore AIRC non sostituite",       n:()=>Object.keys(S.aircNoSost||{}).length, um:"giornate" },
   { k:"uscite",     tit:"Uscite didattiche",           n:()=>(S.uscite||[]).length,             um:"registrate" },
   { k:"recuperi",   tit:"Recuperi da permesso breve",  n:()=>(S.recuperi||[]).length,           um:"posizioni" },
   { k:"bancaOre",   tit:"Banca ore (ore a credito)",   n:()=>(S.bancaOre||[]).length,           um:"ore" },
@@ -5137,7 +5159,7 @@ function confermaNuovoAnno(){
   if(!confirm("Verranno svuotate queste voci:\n\n"+elenco+"\n\nL'operazione non è reversibile. Procedo?")) return;
   if(!confirm("Ultima conferma: azzero definitivamente?")) return;
 
-  const vuoto = { registro:{}, assenzeNote:[], alunniAssenti:[], uscite:[], recuperi:[], bancaOre:[], potAssign:{}, potMod:[], pnoOn:[],
+  const vuoto = { registro:{}, assenzeNote:[], alunniAssenti:[], aircNoSost:{}, uscite:[], recuperi:[], bancaOre:[], potAssign:{}, potMod:[], pnoOn:[],
                   orario:null, flagOggi:[], lingue:{} };
   sel.forEach(x=>{ S[x.k] = (Array.isArray(vuoto[x.k]) ? [] : vuoto[x.k]); });
   if(S.raSel.registro) localStorage.removeItem("sostituto_registro");
@@ -5751,6 +5773,9 @@ function renderRegistro(){
       if(rec.note && rec.note.length){
         out += `<div class="pnote" style="margin:8px 12px">Sostegni non sostituiti: ${rec.note.map(n=>esc(n.nome)+" "+n.h+"ª").join(", ")}</div>`;
       }
+      if(rec.aircNote && rec.aircNote.length){
+        out += `<div class="pnote" style="margin:8px 12px">AIRC non sostituita (gli alunni restano col curricolare di religione): ${rec.aircNote.map(n=>esc(cognomeBreve(n.nome))+" "+n.h+"ª "+esc(fmtCl(n.classe))).join(", ")}</div>`;
+      }
       if(rec.coperte && rec.coperte.length){
         out += `<div class="pnote" style="margin:8px 12px">Senza sostituzione, coperte dal potenziamento assegnato: ${rec.coperte.map(c=>c.h+"ª "+esc(fmtCl(c.classe))+" ("+esc(cognomeBreve(c.assente))+" → "+esc(cognomeBreve(c.da))+")").join(", ")}</div>`;
       }
@@ -5897,7 +5922,7 @@ function renderProspettoHTML(p){
           <span class="ph">${e.h}ª</span><span class="pcl ${artic?'wide':''}">${esc(clLab)}</span>
           <span class="pto" style="color:var(--amber)">da riempire ${chevron}</span></div>`;
       } else if(!e.scelto){
-        html += `<div class="prow scoperta"><span class="ph">${e.h}ª</span><span class="pcl ${artic?'wide':''}">${esc(clLab)}</span><span class="pto">⚠ scoperta — nessun disponibile</span></div>`;
+        html += `<div class="prow scoperta"${e.tipo==="AIRC"?` onclick="apriAlternative('${esc(e.a.nome)}',${e.h})"`:""}><span class="ph">${e.h}ª</span><span class="pcl ${artic?'wide':''}">${esc(clLab)}</span><span class="pto">⚠ scoperta — nessun disponibile${e.tipo==="AIRC"?" "+chevron:""}</span></div>`;
       } else {
         const pay = /pagamento/.test(e.motivo)?' pay':'';
         const man = e.manuale?' manuale':'';
@@ -5921,6 +5946,7 @@ function renderProspettoHTML(p){
             ? `<div class="alt-piu" style="text-align:left; padding:0 0 8px" onclick="event.stopPropagation(); creditoToggle('${esc(e.a.nome)}',${e.h})">↩ Togli dalla banca ore: torna a pagamento</div>`
             : `<div class="alt-piu" style="text-align:left; padding:0 0 8px" onclick="event.stopPropagation(); creditoToggle('${esc(e.a.nome)}',${e.h})">🏦 Segna a credito (banca ore): non è pagata, ${esc(cognomeBreve(e.scelto,16))} la recupera con un permesso</div>`;
         }
+        if(e.tipo==="AIRC") html += `<div class="alt-piu" style="text-align:left; padding:0 0 8px" onclick="event.stopPropagation(); aircNonSostituire('${esc(e.a.nome)}',${e.h},true)">🚫 Non sostituire (AIRC): gli alunni restano col curricolare di religione</div>`;
         if(sostForzato) html += `<div class="alt-piu" style="text-align:left; padding:0 0 8px" onclick="event.stopPropagation(); nonSostituireSostegno('${esc(e.a.nome)}',${e.h})">↩ Non sostituire più questo sostegno</div>`;
         if(alt.length){
           html += `<div class="alt-lbl">Al posto ${e.scelto?'di '+esc(e.scelto):'(vuoto)'}, scegli:</div>`;
@@ -5951,6 +5977,13 @@ function renderProspettoHTML(p){
       }
     }
     html += `</div>`;
+  }
+  if(p.aircNote && p.aircNote.length){
+    html += `<div class="pnote"><b>AIRC non sostituita</b>: gli alunni restano col curricolare di religione. Tocca una voce per sostituirla comunque.</div>`;
+    html += `<div class="pcard" style="margin-top:6px">` + p.aircNote.slice().sort((a,b)=>a.h-b.h).map(n=>
+      `<div class="prow" onclick="aircNonSostituire('${esc(n.nome)}',${n.h},false)">
+        <span class="ph">${n.h}ª</span><span class="pcl">${esc(fmtCl(n.classe))}</span>
+        <span class="pto">${esc(n.nome)}</span><span class="pmot">AIRC · non sostituita ↩</span></div>`).join("") + `</div>`;
   }
   if(p.note && p.note.length){
     html += `<div class="pnote"><b>Sostegni assenti non sostituiti</b> (la classe ha il curricolare). Tocca una voce per sostituirla comunque:</div>`;
@@ -6800,6 +6833,7 @@ function trasformaCambioDocente(dati, v, n, opz){
   (dati.assenzeNote||[]).forEach(a=>{ if(a.docente!==v) return;
     if(tutto) a.docente=n; else if((a.al||a.dal||"")>=dal) rep.assenze++; });
   (dati.alunniAssenti||[]).forEach(a=>{ if(a.docente===v && tutto) a.docente=n; });
+  if(tutto && dati.aircNoSost) for(const iso in dati.aircNoSost) dati.aircNoSost[iso]=(dati.aircNoSost[iso]||[]).map(k=>k.startsWith(v+"|")?n+k.slice(v.length):k);
   (dati.uscite||[]).forEach(u=>{ const i=(u.accomp||[]).indexOf(v); const j=(u.riserve||[]).indexOf(v);
     if(i<0 && j<0) return;
     if(tutto){ if(i>=0) u.accomp[i]=n; if(j>=0) u.riserve[j]=n; } else if((u.al||u.dal||"")>=dal) rep.uscite++; });
