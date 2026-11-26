@@ -5,6 +5,9 @@ Si legge in alto nell'app, sotto il titolo. Da qui in avanti si aggiorna a ogni 
 
 ## Da qui in avanti (dettaglio certo)
 
+### 26.11.2026a — n. 127
+- **«Controlla ora» legge davvero la casella.** In Assenze note il pulsante chiede allo script di condivisione (`?modo=coda&leggi=1`) di far leggere subito la posta allo script «Permessi dalla mail» (sua web app, accesso «Solo io»), poi ricarica la coda e dice quante richieste nuove ha trovato. Il giro automatico ogni 6 ore resta.
+
 ### 25.11.2026a — n. 126
 - **Ora di AIRC non sostituita.** Se manca un docente nell'ora in cui fa AIRC (attività alternativa), tocca la riga nel prospetto e scegli «Non sostituire (AIRC): gli alunni restano col curricolare di religione». L'ora esce dal prospetto e compare in una nota («AIRC non sostituita») anche nella stampa e nel registro; toccandola si torna a sostituirla. La scelta vale per quella data (anche per i giorni successivi: la previsione ne tiene conto) ed è inclusa in backup, condivisione e «Azzera dati dell'anno».
 

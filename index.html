@@ -3604,8 +3604,8 @@ function azzeraPno(){
 
 /* ---- BACKUP e RIPRISTINO ---- */
 const BACKUP_VER = 1;
-const VERSIONE = "25.11.2026a";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
-const NUMERO_VERSIONE = 126;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
+const VERSIONE = "26.11.2026a";   /* aggiornare a ogni consegna: si legge in alto, sotto il titolo */
+const NUMERO_VERSIONE = 127;        /* contatore progressivo delle consegne (+1 a ogni consegna; la 16.10.2026c era la 89) */
 function datiBackup(){
   return {
     app: "SOStituto", versione: BACKUP_VER,
@@ -5535,15 +5535,21 @@ function controllaMail(forza){
   if(!forza && cm.tentativo && Date.now()-cm.tentativo < 10*60*1000) return;
   S.codaMailInCorso=true; cm.tentativo=Date.now();
   if(forza) render();
-  fetch(c.url + "?modo=coda&token=" + encodeURIComponent(c.token))
+  let lettura = null;
+  fetch(c.url + "?modo=coda" + (forza ? "&leggi=1" : "") + "&token=" + encodeURIComponent(c.token))
     .then(r=>r.json())
     .then(d=>{
       if(!d.ok) cm.errore = d.errore || "risposta non valida";
       else if(!Array.isArray(d.voci)) cm.errore = "lo script di condivisione non è ancora aggiornato";
-      else { cm.voci=d.voci; cm.errore=null; cm.quando=Date.now(); }
+      else { cm.voci=d.voci; cm.errore=null; cm.quando=Date.now(); lettura=d.lettura||null; }
     })
     .catch(err=>{ cm.errore=descriviErrore(err); })
-    .then(()=>{ S.codaMailInCorso=false; saveCodaMail(); if(S.tab==="assenze" && !S.assenzaForm) render(); if(forza) toast(cm.errore ? "Mail: "+cm.errore : "Mail controllate"); });
+    .then(()=>{ S.codaMailInCorso=false; saveCodaMail(); if(S.tab==="assenze" && !S.assenzaForm) render(); if(forza) toast(cm.errore ? "Mail: "+cm.errore
+      : !lettura ? "Coda aggiornata"
+      : !lettura.ok ? "Casella non letta: "+(lettura.errore||"errore")+" (coda aggiornata)"
+      : lettura.occupato ? "La casella si sta già leggendo: riprova tra poco"
+      : lettura.nuove ? `✉ ${lettura.nuove} ${lettura.nuove===1?"richiesta nuova letta":"richieste nuove lette"} dalla casella`
+      : "Casella letta: nessuna richiesta nuova"); });
 }
 function valutaCodaMail(){
   if(!S.orario) return [];
@@ -5588,7 +5594,7 @@ function htmlMail(){
   let h = `<div class="mailbox">
     <div class="mailhead"><b>✉ Nuove dalla mail</b>
       <button class="btn ghost mailbtn" onclick="controllaMail(true)" ${S.codaMailInCorso?"disabled":""}>${S.codaMailInCorso?"Controllo…":"Controlla ora"}</button></div>
-    <div class="mailsub">${cm.errore ? `<span class="mailwarn">⚠ ${esc(cm.errore)}</span>` : (ora ? "ultimo controllo alle "+ora : "non ancora controllate")} · la casella viene letta ogni 6 ore</div>`;
+    <div class="mailsub">${cm.errore ? `<span class="mailwarn">⚠ ${esc(cm.errore)}</span>` : (ora ? "ultimo controllo alle "+ora : "non ancora controllate")} · la casella si legge da sola ogni 6 ore, o subito con «Controlla ora»</div>`;
   if(!vis.length) h += `<p class="mailvuota">Nessuna richiesta nuova da inserire.</p>`;
   vis.forEach(x=>{
     const k=esc(x.voce.protocollo).replace(/'/g,"&#39;");
